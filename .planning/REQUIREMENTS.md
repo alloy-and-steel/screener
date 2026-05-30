@@ -1,0 +1,97 @@
+# Requirements — Lynch & Graham Screener: GitHub Pages Migration
+
+## v1 Requirements
+
+### Security
+
+- [ ] **SEC-01**: Hardcoded Finnhub API key in `diagnose_finnhub.py` is replaced with `os.environ["FINNHUB_API_KEY"]`
+- [ ] **SEC-02**: Git history is audited and clean before repo is made public (no credential in history)
+
+### Python Output Changes
+
+- [ ] **PY-01**: `stock_screener.py` writes results to `docs/data/results.json` instead of Google Sheets
+- [ ] **PY-02**: `results.json` includes a `generated_at` ISO timestamp field alongside the rows array
+- [ ] **PY-03**: JSON write is aborted and the script exits non-zero if fewer than 100 rows were produced (guards against silent empty-file commits from mass data failure)
+- [ ] **PY-04**: JSON output uses compact encoding (`separators=(',', ':')`) to minimize file size
+
+### GitHub Actions Pipeline
+
+- [ ] **CI-01**: `screener.yml` has `permissions: contents: write` declared at job or workflow level
+- [ ] **CI-02**: `screener.yml` configures git identity (`github-actions[bot]` name and canonical noreply email) before committing
+- [ ] **CI-03**: `screener.yml` commits only `docs/data/results.json` (not `git add -A`)
+- [ ] **CI-04**: `screener.yml` uses a conditional commit pattern that skips the commit if data is unchanged (prevents empty commits on holidays)
+- [ ] **CI-05**: `docs/.nojekyll` file exists in the repo (prevents GitHub Pages from running Jekyll)
+- [ ] **CI-06**: `.gitignore` has `!docs/data/results.json` exception so the data file can be committed
+
+### Frontend — Core Table
+
+- [ ] **FE-01**: `docs/index.html` loads Tabulator 6.x from jsDelivr CDN (no local npm, no build step)
+- [ ] **FE-02**: Table displays all screener output columns, sorted by `Score` descending on initial load
+- [ ] **FE-03**: Ticker column is frozen (stays visible when scrolling horizontally)
+- [ ] **FE-04**: Header row is sticky (stays visible when scrolling vertically)
+- [ ] **FE-05**: Signal columns (Lynch_Status, Graham_Status, Defensive, Lynch_PEG_Band, Status_Combined) have traffic-light background colors (green/yellow/red) matching the existing `SIGNAL_COLORS` mapping
+- [ ] **FE-06**: Null/missing values display as `—` (em dash) rather than `NaN`, `None`, or blank
+- [ ] **FE-07**: Error rows (tickers that failed data fetching) are hidden by default with a toggle to reveal them
+- [ ] **FE-08**: Page shows a "Data as of [date]" freshness badge derived from `generated_at`
+- [ ] **FE-09**: A yellow stale-data warning banner appears if data is more than 3 calendar days old
+- [ ] **FE-10**: `results.json` is fetched with a cache-busting query parameter (`?v=${Date.now()}`) to bypass CDN caching
+
+### Frontend — Filters & Column Presets
+
+- [ ] **FE-11**: "Buy Signals Only" toggle pill above the table — when active, shows only rows where `Status_Combined` is `True`
+- [ ] **FE-12**: Every column has a header filter appropriate to its data type: dropdown select for categorical columns (status, category, index membership), numeric input for numeric columns (score, price, PE, discount %, etc.)
+- [ ] **FE-13**: "Summary" / "Full" column preset toggle — Summary shows ~10 key signal columns, Full shows all columns
+- [ ] **FE-14**: Ticker text search box for quick symbol lookup (client-side, instant filter)
+
+### Frontend — Top 20 Panel
+
+- [ ] **FE-15**: A collapsible "Top 20 Buy Signals" panel appears above the main table
+- [ ] **FE-16**: Panel is open by default; collapse state is persisted in `localStorage`
+- [ ] **FE-17**: Clicking a ticker in the Top 20 panel scrolls to and highlights that row in the main table
+
+### Documentation Page
+
+- [ ] **DOC-01**: `docs/methodology.html` presents the Lynch and Graham methodology documentation (ported from `DOCS_CONTENT` in `stock_screener.py`)
+- [ ] **DOC-02**: A two-item navigation header links between Dashboard (`index.html`) and Methodology (`methodology.html`)
+
+### Cleanup (deferred until dashboard verified end-to-end)
+
+- [ ] **CLN-01**: `push_to_gsheets()` and all its private helpers (`_apply_color_coding`, `_write_docs_tab`, `_write_markdown_tab`) are removed from `stock_screener.py`
+- [ ] **CLN-02**: `gspread` and `google-auth` are removed from `requirements.txt`
+- [ ] **CLN-03**: `GSHEET_CREDS_JSON`, `GSHEET_SPREADSHEET`, `GSHEET_WORKSHEET` env vars are removed from `screener.yml` and documentation
+- [ ] **CLN-04**: Dead Tiingo config (`TIINGO_API_KEYS`, `TIINGO_DELAY_SEC`, related comments) is removed from `stock_screener.py`
+
+---
+
+## v2 Requirements (Deferred)
+
+- Advanced numeric range filters (min/max sliders per column)
+- Historical run archiving (keep last N runs of results.json)
+- Dark mode toggle
+- Column visibility picker (beyond Summary/Full preset)
+- Mobile-optimized layout (horizontal scroll is acceptable for v1)
+
+---
+
+## Out of Scope
+
+- Real-time or intraday data — requires a backend; daily schedule is sufficient
+- User accounts or server-side watchlists — no server; static constraint
+- Stock detail pages or drill-down views — screener output is the product
+- Charts or trend graphs — no historical data produced
+- CSV/Excel export — `results.json` is publicly fetchable for power users
+- A backend server, API, or database — fully static by design
+
+---
+
+## Traceability
+
+| REQ-ID | Phase | Notes |
+|---|---|---|
+| SEC-01, SEC-02 | Phase 1 | Must be done before repo goes public |
+| PY-01–04, CI-01–06 | Phase 2 | JSON pipeline; verify with `workflow_dispatch` |
+| FE-01–10 | Phase 3 | Core table MVP |
+| FE-11–14 | Phase 3 | Filters and column presets |
+| FE-15–17 | Phase 4 | Top 20 panel |
+| DOC-01–02 | Phase 4 | Methodology page |
+| CLN-01–04 | Phase 5 | Google removal — only after Phase 3 verified |
