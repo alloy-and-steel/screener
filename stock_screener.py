@@ -1204,7 +1204,7 @@ def write_json(df: pd.DataFrame) -> None:
         )
         sys.exit(1)
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    rows = df.where(df.notna(), other=None).to_dict(orient="records")
+    rows = json.loads(df.to_json(orient="records"))
     payload = {
         "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "rows": rows,
