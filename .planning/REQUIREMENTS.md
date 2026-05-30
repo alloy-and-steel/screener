@@ -86,12 +86,40 @@
 
 ## Traceability
 
-| REQ-ID | Phase | Notes |
-|---|---|---|
-| SEC-01, SEC-02 | Phase 1 | Must be done before repo goes public |
-| PY-01–04, CI-01–06 | Phase 2 | JSON pipeline; verify with `workflow_dispatch` |
-| FE-01–10 | Phase 3 | Core table MVP |
-| FE-11–14 | Phase 3 | Filters and column presets |
-| FE-15–17 | Phase 4 | Top 20 panel |
-| DOC-01–02 | Phase 4 | Methodology page |
-| CLN-01–04 | Phase 5 | Google removal — only after Phase 3 verified |
+| REQ-ID | Phase | Status | Notes |
+|--------|-------|--------|-------|
+| SEC-01 | Phase 1 | Pending | Safe to publish — fix before repo goes public |
+| SEC-02 | Phase 1 | Pending | Safe to publish — audit before repo goes public |
+| CI-01 | Phase 1 | Pending | Actions permissions prerequisite |
+| CI-02 | Phase 1 | Pending | Actions git identity prerequisite |
+| CI-03 | Phase 1 | Pending | Actions targeted commit prerequisite |
+| CI-04 | Phase 1 | Pending | Actions conditional commit prerequisite |
+| CI-05 | Phase 1 | Pending | .nojekyll prerequisite |
+| CI-06 | Phase 1 | Pending | .gitignore exception prerequisite |
+| PY-01 | Phase 2 | Pending | Core JSON writer |
+| PY-02 | Phase 2 | Pending | generated_at timestamp |
+| PY-03 | Phase 2 | Pending | Minimum-row guard |
+| PY-04 | Phase 2 | Pending | Compact encoding |
+| FE-01 | Phase 3 | Pending | Tabulator CDN load |
+| FE-02 | Phase 3 | Pending | All columns, Score sort |
+| FE-03 | Phase 3 | Pending | Frozen Ticker column |
+| FE-04 | Phase 3 | Pending | Sticky header |
+| FE-05 | Phase 3 | Pending | Traffic-light color coding |
+| FE-06 | Phase 3 | Pending | Null display as em dash |
+| FE-07 | Phase 3 | Pending | Error rows hidden by default |
+| FE-08 | Phase 3 | Pending | Data freshness badge |
+| FE-09 | Phase 3 | Pending | Stale-data warning banner |
+| FE-10 | Phase 3 | Pending | Cache-busting fetch |
+| FE-11 | Phase 3 | Pending | Buy Signals Only toggle |
+| FE-12 | Phase 3 | Pending | Per-column header filters |
+| FE-13 | Phase 3 | Pending | Summary/Full column preset |
+| FE-14 | Phase 3 | Pending | Ticker text search |
+| FE-15 | Phase 3 | Pending | Top 20 collapsible panel |
+| FE-16 | Phase 3 | Pending | Top 20 collapse state persisted |
+| FE-17 | Phase 3 | Pending | Top 20 ticker click scrolls to row |
+| DOC-01 | Phase 3 | Pending | methodology.html |
+| DOC-02 | Phase 3 | Pending | Two-item nav header |
+| CLN-01 | Phase 4 | Pending | Remove push_to_gsheets — only after Phase 3 verified |
+| CLN-02 | Phase 4 | Pending | Remove gspread/google-auth |
+| CLN-03 | Phase 4 | Pending | Remove GSHEET_* env vars |
+| CLN-04 | Phase 4 | Pending | Remove dead Tiingo config |
