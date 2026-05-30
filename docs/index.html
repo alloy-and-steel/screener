@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lynch &amp; Graham Screener</title>
+
+  <!-- Google Fonts preconnect -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- Tabulator 6.4.0 — midnight dark theme base (Nord overrides in style.css) -->
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/css/tabulator_midnight.min.css">
+
+  <!-- Project shared CSS (Nord overrides, nav, toolbar) — MUST load after Tabulator CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Stale-data banner (hidden until JS shows it) ── -->
+  <div class="stale-banner" id="stale-banner">
+    Warning: Data is more than 3 days old. Run the screener to refresh.
+  </div>
+
+  <!-- ── Site header: title + nav + freshness badge ── -->
+  <header class="site-header">
+    <span class="site-title">Lynch &amp; Graham Screener</span>
+    <nav class="main-nav" aria-label="Site navigation">
+      <a href="index.html" class="nav-link active" aria-current="page">Dashboard</a>
+      <a href="methodology.html" class="nav-link">Methodology</a>
+    </nav>
+    <span class="freshness-badge" id="freshness-badge">Loading data&hellip;</span>
+  </header>
+
+  <!-- ── Toolbar: filter controls above the table ── -->
+  <div class="toolbar" role="toolbar" aria-label="Table controls">
+    <button class="btn-pill" id="btn-buy" aria-pressed="false">
+      Buy Signals Only
+    </button>
+
+    <span class="toolbar-separator" aria-hidden="true"></span>
+
+    <button class="btn-pill active" id="btn-summary" aria-pressed="true">
+      Summary
+    </button>
+    <button class="btn-pill" id="btn-full" aria-pressed="false">
+      Full
+    </button>
+
+    <span class="toolbar-separator" aria-hidden="true"></span>
+
+    <button class="btn-pill" id="btn-errors" aria-pressed="false">
+      Show Errors
+    </button>
+
+    <span class="toolbar-separator" aria-hidden="true"></span>
+
+    <label class="toolbar-label" for="ticker-search">Ticker:</label>
+    <input type="search" id="ticker-search" placeholder="e.g. AAPL"
+           autocomplete="off" spellcheck="false" aria-label="Ticker symbol search">
+  </div>
+
+  <!-- ── Table container ── -->
+  <div id="table-container">
+    <div id="data-table"></div>
+  </div>
+
+  <!-- ── Tabulator 6.4.0 core JS ── -->
+  <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js"></script>
+
+  <script>
+  /* ─────────────────────────────────────────────────────────────────────────
+     Lynch & Graham Screener — Dashboard JS
+     All logic inline; no external JS files.
+  ───────────────────────────────────────────────────────────────────────── */
+
+  // ── Nord Aurora signal color map ──────────────────────────────────────────
+  // Keys are ACTUAL JSON column names (D-14). Values are "green"|"yellow"|"red".
+  const SIGNAL_COLORS = {
+    Lynch_Lynch_Status: {
+      "Strong Buy": "green", "Buy": "green",
+      "Hold": "yellow", "Avoid": "red"
+    },
+    Lynch_Lynch_PEG_Band: {
+      "Strong Buy": "green", "Buy": "green",
+      "Hold": "yellow", "Avoid": "red"
+    },
+    Graham_Graham_Status: {
+      "Deep Buy": "green", "Buy": "green",
+      "Watch": "yellow", "Avoid": "red"
+    },
+    DefensiveLabel: {
+      "Pass": "green", "Borderline": "yellow", "Fail": "red"
+    },
+    Lynch_PEG_Status: {
+      "Cheap": "green", "Reasonable": "yellow", "Rich": "red"
+    },
+    Lynch_PEGY_Status: {
+      "Cheap": "green", "Reasonable": "yellow", "Rich": "red"
+    }
+  };
+
+  const COLOR_STYLES = {
+    green:  { bg: "#a3be8c", text: "#2e3440" },
+    yellow: { bg: "#ebcb8b", text: "#2e3440" },
+    red:    { bg: "#bf616a", text: "#eceff4" }
+  };
+
+  // ── Formatter: signal columns ──────────────────────────────────────────────
+  function makeSignalFormatter(field) {
+    return function(cell) {
+      const val = cell.getValue();
+      if (val === null || val === undefined || val === "") return "—";
+      const colorKey = (SIGNAL_COLORS[field] || {})[val];
+      if (colorKey) {
+        const el = cell.getElement();
+        el.style.backgroundColor = COLOR_STYLES[colorKey].bg;
+        el.style.color = COLOR_STYLES[colorKey].text;
+        el.style.fontWeight = "600";
+        el.style.textAlign = "center";
+      }
+      return val;
+    };
+  }
+
+  // ── Formatter: numeric columns (null → em dash, fixed decimals) ───────────
+  function numFmt(decimals) {
+    return function(cell) {
+      const val = cell.getValue();
+      if (val === null || val === undefined) return "—";
+      if (typeof val === "number" && isNaN(val)) return "—";
+      return typeof val === "number" ? val.toFixed(decimals) : val;
+    };
+  }
+
+  // ── Formatter: percentage columns ─────────────────────────────────────────
+  function pctFmt(cell) {
+    const val = cell.getValue();
+    if (val === null || val === undefined) return "—";
+    return typeof val === "number" ? val.toFixed(1) + "%" : val;
+  }
+
+  // ── Column definitions ─────────────────────────────────────────────────────
+  function buildColumns() {
+    const drop = { headerFilter: "list", headerFilterParams: { valuesLookup: true, clearable: true } };
+    const num  = { headerFilter: "input", headerFilterFunc: ">=", headerFilterPlaceholder: "≥" };
+    const txt  = { headerFilter: "input", headerFilterFunc: "like", headerFilterPlaceholder: "search" };
+
+    return [
+      // ── Identity ──────────────────────────────────────────────────────────
+      { title: "Ticker",       field: "Ticker",       frozen: true,  width: 75,  sorter: "string", formatter: "plaintext", ...txt },
+      { title: "Price",        field: "Price",        sorter: "number", formatter: numFmt(2), ...num, width: 70 },
+      { title: "Mkt Cap ($B)", field: "MarketCap_B",  sorter: "number", formatter: numFmt(2), ...num, width: 100 },
+      { title: "EPS TTM",      field: "EPS_TTM",      sorter: "number", formatter: numFmt(2), ...num, width: 80 },
+      { title: "EPS Annual",   field: "EPS_Annual",   sorter: "string", formatter: "plaintext", headerFilter: false, width: 130 },
+      { title: "Div Yield %",  field: "DivYield_Pct", sorter: "number", formatter: pctFmt,    ...num, width: 85 },
+      { title: "Growth %",     field: "Growth_g_Pct", sorter: "number", formatter: pctFmt,    ...num, width: 80 },
+      { title: "AAA Yield",    field: "AAA_Yield",    sorter: "number", formatter: numFmt(2), ...num, width: 80 },
+      { title: "P/B",          field: "PB_Ratio",     sorter: "number", formatter: numFmt(2), ...num, width: 60 },
+      { title: "Indexes",      field: "Indexes",      sorter: "string", ...drop, width: 100 },
+
+      // ── Lynch metrics ─────────────────────────────────────────────────────
+      { title: "Lynch PE",     field: "Lynch_PE",           sorter: "number", formatter: numFmt(2), ...num, width: 75 },
+      { title: "Lynch PEG",    field: "Lynch_PEG",          sorter: "number", formatter: numFmt(2), ...num, width: 75 },
+      { title: "Lynch PEGY",   field: "Lynch_PEGY",         sorter: "number", formatter: numFmt(2), ...num, width: 80 },
+      { title: "Lynch Score",  field: "Lynch_Lynch_Score",  sorter: "number", formatter: numFmt(2), ...num, width: 85 },
+      { title: "Lynch FV PEG", field: "Lynch_FV_PEG",       sorter: "number", formatter: numFmt(2), ...num, width: 90 },
+      { title: "FV PEG Con",   field: "Lynch_FV_PEG_Con",   sorter: "number", formatter: numFmt(2), ...num, width: 90 },
+      { title: "FV G+D",       field: "Lynch_FV_GplusD",    sorter: "number", formatter: numFmt(2), ...num, width: 80 },
+      { title: "Lynch Cat",    field: "Lynch_Lynch_Category",sorter: "string", ...drop, width: 100 },
+      { title: "Buy Price",    field: "Lynch_Lynch_BuyPrice",sorter: "number", formatter: numFmt(2), ...num, width: 80 },
+      { title: "LV Ratio",     field: "Lynch_LV_Ratio",     sorter: "number", formatter: numFmt(2), ...num, width: 80 },
+      { title: "Lynch Disc %", field: "Lynch_Lynch_Discount_Pct", sorter: "number", formatter: pctFmt, ...num, width: 90 },
+
+      // ── Lynch signal columns (traffic-light) ──────────────────────────────
+      { title: "Lynch Status", field: "Lynch_Lynch_Status", sorter: "string",
+        formatter: makeSignalFormatter("Lynch_Lynch_Status"), ...drop, width: 100 },
+      { title: "PEG Band",     field: "Lynch_Lynch_PEG_Band", sorter: "string",
+        formatter: makeSignalFormatter("Lynch_Lynch_PEG_Band"), ...drop, width: 90 },
+      { title: "PEG Status",   field: "Lynch_PEG_Status",  sorter: "string",
+        formatter: makeSignalFormatter("Lynch_PEG_Status"),  ...drop, width: 90 },
+      { title: "PEGY Status",  field: "Lynch_PEGY_Status", sorter: "string",
+        formatter: makeSignalFormatter("Lynch_PEGY_Status"), ...drop, width: 95 },
+
+      // ── Graham metrics ────────────────────────────────────────────────────
+      { title: "Graham VA",    field: "Graham_Graham_VA",           sorter: "number", formatter: numFmt(2), ...num, width: 85 },
+      { title: "Graham VB",    field: "Graham_Graham_VB",           sorter: "number", formatter: numFmt(2), ...num, width: 85 },
+      { title: "Graham FV",    field: "Graham_Graham_FV",           sorter: "number", formatter: numFmt(2), ...num, width: 85 },
+      { title: "Graham Disc%", field: "Graham_Graham_Discount_Pct", sorter: "number", formatter: pctFmt,    ...num, width: 90 },
+
+      // ── Graham signal column (traffic-light) ──────────────────────────────
+      { title: "Graham Status",field: "Graham_Graham_Status", sorter: "string",
+        formatter: makeSignalFormatter("Graham_Graham_Status"), ...drop, width: 110 },
+
+      // ── Defensive metrics ─────────────────────────────────────────────────
+      { title: "Def Score",    field: "DefensiveScore",  sorter: "number", formatter: numFmt(1), ...num, width: 80 },
+      { title: "Size OK",      field: "Size_OK",         sorter: "number", formatter: numFmt(0), ...num, width: 65 },
+      { title: "Curr Ratio OK",field: "CurrRatio_OK",    sorter: "number", formatter: numFmt(0), ...num, width: 95 },
+      { title: "Debt/Eq OK",   field: "DebtEq_OK",       sorter: "number", formatter: numFmt(0), ...num, width: 80 },
+      { title: "EPS Stab",     field: "EPS_Stability",   sorter: "number", formatter: numFmt(0), ...num, width: 75 },
+      { title: "Div Record",   field: "Div_Record",      sorter: "number", formatter: numFmt(0), ...num, width: 80 },
+      { title: "EPS Gr 10Y",   field: "EPS_Growth10Y",   sorter: "number", formatter: numFmt(0), ...num, width: 85 },
+      { title: "PE Limit",     field: "PE_Limit",        sorter: "number", formatter: numFmt(0), ...num, width: 75 },
+      { title: "PB Limit",     field: "PB_Limit",        sorter: "number", formatter: numFmt(0), ...num, width: 75 },
+
+      // ── Defensive signal column (traffic-light) ───────────────────────────
+      { title: "Defensive",    field: "DefensiveLabel", sorter: "string",
+        formatter: makeSignalFormatter("DefensiveLabel"), ...drop, width: 90 },
+
+      // ── Combined ──────────────────────────────────────────────────────────
+      { title: "Score",        field: "CombinedScore",  sorter: "number", formatter: numFmt(2), ...num, width: 65 },
+
+      // ── Utility columns (programmatic filter only) ────────────────────────
+      { title: "Buy?",  field: "Show",  visible: false, headerFilter: false },
+      { title: "Error", field: "Error", visible: true,  headerFilter: false,
+        formatter: function(cell) {
+          const v = cell.getValue();
+          return (v === null || v === undefined) ? "—" : String(v);
+        }
+      }
+    ];
+  }
+
+  // ── Summary preset columns (D-01 — locked) ────────────────────────────────
+  const SUMMARY_COLS = new Set([
+    "Ticker", "Price", "CombinedScore",
+    "Lynch_Lynch_Status", "Lynch_Lynch_Score", "Lynch_Lynch_BuyPrice",
+    "Lynch_PEG_Status", "Lynch_PEGY_Status",
+    "Graham_Graham_Status", "Graham_Graham_Discount_Pct", "Graham_Graham_FV",
+    "DefensiveScore", "DefensiveLabel"
+  ]);
+
+  // ── Error-row filter (module scope — removeFilter needs same reference) ───
+  function noErrorFilter(data) {
+    return data.Error === null || data.Error === undefined;
+  }
+
+  // ── Freshness badge and stale-data banner ─────────────────────────────────
+  function updateFreshnessUI(generatedAt) {
+    const badge  = document.getElementById("freshness-badge");
+    const banner = document.getElementById("stale-banner");
+    if (!generatedAt) { badge.textContent = "Data date unknown"; return; }
+
+    const dt      = new Date(generatedAt);
+    const dateStr = dt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    badge.textContent = "Data as of " + dateStr;
+
+    const ageDays = (Date.now() - dt.getTime()) / (1000 * 60 * 60 * 24);
+    if (ageDays > 3) banner.classList.add("visible");
+  }
+
+  // ── Column preset apply ───────────────────────────────────────────────────
+  function applyPreset(table, preset, allFields) {
+    allFields.forEach(function(field) {
+      if (preset === "summary") {
+        SUMMARY_COLS.has(field) ? table.showColumn(field) : table.hideColumn(field);
+      } else {
+        table.showColumn(field);
+      }
+    });
+  }
+
+  // ── Main: fetch data and build table ─────────────────────────────────────
+  fetch("data/results.json?v=" + Date.now())
+    .then(function(r) {
+      if (!r.ok) throw new Error("HTTP " + r.status + " fetching results.json");
+      return r.json();
+    })
+    .then(function(data) {
+      updateFreshnessUI(data.generated_at);
+
+      const allFields = buildColumns().map(function(c) { return c.field; });
+
+      var table = new Tabulator("#data-table", {
+        data: data.rows,
+        layout: "fitData",
+        height: "calc(100vh - 140px)",
+        renderVertical: "virtual",
+        initialSort: [{ column: "CombinedScore", dir: "desc" }],
+        columns: buildColumns(),
+      });
+
+      table.on("tableBuilt", function() {
+        // Default: hide error rows (FE-07)
+        table.setFilter(noErrorFilter);
+
+        // Default: Summary preset (D-03)
+        applyPreset(table, "summary", allFields);
+
+        // ── Buy Signals toggle (FE-11) ────────────────────────────────────
+        var buyActive = false;
+        var btnBuy = document.getElementById("btn-buy");
+        btnBuy.addEventListener("click", function() {
+          buyActive = !buyActive;
+          btnBuy.classList.toggle("active", buyActive);
+          btnBuy.setAttribute("aria-pressed", String(buyActive));
+          if (buyActive) {
+            table.addFilter("Show", "=", true);
+          } else {
+            table.removeFilter("Show", "=", true);
+          }
+        });
+
+        // ── Error rows toggle (FE-07) ─────────────────────────────────────
+        var errorsVisible = false;
+        var btnErrors = document.getElementById("btn-errors");
+        btnErrors.addEventListener("click", function() {
+          errorsVisible = !errorsVisible;
+          btnErrors.classList.toggle("active", errorsVisible);
+          btnErrors.setAttribute("aria-pressed", String(errorsVisible));
+          if (errorsVisible) {
+            table.removeFilter(noErrorFilter);
+          } else {
+            table.setFilter(noErrorFilter);
+          }
+        });
+
+        // ── Summary / Full preset toggle (FE-13) ─────────────────────────
+        var currentPreset = "summary";
+        var btnSummary = document.getElementById("btn-summary");
+        var btnFull    = document.getElementById("btn-full");
+
+        btnSummary.addEventListener("click", function() {
+          if (currentPreset === "summary") return;
+          currentPreset = "summary";
+          applyPreset(table, "summary", allFields);
+          btnSummary.classList.add("active");    btnSummary.setAttribute("aria-pressed", "true");
+          btnFull.classList.remove("active");    btnFull.setAttribute("aria-pressed", "false");
+        });
+
+        btnFull.addEventListener("click", function() {
+          if (currentPreset === "full") return;
+          currentPreset = "full";
+          applyPreset(table, "full", allFields);
+          btnFull.classList.add("active");       btnFull.setAttribute("aria-pressed", "true");
+          btnSummary.classList.remove("active"); btnSummary.setAttribute("aria-pressed", "false");
+        });
+
+        // ── Ticker search (FE-14) ─────────────────────────────────────────
+        var searchInput = document.getElementById("ticker-search");
+        var searchTimeout;
+        searchInput.addEventListener("input", function() {
+          clearTimeout(searchTimeout);
+          var val = this.value.trim().toUpperCase();
+          searchTimeout = setTimeout(function() {
+            if (val) {
+              table.setFilter("Ticker", "like", val);
+            } else {
+              table.removeFilter("Ticker", "like", "");
+            }
+          }, 120);
+        });
+      });
+    })
+    .catch(function(err) {
+      document.getElementById("freshness-badge").textContent = "Error loading data";
+      console.error("Dashboard load error:", err);
+    });
+  </script>
+
+</body>
+</html>

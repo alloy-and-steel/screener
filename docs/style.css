@@ -1,0 +1,189 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── A: Base / page layout ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #2e3440;
+  color: #eceff4;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+a { color: #88c0d0; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── B: Header / nav bar ───────────────────────────────────────────────── */
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.6rem 1.2rem;
+  background: #3b4252;
+  border-bottom: 1px solid #4c566a;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.site-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #eceff4;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+nav.main-nav {
+  display: flex;
+  gap: 1rem;
+  margin-left: auto;
+}
+
+.nav-link {
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  color: #d8dee9;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.nav-link:hover { background: #434c5e; text-decoration: none; }
+.nav-link.active {
+  background: #88c0d0;
+  color: #2e3440;
+  font-weight: 600;
+}
+
+.freshness-badge {
+  font-size: 0.78rem;
+  color: #d8dee9;
+  white-space: nowrap;
+  margin-left: 0.5rem;
+}
+
+/* ── C: Toolbar ────────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  background: #2e3440;
+  border-bottom: 1px solid #4c566a;
+}
+
+.btn-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.85rem;
+  border-radius: 20px;
+  border: 1px solid #4c566a;
+  background: #3b4252;
+  color: #d8dee9;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.btn-pill:hover { background: #434c5e; }
+.btn-pill.active {
+  background: #88c0d0;
+  color: #2e3440;
+  border-color: #88c0d0;
+  font-weight: 600;
+}
+
+#ticker-search {
+  background: #3b4252;
+  color: #eceff4;
+  border: 1px solid #4c566a;
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+  width: 120px;
+  outline: none;
+}
+#ticker-search:focus { outline: 2px solid #88c0d0; }
+
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background: #4c566a;
+  margin: 0 0.2rem;
+}
+
+.toolbar-label {
+  font-size: 0.78rem;
+  color: #d8dee9;
+}
+
+/* ── D: Stale-data banner ──────────────────────────────────────────────── */
+.stale-banner {
+  display: none;
+  padding: 0.5rem 1.2rem;
+  background: #ebcb8b;
+  color: #2e3440;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-bottom: 2px solid #d08770;
+}
+.stale-banner.visible { display: block; }
+
+/* ── E: Tabulator Nord overrides ───────────────────────────────────────── */
+.tabulator { background-color: #3b4252; border-color: #4c566a; }
+
+.tabulator .tabulator-header {
+  background-color: #2e3440;
+  border-bottom-color: #4c566a;
+}
+.tabulator .tabulator-header .tabulator-col {
+  background-color: #2e3440;
+  border-right-color: #4c566a;
+}
+.tabulator .tabulator-header .tabulator-col-title { color: #eceff4; }
+
+.tabulator .tabulator-tableholder .tabulator-table { background-color: #3b4252; }
+
+.tabulator .tabulator-row {
+  background-color: #3b4252;
+  border-bottom: 1px solid #4c566a;
+  color: #eceff4;
+}
+.tabulator .tabulator-row:nth-child(even) { background-color: #434c5e; }
+.tabulator .tabulator-row.tabulator-row-even { background-color: #434c5e; }
+.tabulator .tabulator-row:hover,
+.tabulator .tabulator-row.tabulator-selected { background-color: #4c566a !important; }
+
+.tabulator .tabulator-cell {
+  border-right-color: #4c566a;
+  color: #eceff4;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.82rem;
+  padding: 4px 6px;
+}
+
+.tabulator .tabulator-row .tabulator-frozen.tabulator-frozen-left {
+  border-right: 2px solid #88c0d0;
+}
+
+.tabulator .tabulator-header .tabulator-col .tabulator-header-filter input,
+.tabulator .tabulator-header .tabulator-col .tabulator-header-filter select {
+  background-color: #2e3440;
+  color: #d8dee9;
+  border: 1px solid #4c566a;
+  border-radius: 3px;
+  padding: 2px 4px;
+  width: 100%;
+}
+
+.tabulator .tabulator-tableholder::-webkit-scrollbar { height: 6px; width: 6px; }
+.tabulator .tabulator-tableholder::-webkit-scrollbar-track { background: #2e3440; }
+.tabulator .tabulator-tableholder::-webkit-scrollbar-thumb {
+  background: #4c566a;
+  border-radius: 3px;
+}
+
+/* ── F: Table container ────────────────────────────────────────────────── */
+#table-container { overflow: hidden; height: calc(100vh - 140px); }
+#data-table { margin: 0; }
