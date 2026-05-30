@@ -59,7 +59,7 @@ Plans:
   4. "Buy Signals Only" toggle, per-column header filters, ticker search box, and Summary/Full column preset toggle all work client-side with no page reload
   5. The collapsible Top 20 panel is open by default, persists its state in `localStorage`, and clicking a ticker scrolls to and highlights that row in the main table
   6. `methodology.html` presents the Lynch/Graham documentation and the two-item nav header links correctly between Dashboard and Methodology
-**Plans:** TBD
+**Plans:** 03-01-PLAN.md (Wave 1 — index.html), 03-02-PLAN.md (Wave 2 — methodology.html)
 
 ### Phase 4: Google & Tiingo Cleanup
 **Goal:** All Google Sheets code, dependencies, credentials, and dead Tiingo config are removed from the codebase — the screener has no vestigial output code
@@ -82,5 +82,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Security & Pipeline Prerequisites | 1/1 | Complete | 2026-05-30 |
 | 2. JSON Output Pipeline | 1/1 | Complete | 2026-05-30 |
-| 3. Interactive Dashboard | 0/? | Not started | - |
+| 3. Interactive Dashboard | 0/2 | Planned | - |
 | 4. Google & Tiingo Cleanup | 0/? | Not started | - |
