@@ -2,13 +2,13 @@
 Lynch & Graham Stock Screener
 ==============================
 Fetches S&P 500, Dow 30, and Nasdaq-100 constituents dynamically,
-pulls fundamentals from Tiingo, AAA yield from FRED, computes
-Lynch and Graham valuation metrics, and pushes results to Google Sheets.
+pulls fundamentals from yfinance and Finnhub, computes Lynch and
+Graham valuation metrics, and writes results to docs/data/results.json
+for GitHub Pages.
 
 Local setup:
-    1. Copy .env.example to .env and fill in your credentials.
-    2. Share your Google Sheet with your service account email.
-    3. Run: python stock_screener.py
+    1. Copy .env.example to .env and fill in your API keys.
+    2. Run: python stock_screener.py
 
 GitHub Actions setup:
     Add each variable from .env.example as a repository secret
@@ -19,7 +19,6 @@ GitHub Actions setup:
 import os
 import sys
 import json
-import time
 import logging
 import requests
 import pandas as pd
@@ -28,39 +27,20 @@ from datetime import datetime
 from fredapi import Fred
 from dotenv import load_dotenv
 
-import gspread
-from google.oauth2.service_account import Credentials
-from google.oauth2 import service_account
-
 # Load .env when running locally; no-op in GitHub Actions (env vars already set)
 load_dotenv()
 
 # ─────────────────────────────────────────────
 # CONFIGURATION — all values come from env vars
 # ─────────────────────────────────────────────
-# Comma-separated list of Tiingo API keys.
-# The script rotates to the next key automatically on a 429 rate-limit response.
-# Example: TIINGO_API_KEYS=key_one,key_two,key_three
-# Optional — not currently used for any active data fetching.
-# Include if you plan to add Tiingo-specific features later.
-TIINGO_API_KEYS = [k.strip() for k in os.environ.get("TIINGO_API_KEYS", "").split(",") if k.strip()]
 FRED_API_KEY     = os.environ["FRED_API_KEY"]
 FINNHUB_API_KEY  = os.environ["FINNHUB_API_KEY"]
-
-
-# Google Sheets
-# Locally:  set GSHEET_CREDS_JSON to the path of your service account JSON file.
-# Actions:  set GSHEET_CREDS_JSON to the entire JSON content as a secret (see README).
-GSHEET_CREDS_JSON   = os.environ.get("GSHEET_CREDS_JSON", "")
-GSHEET_SPREADSHEET  = os.environ.get("GSHEET_SPREADSHEET", "Lynch & Graham Screener")
-GSHEET_WORKSHEET    = os.environ.get("GSHEET_WORKSHEET",   "Results")
 
 # Screener parameters
 GROWTH_CAP          = 25.0   # cap 'g' at this % to prevent distortion
 GRAHAM_NO_GROWTH_PE = 8.5    # classic Graham baseline P/E; change to 7 for conservative
 GRAHAM_HIST_AAA     = 4.4    # Graham's original historical AAA yield constant
 FRED_AAA_SERIES     = "AAA"  # Moody's AAA corporate bond yield series on FRED
-TIINGO_DELAY_SEC    = 0.25   # polite delay between Tiingo calls (rate limiting)
 
 # Graham defensive-investor filter thresholds
 MIN_MARKET_CAP_B    = 2.0    # minimum market cap in $B
@@ -560,7 +540,6 @@ def combined_score(lynch_discount: float | None, graham_discount: float | None) 
 def process_ticker(ticker: str, aaa_yield: float) -> dict:
     """Run the full pipeline for one ticker. Returns a flat result dict."""
     row = {"Ticker": ticker}
-    time.sleep(TIINGO_DELAY_SEC)
 
     # --- Fetch all data (yfinance price + history, Finnhub fundamentals) ---
     fund = get_combined_data(ticker)
@@ -600,6 +579,7 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
         log.info(f"{ticker}: growth not computable, skipping valuation")
         row["Error"] = "Growth N/A"
         return row
+    g = min(g, GROWTH_CAP)
     if g <= 0:
         log.info(f"{ticker}: negative/zero growth ({g:.1f}%), flooring to 1%")
         g = 1.0
@@ -671,532 +651,6 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float) -> pd.DataFrame:
 
 
 # ═════════════════════════════════════════════
-# STEP 6 — PUSH TO GOOGLE SHEETS
-# ═════════════════════════════════════════════
-
-# ── Traffic light color maps ─────────────────────────────────────────────────
-# Each entry: signal column name → {cell value → (red, green, blue) 0–1 floats}
-_GREEN  = {"red": 0.714, "green": 0.843, "blue": 0.659}
-_YELLOW = {"red": 1.0,   "green": 0.898, "blue": 0.6}
-_RED    = {"red": 0.918, "green": 0.600, "blue": 0.600}
-_NONE   = None  # no fill
-
-SIGNAL_COLORS = {
-    "Lynch_Status": {
-        "Strong Buy": _GREEN,
-        "Buy":        _GREEN,
-        "Hold":       _YELLOW,
-        "Avoid":      _RED,
-    },
-    "Lynch_PEG_Band": {
-        "Strong Buy": _GREEN,
-        "Buy":        _GREEN,
-        "Hold":       _YELLOW,
-        "Avoid":      _RED,
-    },
-    "Graham_Status": {
-        "Deep Buy":   _GREEN,
-        "Buy":        _GREEN,
-        "Watch":      _YELLOW,
-        "Avoid":      _RED,
-    },
-    "Defensive": {
-        "Pass":       _GREEN,
-        "Borderline": _YELLOW,
-        "Fail":       _RED,
-    },
-    "Status_Combined": {
-        "True":       _GREEN,
-        "False":      _NONE,
-    },
-    "Lynch_PEG_Status": {
-        "Cheap":      _GREEN,
-        "Reasonable": _YELLOW,
-        "Rich":       _RED,
-    },
-    "Lynch_PEGY_Status": {
-        "Cheap":      _GREEN,
-        "Reasonable": _YELLOW,
-        "Rich":       _RED,
-    },
-}
-
-
-def _col_letter(n: int) -> str:
-    """Convert 0-based column index to spreadsheet letter (0→A, 25→Z, 26→AA)."""
-    result = ""
-    n += 1
-    while n:
-        n, r = divmod(n - 1, 26)
-        result = chr(65 + r) + result
-    return result
-
-
-def _apply_color_coding(ws, df_clean: "pd.DataFrame"):
-    """
-    Apply traffic-light background colors to signal columns.
-    Batches all requests into a single API call for efficiency.
-    """
-    cols = df_clean.columns.tolist()
-    requests = []
-
-    for col_name, color_map in SIGNAL_COLORS.items():
-        if col_name not in cols:
-            continue
-        col_idx = cols.index(col_name)
-
-        for row_idx, val in enumerate(df_clean[col_name].tolist()):
-            color = color_map.get(str(val).strip())
-            if color is None:
-                continue
-            # row 0 = header (row 1 in sheets), data starts at row_idx+1 (0-based) → +2
-            requests.append({
-                "repeatCell": {
-                    "range": {
-                        "sheetId":          ws.id,
-                        "startRowIndex":    row_idx + 1,
-                        "endRowIndex":      row_idx + 2,
-                        "startColumnIndex": col_idx,
-                        "endColumnIndex":   col_idx + 1,
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "backgroundColor": color
-                        }
-                    },
-                    "fields": "userEnteredFormat.backgroundColor"
-                }
-            })
-
-    if requests:
-        ws.spreadsheet.batch_update({"requests": requests})
-
-
-# ── Documentation tab content ─────────────────────────────────────────────────
-DOCS_CONTENT = [
-    ["Lynch & Graham Stock Screener — Documentation"],
-    [""],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    ["OVERVIEW"],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    ["  This screener runs two parallel valuation frameworks — Peter Lynch and"],
-    ["  Benjamin Graham — across the S&P 500, Dow 30, and Nasdaq-100 universe."],
-    ["  Each framework outputs a fair value estimate and a buy/hold/avoid signal."],
-    ["  A blended Score combines both for easy sorting."],
-    [""],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    ["SIGNAL COLUMNS (appear on the left)"],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    [""],
-    ["  Status_Combined"],
-    ["    • True  = at least one of Lynch or Graham says Buy"],
-    ["    • False = neither framework sees value at the current price"],
-    [""],
-    ["  Score"],
-    ["    • Blended 0–60 score. Higher = cheaper relative to both frameworks."],
-    ["    • Formula: 0.5 × Lynch_Discount_Pct + 0.5 × Graham_Discount_Pct"],
-    ["    • Both discounts are clipped to [0, 60%] before averaging."],
-    ["    • The sheet is sorted by this column descending (best first)."],
-    [""],
-    ["  Lynch_Status  (G+D method — primary Lynch signal)"],
-    ["    • Strong Buy  = price ≤ 70% of Lynch fair value"],
-    ["    • Buy         = price ≤ 100% of Lynch fair value"],
-    ["    • Hold        = price ≤ 130% of Lynch fair value"],
-    ["    • Avoid       = price > 130% of Lynch fair value"],
-    ["    • Fair value  = EPS × (Growth% + Dividend%)"],
-    [""],
-    ["  Lynch_PEG_Band  (PEG method — secondary Lynch signal)"],
-    ["    • Strong Buy  = price ≤ 70% of conservative PEG fair value"],
-    ["    • Buy         = price ≤ conservative PEG fair value (EPS × 0.8 × Growth)"],
-    ["    • Hold        = price ≤ PEG fair value (EPS × Growth)"],
-    ["    • Avoid       = price > PEG fair value"],
-    [""],
-    ["  Graham_Status"],
-    ["    • Deep Buy    = price ≤ 60% of Graham fair value (40%+ margin of safety)"],
-    ["    • Buy         = price ≤ 80% of Graham fair value (20%+ margin of safety)"],
-    ["    • Watch       = price ≤ 95% of Graham fair value"],
-    ["    • Avoid       = price > 95% of Graham fair value"],
-    ["    • Fair value  = MIN(Version A, Version B) — see Graham section below"],
-    [""],
-    ["  Defensive  (Graham defensive investor filter)"],
-    ["    • Pass        = score ≥ 6/8 on Graham's balance sheet checklist"],
-    ["    • Borderline  = score 4–5"],
-    ["    • Fail        = score < 4"],
-    ["    • See Defensive_Score for the exact number"],
-    [""],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    ["PETER LYNCH FRAMEWORK"],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    [""],
-    ["  Core idea: a stock is fairly valued when its P/E ratio equals its"],
-    ["  growth rate (PEG = 1). Add dividends for income-paying stocks (PEGY)."],
-    [""],
-    ["  Category  (auto-assigned from growth rate)"],
-    ["    • Slow Grower  = growth < 5%  — utility/mature companies"],
-    ["    • Stalwart     = growth 5–12% — large, steady compounders"],
-    ["    • Fast Grower  = growth > 12% — high growth, higher risk"],
-    [""],
-    ["  Key metrics"],
-    ["    • Lynch_PEG     = P/E ÷ Growth%.  Below 1.0 = cheap, above 1.0 = rich."],
-    ["    • Lynch_PEGY    = P/E ÷ (Growth% + Div%).  Adds dividend to PEG."],
-    ["    • Lynch_Score   = (Growth% + Div%) ÷ P/E.  Inverse of PEGY, higher = better."],
-    ["    • Lynch_FV_GplusD  = EPS × (Growth% + Div%).  G+D fair value."],
-    ["    • Lynch_BuyPrice   = Category-adjusted buy price (applies extra discount"],
-    ["                         for Fast Growers, less for Stalwarts)."],
-    ["    • Lynch_Discount_Pct = how far below Lynch_BuyPrice the stock is trading."],
-    ["                           Positive = trading below buy price (good)."],
-    [""],
-    ["  Discount factors by category"],
-    ["    • Slow Grower:  buy at 75% of conservative fair value"],
-    ["    • Stalwart:     buy at 80% of conservative fair value"],
-    ["    • Fast Grower:  buy at 70% of conservative fair value (more growth risk)"],
-    [""],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    ["BENJAMIN GRAHAM FRAMEWORK"],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    [""],
-    ["  Core idea: buy at a significant discount to intrinsic value (margin of"],
-    ["  safety). Graham's formula adjusts for interest rates — higher rates"],
-    ["  make stocks worth less, lower rates make them worth more."],
-    [""],
-    ["  Graham_VA  (classic rate-adjusted formula)"],
-    ["    • Formula: EPS × (8.5 + 2 × Growth%) × 4.4 ÷ AAA_Yield"],
-    ["    • 8.5 = Graham's no-growth P/E baseline"],
-    ["    • 4.4 = historical AAA bond yield when formula was written"],
-    ["    • AAA_Yield = current Moody's AAA corporate yield (fetched live from FRED)"],
-    [""],
-    ["  Graham_VB  (conservative variant)"],
-    ["    • Formula: EPS × (7 + Growth%) × 4.4 ÷ AAA_Yield"],
-    ["    • Uses a lower base P/E (7 vs 8.5) and single growth multiplier"],
-    [""],
-    ["  Graham_FairValue"],
-    ["    • MIN(Graham_VA, Graham_VB) — always uses the more conservative estimate"],
-    [""],
-    ["  Graham_Discount_Pct"],
-    ["    • How far below Graham_FairValue the stock is trading."],
-    ["    • Positive = trading at a discount (good). Negative = trading at a premium."],
-    [""],
-    ["  Graham Defensive Checklist  (8 criteria, 1 point each)"],
-    ["    1. Market cap ≥ $2B"],
-    ["    2. Current ratio ≥ 2.0  (current assets / current liabilities)"],
-    ["    3. Long-term debt / equity ≤ 1.0"],
-    ["    4. Positive EPS in 8 of last 10 fiscal years"],
-    ["    5. Paid a dividend in 5 of last 10 years"],
-    ["    6. Cumulative EPS growth ≥ 33% over 10 years (~3%/yr)"],
-    ["    7. P/E ≤ 15 based on 3-year average EPS"],
-    ["    8. P/B ≤ 1.5, or P/E × P/B ≤ 22.5"],
-    [""],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    ["DATA SOURCES"],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    [""],
-    ["  • Price, EPS, dividends, balance sheet  →  Yahoo Finance (via yfinance)"],
-    ["  • AAA corporate bond yield              →  FRED (Federal Reserve)"],
-    ["  • Index constituents                    →  Wikipedia (S&P 500, Dow, Nasdaq-100)"],
-    [""],
-    ["  Growth is calculated as EPS CAGR using the longest available window"],
-    ["  (typically 4–5 years). If growth is negative, it is floored at 1%"],
-    ["  so that a conservative valuation is still computed rather than skipped."],
-    [""],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    ["COLOR CODING (Results tab)"],
-    ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"],
-    [""],
-    ["  Green  = Strong Buy / Buy / Deep Buy / Pass"],
-    ["  Yellow = Hold / Watch / Borderline / Reasonable"],
-    ["  Red    = Avoid / Fail"],
-    [""],
-    ["  Applied to: Lynch_Status, Lynch_PEG_Band, Graham_Status,"],
-    ["              Defensive, Status_Combined, Lynch_PEG_Status, Lynch_PEGY_Status"],
-    [""],
-]
-
-
-def _write_markdown_tab(sh, df: "pd.DataFrame"):
-    """
-    Write a Top 20 Buy Signals summary as a copyable markdown table
-    on a dedicated tab. Designed for easy sharing — just copy the cell.
-    """
-    tab_name = "Top 20 Summary"
-    try:
-        md_ws = sh.worksheet(tab_name)
-        md_ws.clear()
-    except gspread.WorksheetNotFound:
-        md_ws = sh.add_worksheet(title=tab_name, rows=60, cols=3)
-
-    # ── Build the top 20 from the results DataFrame ──────────────────
-    # Rename Score column if needed (may already be renamed by this point)
-    score_col   = "Score"    if "Score"    in df.columns else "CombinedScore"
-    status_col  = "Status_Combined" if "Status_Combined" in df.columns else "Show"
-    lynch_col   = "Lynch_Status"
-    graham_col  = "Graham_Status"
-    defensive_col = "Defensive"
-    price_col   = "Price"
-    buy_price_col = "Lynch_BuyPrice"
-    graham_fv_col = "Graham_FairValue"
-    category_col  = "Category"
-    growth_col    = "Growth_Pct" if "Growth_Pct" in df.columns else "Growth_g_Pct"
-    eps_col       = "EPS"        if "EPS"        in df.columns else "EPS_TTM"
-
-    # Filter to rows with a buy signal and valid score, take top 20
-    has_score = df[score_col].apply(lambda x: str(x).replace(".", "").lstrip("-").isdigit()
-                                    or (str(x).replace(".", "", 1).replace("-", "", 1).isdigit()))
-    try:
-        scored = df[has_score].copy()
-        scored[score_col] = pd.to_numeric(scored[score_col], errors="coerce")
-        top20 = scored.nlargest(20, score_col)
-    except Exception:
-        top20 = df.head(20)
-
-    # ── Helper to safely get a cell value ────────────────────────────
-    def _cell(row, col):
-        if col in row.index:
-            v = row[col]
-            return "" if str(v) in ("nan", "None", "") else str(v)
-        return ""
-
-    # ── Build markdown table ──────────────────────────────────────────
-    from datetime import date
-    today = date.today().strftime("%B %d, %Y")
-
-    header = (
-        "| # | Ticker | Price | Lynch | Graham | Defensive "
-        "| Category | Growth% | EPS | Lynch Buy | Graham FV | Score |"
-    )
-    separator = (
-        "|---|--------|-------|-------|--------|-----------|"
-        "----------|---------|-----|-----------|-----------|-------|"
-    )
-
-    rows_md = []
-    for i, (_, row) in enumerate(top20.iterrows(), 1):
-        line = (
-            f"| {i} "
-            f"| {_cell(row, 'Ticker')} "
-            f"| ${_cell(row, price_col)} "
-            f"| {_cell(row, lynch_col)} "
-            f"| {_cell(row, graham_col)} "
-            f"| {_cell(row, defensive_col)} "
-            f"| {_cell(row, category_col)} "
-            f"| {_cell(row, growth_col)}% "
-            f"| ${_cell(row, eps_col)} "
-            f"| ${_cell(row, buy_price_col)} "
-            f"| ${_cell(row, graham_fv_col)} "
-            f"| {_cell(row, score_col)} |"
-        )
-        rows_md.append(line)
-
-    full_table = "\n".join([header, separator] + rows_md)
-
-    # ── Write to sheet ────────────────────────────────────────────────
-    sheet_data = [
-        [f"Top 20 Buy Signals — {today}"],
-        [""],
-        ["Instructions: Copy the cell below and paste as markdown anywhere."],
-        [""],
-        [full_table],
-        [""],
-        ["── Individual rows (for easier reading) ──────────────────────────"],
-        [header],
-        [separator],
-    ] + [[r] for r in rows_md]
-
-    md_ws.update(sheet_data, value_input_option="USER_ENTERED")
-
-    # Format: bold title, wide column, wrap text on the full table cell
-    requests = [
-        # Bold title
-        {
-            "repeatCell": {
-                "range": {"sheetId": md_ws.id,
-                          "startRowIndex": 0, "endRowIndex": 1,
-                          "startColumnIndex": 0, "endColumnIndex": 1},
-                "cell": {"userEnteredFormat": {"textFormat": {"bold": True, "fontSize": 13}}},
-                "fields": "userEnteredFormat.textFormat"
-            }
-        },
-        # Wrap text on the full-table cell (row 5, 0-indexed = row 4)
-        {
-            "repeatCell": {
-                "range": {"sheetId": md_ws.id,
-                          "startRowIndex": 4, "endRowIndex": 5,
-                          "startColumnIndex": 0, "endColumnIndex": 1},
-                "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP"}},
-                "fields": "userEnteredFormat.wrapStrategy"
-            }
-        },
-        # Wide column A
-        {
-            "updateDimensionProperties": {
-                "range": {"sheetId": md_ws.id, "dimension": "COLUMNS",
-                          "startIndex": 0, "endIndex": 1},
-                "properties": {"pixelSize": 900},
-                "fields": "pixelSize"
-            }
-        },
-    ]
-    sh.batch_update({"requests": requests})
-
-
-def _write_docs_tab(sh):
-    """Create or overwrite the Documentation worksheet."""
-    tab_name = "Documentation"
-    try:
-        docs_ws = sh.worksheet(tab_name)
-        docs_ws.clear()
-    except gspread.WorksheetNotFound:
-        docs_ws = sh.add_worksheet(title=tab_name, rows=200, cols=5)
-
-    docs_ws.update(DOCS_CONTENT, value_input_option="USER_ENTERED")
-
-    # Bold the title and section headers
-    bold_rows = [i + 1 for i, row in enumerate(DOCS_CONTENT)
-                 if row and ("━" in row[0] or row[0] == DOCS_CONTENT[0][0]
-                 or (row[0].strip() and not row[0].startswith(" ") and not row[0].startswith("•")))]
-    requests = []
-    for r in bold_rows:
-        requests.append({
-            "repeatCell": {
-                "range": {"sheetId": docs_ws.id,
-                          "startRowIndex": r - 1, "endRowIndex": r,
-                          "startColumnIndex": 0,  "endColumnIndex": 1},
-                "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
-                "fields": "userEnteredFormat.textFormat.bold"
-            }
-        })
-    # Widen column A so text isn't clipped
-    requests.append({
-        "updateDimensionProperties": {
-            "range": {"sheetId": docs_ws.id, "dimension": "COLUMNS",
-                      "startIndex": 0, "endIndex": 1},
-            "properties": {"pixelSize": 700},
-            "fields": "pixelSize"
-        }
-    })
-    if requests:
-        sh.batch_update({"requests": requests})
-
-def push_to_gsheets(df: pd.DataFrame):
-    """
-    Authenticate and write the results DataFrame to Google Sheets.
-
-    GSHEET_CREDS_JSON can be either:
-      - A file path  (local dev):  "/path/to/service_account.json"
-      - Raw JSON string (Actions): the entire JSON content as a secret
-    """
-    import json as _json
-    log.info("Authenticating with Google Sheets...")
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    creds_val = GSHEET_CREDS_JSON.strip()
-    if creds_val.startswith("{"):
-        # Raw JSON content (GitHub Actions secret)
-        creds_info = _json.loads(creds_val)
-        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
-    else:
-        # File path (local dev)
-        creds = Credentials.from_service_account_file(creds_val, scopes=scopes)
-    client = gspread.authorize(creds)
-
-    log.info(f"Opening spreadsheet: '{GSHEET_SPREADSHEET}' → '{GSHEET_WORKSHEET}'")
-    sh  = client.open(GSHEET_SPREADSHEET)
-
-    # Create worksheet if it doesn't exist
-    try:
-        ws = sh.worksheet(GSHEET_WORKSHEET)
-        ws.clear()
-    except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title=GSHEET_WORKSHEET, rows=2000, cols=60)
-
-    # ── Rename columns (clean up prefixes/redundancy) ──────────────
-    rename_map = {
-        # Signals
-        "Show":                     "Status_Combined",
-        "CombinedScore":            "Score",
-        "DefensiveLabel":           "Defensive",
-        "DefensiveScore":           "Defensive_Score",
-        # Lynch signals
-        "Lynch_Lynch_Status":       "Lynch_Status",
-        "Lynch_Lynch_PEG_Band":     "Lynch_PEG_Band",
-        "Lynch_Lynch_Category":     "Category",
-        "Lynch_Lynch_BuyPrice":     "Lynch_BuyPrice",
-        "Lynch_Lynch_Discount_Pct": "Lynch_Discount_Pct",
-        "Lynch_Lynch_Score":        "Lynch_Score",
-        "Lynch_Lynch_LV_Ratio":     "Lynch_LV_Ratio",
-        "Lynch_Lynch_FV_PEG":       "Lynch_FV_PEG",
-        "Lynch_Lynch_FV_PEG_Con":   "Lynch_FV_PEG_Con",
-        "Lynch_Lynch_FV_GplusD":    "Lynch_FV_GplusD",
-        "Lynch_Lynch_PEGY_Status":  "Lynch_PEGY_Status",
-        "Lynch_Lynch_PEG_Status":   "Lynch_PEG_Status",
-        "Lynch_Lynch_PE":           "Lynch_PE",
-        "Lynch_Lynch_PEG":          "Lynch_PEG",
-        "Lynch_Lynch_PEGY":         "Lynch_PEGY",
-        # Graham signals
-        "Graham_Graham_Status":         "Graham_Status",
-        "Graham_Graham_FV":             "Graham_FairValue",
-        "Graham_Graham_VA":             "Graham_VA",
-        "Graham_Graham_VB":             "Graham_VB",
-        "Graham_Graham_Discount_Pct":   "Graham_Discount_Pct",
-        # Raw data
-        "Growth_g_Pct":             "Growth_Pct",
-        "EPS_TTM":                  "EPS",
-        "DivYield_Pct":             "Div_Yield_Pct",
-    }
-    df = df.rename(columns=rename_map)
-
-    # ── Reorder: signals first, raw data after ──────────────────────
-    priority_cols = [
-        "Ticker", "Indexes",
-        "Status_Combined", "Score",
-        "Lynch_Status", "Lynch_PEG_Band", "Graham_Status",
-        "Defensive", "Defensive_Score",
-        "Price", "Lynch_BuyPrice", "Graham_FairValue",
-        "Category", "Growth_Pct", "EPS",
-        "Lynch_Discount_Pct", "Graham_Discount_Pct",
-    ]
-    remaining_cols = [c for c in df.columns if c not in priority_cols]
-    df = df[[c for c in priority_cols if c in df.columns] + remaining_cols]
-
-    # Convert DataFrame → list of lists (header + rows)
-    df_clean = df.fillna("").astype(str)
-    data = [df_clean.columns.tolist()] + df_clean.values.tolist()
-
-    ws.update(data, value_input_option="USER_ENTERED")
-    log.info(f"✓ Wrote {len(df)} rows to Google Sheets.")
-
-    # Bold the header row
-    ws.format("1:1", {"textFormat": {"bold": True}})
-
-    # Freeze header row
-    sh.batch_update({
-        "requests": [{
-            "updateSheetProperties": {
-                "properties": {
-                    "sheetId": ws.id,
-                    "gridProperties": {"frozenRowCount": 1}
-                },
-                "fields": "gridProperties.frozenRowCount"
-            }
-        }]
-    })
-    log.info("✓ Header formatted and frozen.")
-
-    # ── Color coding ────────────────────────────────────────────────
-    _apply_color_coding(ws, df_clean)
-    log.info("✓ Color coding applied.")
-
-    # ── Documentation tab ───────────────────────────────────────────
-    _write_docs_tab(sh)
-    log.info("✓ Documentation tab written.")
-
-    # ── Top 20 markdown summary tab ──────────────────────────────────
-    _write_markdown_tab(sh, df)
-    log.info("✓ Top 20 markdown tab written.")
-
-
-# ═════════════════════════════════════════════
 # MAIN
 # ═════════════════════════════════════════════
 
@@ -1234,7 +688,7 @@ def main():
     # 3. Process all tickers
     results_df = run_screener(universe, aaa_yield)
 
-    # 4. Push to Google Sheets
+    # 4. Write JSON output
     write_json(results_df)
 
     log.info("═══ Done ═══")

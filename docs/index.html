@@ -149,67 +149,67 @@
 
     return [
       // ── Identity ──────────────────────────────────────────────────────────
-      { title: "Ticker",       field: "Ticker",       frozen: true,  width: 75,  sorter: "string", formatter: "plaintext", ...txt },
-      { title: "Price",        field: "Price",        sorter: "number", formatter: numFmt(2), ...num, width: 70 },
-      { title: "Mkt Cap ($B)", field: "MarketCap_B",  sorter: "number", formatter: numFmt(2), ...num, width: 100 },
-      { title: "EPS TTM",      field: "EPS_TTM",      sorter: "number", formatter: numFmt(2), ...num, width: 80 },
-      { title: "EPS Annual",   field: "EPS_Annual",   sorter: "string", formatter: "plaintext", headerFilter: false, width: 130 },
-      { title: "Div Yield %",  field: "DivYield_Pct", sorter: "number", formatter: pctFmt,    ...num, width: 85 },
-      { title: "Growth %",     field: "Growth_g_Pct", sorter: "number", formatter: pctFmt,    ...num, width: 80 },
-      { title: "AAA Yield",    field: "AAA_Yield",    sorter: "number", formatter: numFmt(2), ...num, width: 80 },
-      { title: "P/B",          field: "PB_Ratio",     sorter: "number", formatter: numFmt(2), ...num, width: 60 },
-      { title: "Indexes",      field: "Indexes",      sorter: "string", ...drop, width: 100 },
+      { title: "Ticker",       field: "Ticker",       frozen: true,  sorter: "string", formatter: function(cell) { var t = cell.getValue(); return '<a href="https://finviz.com/quote.ashx?t=' + t + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">' + t + '</a>'; }, ...txt },
+      { title: "Price",        field: "Price",        sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Mkt Cap ($B)", field: "MarketCap_B",  sorter: "number", formatter: numFmt(2), ...num },
+      { title: "EPS TTM",      field: "EPS_TTM",      sorter: "number", formatter: numFmt(2), ...num },
+      { title: "EPS Annual",   field: "EPS_Annual",   sorter: "string", formatter: "plaintext", headerFilter: false, maxWidth: 160 },
+      { title: "Div Yield %",  field: "DivYield_Pct", sorter: "number", formatter: pctFmt,    ...num },
+      { title: "Growth %",     field: "Growth_g_Pct", sorter: "number", formatter: pctFmt,    ...num },
+      { title: "AAA Yield",    field: "AAA_Yield",    sorter: "number", formatter: numFmt(2), ...num },
+      { title: "P/B",          field: "PB_Ratio",     sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Indexes",      field: "Indexes",      sorter: "string", ...drop },
 
       // ── Lynch metrics ─────────────────────────────────────────────────────
-      { title: "Lynch PE",     field: "Lynch_PE",           sorter: "number", formatter: numFmt(2), ...num, width: 75 },
-      { title: "Lynch PEG",    field: "Lynch_PEG",          sorter: "number", formatter: numFmt(2), ...num, width: 75 },
-      { title: "Lynch PEGY",   field: "Lynch_PEGY",         sorter: "number", formatter: numFmt(2), ...num, width: 80 },
-      { title: "Lynch Score",  field: "Lynch_Lynch_Score",  sorter: "number", formatter: numFmt(2), ...num, width: 85 },
-      { title: "Lynch FV PEG", field: "Lynch_FV_PEG",       sorter: "number", formatter: numFmt(2), ...num, width: 90 },
-      { title: "FV PEG Con",   field: "Lynch_FV_PEG_Con",   sorter: "number", formatter: numFmt(2), ...num, width: 90 },
-      { title: "FV G+D",       field: "Lynch_FV_GplusD",    sorter: "number", formatter: numFmt(2), ...num, width: 80 },
-      { title: "Lynch Cat",    field: "Lynch_Lynch_Category",sorter: "string", ...drop, width: 100 },
-      { title: "Buy Price",    field: "Lynch_Lynch_BuyPrice",sorter: "number", formatter: numFmt(2), ...num, width: 80 },
-      { title: "LV Ratio",     field: "Lynch_LV_Ratio",     sorter: "number", formatter: numFmt(2), ...num, width: 80 },
-      { title: "Lynch Disc %", field: "Lynch_Lynch_Discount_Pct", sorter: "number", formatter: pctFmt, ...num, width: 90 },
+      { title: "Lynch PE",     field: "Lynch_PE",           sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Lynch PEG",    field: "Lynch_PEG",          sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Lynch PEGY",   field: "Lynch_PEGY",         sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Lynch Score",  field: "Lynch_Lynch_Score",  sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Lynch FV PEG", field: "Lynch_FV_PEG",       sorter: "number", formatter: numFmt(2), ...num },
+      { title: "FV PEG Con",   field: "Lynch_FV_PEG_Con",   sorter: "number", formatter: numFmt(2), ...num },
+      { title: "FV G+D",       field: "Lynch_FV_GplusD",    sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Lynch Cat",    field: "Lynch_Lynch_Category",sorter: "string", ...drop },
+      { title: "Buy Price",    field: "Lynch_Lynch_BuyPrice",sorter: "number", formatter: numFmt(2), ...num },
+      { title: "LV Ratio",     field: "Lynch_LV_Ratio",     sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Lynch Disc %", field: "Lynch_Lynch_Discount_Pct", sorter: "number", formatter: pctFmt, ...num },
 
       // ── Lynch signal columns (traffic-light) ──────────────────────────────
       { title: "Lynch Status", field: "Lynch_Lynch_Status", sorter: "string",
-        formatter: makeSignalFormatter("Lynch_Lynch_Status"), ...drop, width: 100 },
+        formatter: makeSignalFormatter("Lynch_Lynch_Status"), ...drop },
       { title: "PEG Band",     field: "Lynch_Lynch_PEG_Band", sorter: "string",
-        formatter: makeSignalFormatter("Lynch_Lynch_PEG_Band"), ...drop, width: 90 },
+        formatter: makeSignalFormatter("Lynch_Lynch_PEG_Band"), ...drop },
       { title: "PEG Status",   field: "Lynch_PEG_Status",  sorter: "string",
-        formatter: makeSignalFormatter("Lynch_PEG_Status"),  ...drop, width: 90 },
+        formatter: makeSignalFormatter("Lynch_PEG_Status"),  ...drop },
       { title: "PEGY Status",  field: "Lynch_PEGY_Status", sorter: "string",
-        formatter: makeSignalFormatter("Lynch_PEGY_Status"), ...drop, width: 95 },
+        formatter: makeSignalFormatter("Lynch_PEGY_Status"), ...drop },
 
       // ── Graham metrics ────────────────────────────────────────────────────
-      { title: "Graham VA",    field: "Graham_Graham_VA",           sorter: "number", formatter: numFmt(2), ...num, width: 85 },
-      { title: "Graham VB",    field: "Graham_Graham_VB",           sorter: "number", formatter: numFmt(2), ...num, width: 85 },
-      { title: "Graham FV",    field: "Graham_Graham_FV",           sorter: "number", formatter: numFmt(2), ...num, width: 85 },
-      { title: "Graham Disc%", field: "Graham_Graham_Discount_Pct", sorter: "number", formatter: pctFmt,    ...num, width: 90 },
+      { title: "Graham VA",    field: "Graham_Graham_VA",           sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Graham VB",    field: "Graham_Graham_VB",           sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Graham FV",    field: "Graham_Graham_FV",           sorter: "number", formatter: numFmt(2), ...num },
+      { title: "Graham Disc%", field: "Graham_Graham_Discount_Pct", sorter: "number", formatter: pctFmt,    ...num },
 
       // ── Graham signal column (traffic-light) ──────────────────────────────
       { title: "Graham Status",field: "Graham_Graham_Status", sorter: "string",
-        formatter: makeSignalFormatter("Graham_Graham_Status"), ...drop, width: 110 },
+        formatter: makeSignalFormatter("Graham_Graham_Status"), ...drop },
 
       // ── Defensive metrics ─────────────────────────────────────────────────
-      { title: "Def Score",    field: "DefensiveScore",  sorter: "number", formatter: numFmt(1), ...num, width: 80 },
-      { title: "Size OK",      field: "Size_OK",         sorter: "number", formatter: numFmt(0), ...num, width: 65 },
-      { title: "Curr Ratio OK",field: "CurrRatio_OK",    sorter: "number", formatter: numFmt(0), ...num, width: 95 },
-      { title: "Debt/Eq OK",   field: "DebtEq_OK",       sorter: "number", formatter: numFmt(0), ...num, width: 80 },
-      { title: "EPS Stab",     field: "EPS_Stability",   sorter: "number", formatter: numFmt(0), ...num, width: 75 },
-      { title: "Div Record",   field: "Div_Record",      sorter: "number", formatter: numFmt(0), ...num, width: 80 },
-      { title: "EPS Gr 10Y",   field: "EPS_Growth10Y",   sorter: "number", formatter: numFmt(0), ...num, width: 85 },
-      { title: "PE Limit",     field: "PE_Limit",        sorter: "number", formatter: numFmt(0), ...num, width: 75 },
-      { title: "PB Limit",     field: "PB_Limit",        sorter: "number", formatter: numFmt(0), ...num, width: 75 },
+      { title: "Def Score",    field: "DefensiveScore",  sorter: "number", formatter: numFmt(1), ...num },
+      { title: "Size OK",      field: "Size_OK",         sorter: "number", formatter: numFmt(0), ...num },
+      { title: "Curr Ratio OK",field: "CurrRatio_OK",    sorter: "number", formatter: numFmt(0), ...num },
+      { title: "Debt/Eq OK",   field: "DebtEq_OK",       sorter: "number", formatter: numFmt(0), ...num },
+      { title: "EPS Stab",     field: "EPS_Stability",   sorter: "number", formatter: numFmt(0), ...num },
+      { title: "Div Record",   field: "Div_Record",      sorter: "number", formatter: numFmt(0), ...num },
+      { title: "EPS Gr 10Y",   field: "EPS_Growth10Y",   sorter: "number", formatter: numFmt(0), ...num },
+      { title: "PE Limit",     field: "PE_Limit",        sorter: "number", formatter: numFmt(0), ...num },
+      { title: "PB Limit",     field: "PB_Limit",        sorter: "number", formatter: numFmt(0), ...num },
 
       // ── Defensive signal column (traffic-light) ───────────────────────────
       { title: "Defensive",    field: "DefensiveLabel", sorter: "string",
-        formatter: makeSignalFormatter("DefensiveLabel"), ...drop, width: 90 },
+        formatter: makeSignalFormatter("DefensiveLabel"), ...drop },
 
       // ── Combined ──────────────────────────────────────────────────────────
-      { title: "Score",        field: "CombinedScore",  sorter: "number", formatter: numFmt(2), ...num, width: 65 },
+      { title: "Score",        field: "CombinedScore",  sorter: "number", formatter: numFmt(2), ...num },
 
       // ── Utility columns (programmatic filter only) ────────────────────────
       { title: "Buy?",  field: "Show",  visible: false, headerFilter: false },
@@ -275,7 +275,7 @@
 
       var table = new Tabulator("#data-table", {
         data: data.rows,
-        layout: "fitData",
+        layout: "fitDataTable",
         height: "calc(100vh - 140px)",
         renderVertical: "virtual",
         initialSort: [{ column: "CombinedScore", dir: "desc" }],

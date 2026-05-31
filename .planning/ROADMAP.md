@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Security & Pipeline Prerequisites** - Fix the hardcoded API key, audit git history, and configure the Actions workflow so the repo is safe to publish and the CI commit chain is correct
 - [x] **Phase 2: JSON Output Pipeline** - Replace `push_to_gsheets()` with a JSON writer and verify the full Actions → commit → Pages publish loop with `workflow_dispatch`
 - [x] **Phase 3: Interactive Dashboard** - Build the complete GitHub Pages frontend: Tabulator table with all columns, color coding, filters, Top 20 panel, methodology page, and nav (completed 2026-05-31)
-- [ ] **Phase 4: Google & Tiingo Cleanup** - Remove all Google dependencies and dead Tiingo config from the codebase now that the new pipeline is confirmed
+- [x] **Phase 4: Google & Tiingo Cleanup** - Remove all Google dependencies and dead Tiingo config from the codebase now that the new pipeline is confirmed (completed 2026-05-31)
 
 ## Phase Details
 
@@ -82,4 +82,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Security & Pipeline Prerequisites | 1/1 | Complete | 2026-05-30 |
 | 2. JSON Output Pipeline | 1/1 | Complete | 2026-05-30 |
 | 3. Interactive Dashboard | 2/2 | Complete    | 2026-05-31 |
-| 4. Google & Tiingo Cleanup | 0/? | Not started | - |
+| 4. Google & Tiingo Cleanup | 1/1 | Complete | 2026-05-31 |
