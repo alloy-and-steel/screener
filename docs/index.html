@@ -50,8 +50,8 @@
 
     <span class="toolbar-separator" aria-hidden="true"></span>
 
-    <button class="btn-pill" id="btn-errors" aria-pressed="false">
-      Show Errors
+    <button class="btn-pill" id="btn-clear-filters">
+      Clear Filters
     </button>
 
     <span class="toolbar-separator" aria-hidden="true"></span>
@@ -302,18 +302,10 @@
           }
         });
 
-        // ── Error rows toggle (FE-07) ─────────────────────────────────────
-        var errorsVisible = false;
-        var btnErrors = document.getElementById("btn-errors");
-        btnErrors.addEventListener("click", function() {
-          errorsVisible = !errorsVisible;
-          btnErrors.classList.toggle("active", errorsVisible);
-          btnErrors.setAttribute("aria-pressed", String(errorsVisible));
-          if (errorsVisible) {
-            table.removeFilter(noErrorFilter);
-          } else {
-            table.setFilter(noErrorFilter);
-          }
+        // ── Clear all header filters ──────────────────────────────────────
+        document.getElementById("btn-clear-filters").addEventListener("click", function() {
+          table.clearHeaderFilter();
+          document.getElementById("ticker-search").value = "";
         });
 
         // ── Summary / Full preset toggle (FE-13) ─────────────────────────
