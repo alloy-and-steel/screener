@@ -51,8 +51,8 @@
 
 ### Documentation Page
 
-- [ ] **DOC-01**: `docs/methodology.html` presents the Lynch and Graham methodology documentation (ported from `DOCS_CONTENT` in `stock_screener.py`)
-- [ ] **DOC-02**: A two-item navigation header links between Dashboard (`index.html`) and Methodology (`methodology.html`)
+- [x] **DOC-01**: `docs/methodology.html` presents the Lynch and Graham methodology documentation (ported from `DOCS_CONTENT` in `stock_screener.py`)
+- [x] **DOC-02**: A two-item navigation header links between Dashboard (`index.html`) and Methodology (`methodology.html`)
 
 ### Cleanup (deferred until dashboard verified end-to-end)
 
@@ -117,8 +117,8 @@
 | FE-15 | Phase 3 | Pending | Top 20 collapsible panel |
 | FE-16 | Phase 3 | Pending | Top 20 collapse state persisted |
 | FE-17 | Phase 3 | Pending | Top 20 ticker click scrolls to row |
-| DOC-01 | Phase 3 | Pending | methodology.html |
-| DOC-02 | Phase 3 | Pending | Two-item nav header |
+| DOC-01 | Phase 3 | Complete | methodology.html |
+| DOC-02 | Phase 3 | Complete | Two-item nav header |
 | CLN-01 | Phase 4 | Pending | Remove push_to_gsheets — only after Phase 3 verified |
 | CLN-02 | Phase 4 | Pending | Remove gspread/google-auth |
 | CLN-03 | Phase 4 | Pending | Remove GSHEET_* env vars |
