@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Methodology — Lynch &amp; Graham Screener</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Site header: title + nav ── -->
+  <header class="site-header">
+    <span class="site-title">Lynch &amp; Graham Screener</span>
+    <nav class="main-nav" aria-label="Site navigation">
+      <a href="index.html" class="nav-link">Dashboard</a>
+      <a href="methodology.html" class="nav-link active" aria-current="page">Methodology</a>
+    </nav>
+  </header>
+
+  <!-- ── Main content ── -->
+  <main class="methodology-content">
+
+    <h1>Methodology</h1>
+    <p>
+      This screener runs two parallel valuation frameworks — Peter Lynch and Benjamin Graham —
+      across the S&amp;P 500, Dow 30, and Nasdaq-100 universe. Each framework outputs a fair value
+      estimate and a buy/hold/avoid signal. A blended score combines both for easy sorting.
+    </p>
+
+    <!-- Tab list -->
+    <div role="tablist" aria-label="Methodology sections" class="tab-list">
+      <button role="tab" id="tab-lynch"     aria-selected="true"
+              aria-controls="panel-lynch"     class="tab-btn active">Lynch Signals</button>
+      <button role="tab" id="tab-graham"    aria-selected="false"
+              aria-controls="panel-graham"    class="tab-btn">Graham Signals</button>
+      <button role="tab" id="tab-defensive" aria-selected="false"
+              aria-controls="panel-defensive" class="tab-btn">Defensive Checklist</button>
+      <button role="tab" id="tab-sources"   aria-selected="false"
+              aria-controls="panel-sources"   class="tab-btn">Data Sources</button>
+    </div>
+
+    <!-- ── Panel 1: Lynch Signals ── -->
+    <section role="tabpanel" id="panel-lynch" aria-labelledby="tab-lynch">
+      <h2>Peter Lynch Framework</h2>
+      <p>
+        Lynch's core idea is that a stock is fairly valued when its P/E ratio equals its
+        earnings growth rate (PEG = 1). Adding the dividend yield gives the PEGY ratio for
+        income-paying stocks. The screener uses the G+D method (growth plus dividends) as the
+        primary Lynch signal and the PEG band method as a secondary signal.
+      </p>
+
+      <h3>Lynch Status</h3>
+      <p>Column: <code>Lynch_Lynch_Status</code> — primary Lynch buy/hold/avoid signal based on the G+D fair value.</p>
+      <dl>
+        <dt>Strong Buy</dt>
+        <dd>Price is at or below 70% of Lynch fair value (EPS &times; (Growth% + Dividend%))</dd>
+        <dt>Buy</dt>
+        <dd>Price is at or below 100% of Lynch fair value</dd>
+        <dt>Hold</dt>
+        <dd>Price is at or below 130% of Lynch fair value</dd>
+        <dt>Avoid</dt>
+        <dd>Price is above 130% of Lynch fair value</dd>
+      </dl>
+
+      <h3>PEG Band</h3>
+      <p>Column: <code>Lynch_Lynch_PEG_Band</code> — secondary Lynch signal based on the conservative PEG fair value.</p>
+      <dl>
+        <dt>Strong Buy</dt>
+        <dd>Price is at or below 70% of conservative PEG fair value</dd>
+        <dt>Buy</dt>
+        <dd>Price is at or below the conservative PEG fair value (EPS &times; 0.8 &times; Growth%)</dd>
+        <dt>Hold</dt>
+        <dd>Price is at or below the standard PEG fair value (EPS &times; Growth%)</dd>
+        <dt>Avoid</dt>
+        <dd>Price is above the standard PEG fair value</dd>
+      </dl>
+
+      <h3>PEG Status / PEGY Status</h3>
+      <p>Columns: <code>Lynch_PEG_Status</code> and <code>Lynch_PEGY_Status</code> — classify the raw PEG and PEGY ratios.</p>
+      <dl>
+        <dt>Cheap</dt>
+        <dd>PEG (or PEGY) below 1.0 — stock trades below its growth-adjusted fair value</dd>
+        <dt>Reasonable</dt>
+        <dd>PEG (or PEGY) between 1.0 and 1.5 — fairly priced relative to growth</dd>
+        <dt>Rich</dt>
+        <dd>PEG (or PEGY) above 1.5 — stock trades at a premium to its growth rate</dd>
+      </dl>
+
+      <h3>Company Categories</h3>
+      <p>Column: <code>Lynch_Lynch_Category</code> — automatically assigned based on the EPS growth rate.</p>
+      <dl>
+        <dt>Slow Grower</dt>
+        <dd>Growth below 5% — mature or utility-type companies</dd>
+        <dt>Stalwart</dt>
+        <dd>Growth between 5% and 12% — large, steady compounders</dd>
+        <dt>Fast Grower</dt>
+        <dd>Growth above 12% — higher growth, but with more valuation risk</dd>
+      </dl>
+
+      <h3>Key Metrics</h3>
+      <dl>
+        <dt><code>Lynch_PEG</code></dt>
+        <dd>P/E ratio divided by Growth%. Below 1.0 = cheap; above 1.0 = rich.</dd>
+        <dt><code>Lynch_PEGY</code></dt>
+        <dd>P/E ratio divided by (Growth% + Dividend%). Rewards income-paying stocks.</dd>
+        <dt><code>Lynch_Lynch_Score</code></dt>
+        <dd>(Growth% + Dividend%) divided by P/E. Inverse of PEGY — higher is better.</dd>
+        <dt><code>Lynch_FV_GplusD</code></dt>
+        <dd>G+D fair value: EPS &times; (Growth% + Dividend%). The primary Lynch fair value estimate.</dd>
+        <dt><code>Lynch_Lynch_BuyPrice</code></dt>
+        <dd>Category-adjusted buy price — applies an extra discount for Fast Growers, less for Stalwarts.</dd>
+        <dt><code>Lynch_Lynch_Discount_Pct</code></dt>
+        <dd>How far below Lynch_BuyPrice the stock is currently trading. Positive = trading below buy price (good).</dd>
+      </dl>
+
+      <h3>Discount Factors by Category</h3>
+      <p>The buy price applies a category-specific discount to the conservative fair value:</p>
+      <dl>
+        <dt>Slow Grower</dt>
+        <dd>Buy at 75% of conservative fair value</dd>
+        <dt>Stalwart</dt>
+        <dd>Buy at 80% of conservative fair value</dd>
+        <dt>Fast Grower</dt>
+        <dd>Buy at 70% of conservative fair value (additional discount for growth risk)</dd>
+      </dl>
+    </section>
+
+    <!-- ── Panel 2: Graham Signals ── -->
+    <section role="tabpanel" id="panel-graham" aria-labelledby="tab-graham" hidden>
+      <h2>Benjamin Graham Framework</h2>
+      <p>
+        Graham's core idea is to buy at a significant discount to intrinsic value — the "margin of
+        safety." His formula adjusts fair value for the prevailing interest rate environment: higher
+        rates reduce intrinsic value, lower rates increase it. The screener computes two Graham
+        formula variants and uses the more conservative of the two as the fair value estimate.
+      </p>
+
+      <h3>Graham Status</h3>
+      <p>Column: <code>Graham_Graham_Status</code> — classifies current price relative to Graham fair value.</p>
+      <dl>
+        <dt>Deep Buy</dt>
+        <dd>Price is at or below 60% of Graham fair value (40%+ margin of safety)</dd>
+        <dt>Buy</dt>
+        <dd>Price is at or below 80% of Graham fair value (20%+ margin of safety)</dd>
+        <dt>Watch</dt>
+        <dd>Price is at or below 95% of Graham fair value</dd>
+        <dt>Avoid</dt>
+        <dd>Price is above 95% of Graham fair value</dd>
+      </dl>
+
+      <h3>Fair Value Formulas</h3>
+
+      <p><strong>Version A (<code>Graham_Graham_VA</code>):</strong>
+        EPS &times; (8.5 + 2 &times; Growth%) &times; 4.4 &divide; AAA_Yield</p>
+      <dl>
+        <dt>8.5</dt>
+        <dd>Graham's no-growth P/E baseline — the P/E appropriate for a company with zero growth</dd>
+        <dt>2 &times; Growth%</dt>
+        <dd>Each percentage point of annual growth adds 2 points to the fair P/E</dd>
+        <dt>4.4</dt>
+        <dd>Historical AAA corporate bond yield when Graham wrote the formula (~1962)</dd>
+        <dt>AAA_Yield</dt>
+        <dd>Current Moody's AAA corporate bond yield, fetched live from FRED on each run</dd>
+      </dl>
+
+      <p><strong>Version B (<code>Graham_Graham_VB</code>):</strong>
+        EPS &times; (7 + Growth%) &times; 4.4 &divide; AAA_Yield</p>
+      <p>Version B uses a lower base P/E (7 vs. 8.5) and a single-multiple growth term
+         instead of double — a more conservative variant of the same rate-adjusted formula.</p>
+
+      <p><strong><code>Graham_Graham_FV</code> = MIN(VA, VB)</strong> —
+         always uses the more conservative of the two estimates as the definitive fair value.</p>
+
+      <h3>Graham Discount</h3>
+      <p>
+        Column: <code>Graham_Graham_Discount_Pct</code> — measures how far the current price is
+        below Graham fair value. A positive value means the stock is trading at a discount
+        (good — potential margin of safety). A negative value means it is trading at a premium
+        to fair value.
+      </p>
+    </section>
+
+    <!-- ── Panel 3: Defensive Checklist ── -->
+    <section role="tabpanel" id="panel-defensive" aria-labelledby="tab-defensive" hidden>
+      <h2>Graham Defensive Investor Checklist</h2>
+      <p>
+        Graham defined criteria that a stock must meet to be suitable for a conservative
+        "defensive" investor — one who prioritises safety of principal and a reasonable return.
+        Each criterion earns one point; the total out of 8 is the defensive score.
+      </p>
+
+      <p>
+        Columns: <code>DefensiveLabel</code> (Pass / Borderline / Fail) and
+        <code>DefensiveScore</code> (0–8).
+      </p>
+
+      <dl>
+        <dt>Pass</dt>
+        <dd>Score &ge; 6 out of 8 — meets Graham's defensive investor standard</dd>
+        <dt>Borderline</dt>
+        <dd>Score 4–5 — partially meets the criteria; warrants closer review</dd>
+        <dt>Fail</dt>
+        <dd>Score &lt; 4 — does not meet the defensive investor threshold</dd>
+      </dl>
+
+      <h3>Eight-Point Checklist</h3>
+      <table class="checklist-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Criterion</th>
+            <th>Pass Condition</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>Market capitalisation</td>
+            <td>&ge; $2 billion</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Current ratio</td>
+            <td>&ge; 2.0 (current assets &divide; current liabilities)</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Long-term debt / equity</td>
+            <td>&le; 1.0</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Earnings per share history</td>
+            <td>Positive EPS in 8 of the last 10 fiscal years</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Dividend history</td>
+            <td>Paid a dividend in 5 of the last 10 years</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>EPS growth (10-year)</td>
+            <td>Cumulative growth &ge; 33% over 10 years (~3%/yr)</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>P/E ratio</td>
+            <td>&le; 15 based on 3-year average EPS</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>P/B ratio</td>
+            <td>&le; 1.5, or P/E &times; P/B &le; 22.5</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── Panel 4: Data Sources ── -->
+    <section role="tabpanel" id="panel-sources" aria-labelledby="tab-sources" hidden>
+      <h2>Data Sources</h2>
+      <p>
+        All data is fetched automatically on each screener run. No manual data entry is required.
+        The screener runs on a weekday schedule via GitHub Actions.
+      </p>
+
+      <dl>
+        <dt>Price, EPS, dividends, balance sheet</dt>
+        <dd>Yahoo Finance via the <code>yfinance</code> Python library</dd>
+        <dt>AAA corporate bond yield</dt>
+        <dd>FRED (Federal Reserve Economic Data) — fetched live on each run</dd>
+        <dt>Index constituents (S&amp;P 500, Dow 30, Nasdaq-100)</dt>
+        <dd>Wikipedia — scraped on each run to keep the universe current</dd>
+      </dl>
+
+      <p>
+        Growth is calculated as EPS CAGR using the longest available window (typically 4–5 years).
+        If growth is negative it is floored at 1% so a conservative valuation is still computed.
+      </p>
+    </section>
+
+  </main>
+
+  <script>
+    var tabs = document.querySelectorAll('[role="tab"]');
+
+    tabs.forEach(function(tab, i) {
+      tab.addEventListener("click", function() { activateTab(tab); });
+      tab.addEventListener("keydown", function(e) {
+        if (e.key === "ArrowRight") activateTab(tabs[(i + 1) % tabs.length]);
+        if (e.key === "ArrowLeft")  activateTab(tabs[(i - 1 + tabs.length) % tabs.length]);
+      });
+    });
+
+    function activateTab(tab) {
+      tabs.forEach(function(t) {
+        t.setAttribute("aria-selected", "false");
+        t.classList.remove("active");
+      });
+      tab.setAttribute("aria-selected", "true");
+      tab.classList.add("active");
+      tab.focus();
+
+      document.querySelectorAll('[role="tabpanel"]').forEach(function(p) {
+        p.hidden = true;
+      });
+      document.getElementById(tab.getAttribute("aria-controls")).hidden = false;
+    }
+  </script>
+
+</body>
+</html>

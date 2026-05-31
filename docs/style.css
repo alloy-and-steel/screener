@@ -187,3 +187,62 @@ nav.main-nav {
 /* ── F: Table container ────────────────────────────────────────────────── */
 #table-container { overflow: hidden; height: calc(100vh - 140px); }
 #data-table { margin: 0; }
+
+/* ── G: Methodology page ───────────────────────────────────────────────── */
+.methodology-content {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 1.5rem 1.2rem;
+}
+
+.tab-list {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #4c566a;
+  margin-bottom: 1.5rem;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #d8dee9;
+  padding: 0.6rem 1.1rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-family: inherit;
+  margin-bottom: -2px;
+}
+.tab-btn:hover { color: #eceff4; }
+.tab-btn.active {
+  color: #88c0d0;
+  border-bottom-color: #88c0d0;
+  font-weight: 600;
+}
+
+[role="tabpanel"] { outline: none; }
+[role="tabpanel"] h2 { color: #eceff4; font-size: 1.2rem; margin-top: 0; }
+[role="tabpanel"] h3 { color: #d8dee9; font-size: 1rem; margin-top: 1.5rem; }
+[role="tabpanel"] dl { margin: 0.5rem 0 1rem 0; }
+[role="tabpanel"] dt { color: #88c0d0; font-weight: 600; margin-top: 0.8rem; }
+[role="tabpanel"] dd { margin: 0.2rem 0 0 1.2rem; color: #d8dee9; }
+[role="tabpanel"] code {
+  background: #3b4252;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.85em;
+  color: #88c0d0;
+}
+
+.checklist-table { border-collapse: collapse; width: 100%; margin-top: 0.8rem; }
+.checklist-table th,
+.checklist-table td {
+  border: 1px solid #4c566a;
+  padding: 0.4rem 0.7rem;
+  text-align: left;
+  font-size: 0.87rem;
+}
+.checklist-table th { background: #2e3440; color: #eceff4; }
+.checklist-table td { color: #d8dee9; }
+.checklist-table tr:nth-child(even) td { background: #434c5e; }
