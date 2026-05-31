@@ -213,7 +213,7 @@
 
       // ── Utility columns (programmatic filter only) ────────────────────────
       { title: "Buy?",  field: "Show",  visible: false, headerFilter: false },
-      { title: "Error", field: "Error", visible: true,  headerFilter: false,
+      { title: "Error", field: "Error", visible: false, headerFilter: false,
         formatter: function(cell) {
           const v = cell.getValue();
           return (v === null || v === undefined) ? "—" : String(v);
@@ -270,7 +270,8 @@
     .then(function(data) {
       updateFreshnessUI(data.generated_at);
 
-      const allFields = buildColumns().map(function(c) { return c.field; });
+      const cols = buildColumns();
+      const allFields = cols.map(function(c) { return c.field; });
 
       var table = new Tabulator("#data-table", {
         data: data.rows,
@@ -278,7 +279,7 @@
         height: "calc(100vh - 140px)",
         renderVertical: "virtual",
         initialSort: [{ column: "CombinedScore", dir: "desc" }],
-        columns: buildColumns(),
+        columns: cols,
       });
 
       table.on("tableBuilt", function() {
@@ -332,14 +333,17 @@
         // ── Ticker search (FE-14) ─────────────────────────────────────────
         var searchInput = document.getElementById("ticker-search");
         var searchTimeout;
+        var prevTickerVal = "";
         searchInput.addEventListener("input", function() {
           clearTimeout(searchTimeout);
           var val = this.value.trim().toUpperCase();
           searchTimeout = setTimeout(function() {
+            if (prevTickerVal) {
+              table.removeFilter("Ticker", "like", prevTickerVal);
+            }
+            prevTickerVal = val;
             if (val) {
-              table.setFilter("Ticker", "like", val);
-            } else {
-              table.removeFilter("Ticker", "like", "");
+              table.addFilter("Ticker", "like", val);
             }
           }, 120);
         });
