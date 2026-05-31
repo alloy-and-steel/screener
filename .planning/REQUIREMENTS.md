@@ -25,23 +25,23 @@
 
 ### Frontend — Core Table
 
-- [ ] **FE-01**: `docs/index.html` loads Tabulator 6.x from jsDelivr CDN (no local npm, no build step)
-- [ ] **FE-02**: Table displays all screener output columns, sorted by `Score` descending on initial load
-- [ ] **FE-03**: Ticker column is frozen (stays visible when scrolling horizontally)
-- [ ] **FE-04**: Header row is sticky (stays visible when scrolling vertically)
-- [ ] **FE-05**: Signal columns (Lynch_Status, Graham_Status, Defensive, Lynch_PEG_Band, Status_Combined) have traffic-light background colors (green/yellow/red) matching the existing `SIGNAL_COLORS` mapping
-- [ ] **FE-06**: Null/missing values display as `—` (em dash) rather than `NaN`, `None`, or blank
+- [x] **FE-01**: `docs/index.html` loads Tabulator 6.x from jsDelivr CDN (no local npm, no build step)
+- [x] **FE-02**: Table displays all screener output columns, sorted by `Score` descending on initial load
+- [x] **FE-03**: Ticker column is frozen (stays visible when scrolling horizontally)
+- [x] **FE-04**: Header row is sticky (stays visible when scrolling vertically)
+- [x] **FE-05**: Signal columns (Lynch_Status, Graham_Status, Defensive, Lynch_PEG_Band, Status_Combined) have traffic-light background colors (green/yellow/red) matching the existing `SIGNAL_COLORS` mapping
+- [x] **FE-06**: Null/missing values display as `—` (em dash) rather than `NaN`, `None`, or blank
 - [x] **FE-07**: Error rows (tickers that failed data fetching) are hidden by default (no toggle — permanently hidden by design)
-- [ ] **FE-08**: Page shows a "Data as of [date]" freshness badge derived from `generated_at`
-- [ ] **FE-09**: A yellow stale-data warning banner appears if data is more than 3 calendar days old
-- [ ] **FE-10**: `results.json` is fetched with a cache-busting query parameter (`?v=${Date.now()}`) to bypass CDN caching
+- [x] **FE-08**: Page shows a "Data as of [date]" freshness badge derived from `generated_at`
+- [x] **FE-09**: A yellow stale-data warning banner appears if data is more than 3 calendar days old
+- [x] **FE-10**: `results.json` is fetched with a cache-busting query parameter (`?v=${Date.now()}`) to bypass CDN caching
 
 ### Frontend — Filters & Column Presets
 
-- [ ] **FE-11**: "Buy Signals Only" toggle pill above the table — when active, shows only rows where `Status_Combined` is `True`
-- [ ] **FE-12**: Every column has a header filter appropriate to its data type: dropdown select for categorical columns (status, category, index membership), numeric input for numeric columns (score, price, PE, discount %, etc.)
-- [ ] **FE-13**: "Summary" / "Full" column preset toggle — Summary shows ~10 key signal columns, Full shows all columns
-- [ ] **FE-14**: Ticker text search box for quick symbol lookup (client-side, instant filter)
+- [x] **FE-11**: "Buy Signals Only" toggle pill above the table — when active, shows only rows where `Status_Combined` is `True`
+- [x] **FE-12**: Every column has a header filter appropriate to its data type: dropdown select for categorical columns (status, category, index membership), numeric input for numeric columns (score, price, PE, discount %, etc.)
+- [x] **FE-13**: "Summary" / "Full" column preset toggle — Summary shows ~10 key signal columns, Full shows all columns
+- [x] **FE-14**: Ticker text search box for quick symbol lookup (client-side, instant filter)
 
 ### Documentation Page
 
@@ -96,20 +96,20 @@
 | PY-02 | Phase 2 | Pending | generated_at timestamp |
 | PY-03 | Phase 2 | Pending | Minimum-row guard |
 | PY-04 | Phase 2 | Pending | Compact encoding |
-| FE-01 | Phase 3 | Pending | Tabulator CDN load |
-| FE-02 | Phase 3 | Pending | All columns, Score sort |
-| FE-03 | Phase 3 | Pending | Frozen Ticker column |
-| FE-04 | Phase 3 | Pending | Sticky header |
-| FE-05 | Phase 3 | Pending | Traffic-light color coding |
-| FE-06 | Phase 3 | Pending | Null display as em dash |
+| FE-01 | Phase 3 | Complete | Tabulator CDN load |
+| FE-02 | Phase 3 | Complete | All columns, Score sort |
+| FE-03 | Phase 3 | Complete | Frozen Ticker column |
+| FE-04 | Phase 3 | Complete | Sticky header |
+| FE-05 | Phase 3 | Complete | Traffic-light color coding |
+| FE-06 | Phase 3 | Complete | Null display as em dash |
 | FE-07 | Phase 3 | Complete | Error rows hidden by default (no toggle by design) |
-| FE-08 | Phase 3 | Pending | Data freshness badge |
-| FE-09 | Phase 3 | Pending | Stale-data warning banner |
-| FE-10 | Phase 3 | Pending | Cache-busting fetch |
-| FE-11 | Phase 3 | Pending | Buy Signals Only toggle |
-| FE-12 | Phase 3 | Pending | Per-column header filters |
-| FE-13 | Phase 3 | Pending | Summary/Full column preset |
-| FE-14 | Phase 3 | Pending | Ticker text search |
+| FE-08 | Phase 3 | Complete | Data freshness badge |
+| FE-09 | Phase 3 | Complete | Stale-data warning banner |
+| FE-10 | Phase 3 | Complete | Cache-busting fetch |
+| FE-11 | Phase 3 | Complete | Buy Signals Only toggle |
+| FE-12 | Phase 3 | Complete | Per-column header filters |
+| FE-13 | Phase 3 | Complete | Summary/Full column preset |
+| FE-14 | Phase 3 | Complete | Ticker text search |
 | FE-15 | — | Removed | Top 20 panel — descoped before execution |
 | FE-16 | — | Removed | Top 20 localStorage — descoped before execution |
 | FE-17 | — | Removed | Top 20 click-to-scroll — descoped before execution |
