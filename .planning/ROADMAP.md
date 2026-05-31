@@ -64,7 +64,7 @@ Plans:
 ### Phase 4: Google & Tiingo Cleanup
 **Goal:** All Google Sheets code, dependencies, credentials, and dead Tiingo config are removed from the codebase — the screener has no vestigial output code
 **Mode:** mvp
-**Depends on:** Phase 3
+**Depends on:** Phase 3 — including **03-02-PLAN.md** (`docs/methodology.html`) which must be executed before Phase 4 begins
 **Requirements:** CLN-01, CLN-02, CLN-03, CLN-04
 **Success Criteria** (what must be TRUE):
   1. `push_to_gsheets()` and its private helpers (`_apply_color_coding`, `_write_docs_tab`, `_write_markdown_tab`) no longer exist in `stock_screener.py`

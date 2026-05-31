@@ -65,7 +65,8 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- **03-02-PLAN.md** — `docs/methodology.html` not yet built. Must complete before Phase 4.
+  Run `/gsd:execute-phase 3` after `/clear` to execute Wave 2.
 
 ### Blockers/Concerns
 
