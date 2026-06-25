@@ -1,13 +1,23 @@
 name: Screen and Deploy
 
+# Periodic data refresh + publish. Runs the Python screener against LIVE data
+# (FRED / Finnhub / yfinance), builds the SPA, and ships data + frontend together
+# as a single GitHub Pages artifact. Code-change validation lives in the sibling
+# CI workflows (ci-python.yml, ci-frontend.yml) — those never deploy.
+#
+# The dataset is NEVER committed: it is generated fresh here and lives only inside
+# the Pages artifact (committing it churned the pie superproject gitlink daily).
+# So a deploy ALWAYS runs the screener first — a frontend-only change reaches
+# production via the next cron tick or a manual "Run workflow".
+#
+# Pages source must be set to "GitHub Actions" in repo Settings -> Pages
+# (one-time, operator).
+
 on:
   schedule:
     - cron: "0 11 * * 1-5"   # 6am ET weekdays
   workflow_dispatch:
 
-# Deploy data + SPA as a Pages build artifact (no committed results.json -> no
-# gitlink churn in the pie superproject). Pages source must be set to
-# "GitHub Actions" in repo Settings -> Pages (one-time, operator).
 permissions:
   contents: read
   pages: write

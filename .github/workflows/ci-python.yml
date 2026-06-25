@@ -1,0 +1,54 @@
+name: CI - Python
+
+# Validates the screener's Python on every change to Python sources. Compiles all
+# modules, then import-smokes them. No network: the fetch pipeline is behind
+# `if __name__ == "__main__"`, so importing only loads code. Does NOT run the live
+# screener or deploy — that is deploy.yml's job on the cron schedule.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "**.py"
+      - "requirements.txt"
+      - ".github/workflows/ci-python.yml"
+  pull_request:
+    paths:
+      - "**.py"
+      - "requirements.txt"
+      - ".github/workflows/ci-python.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-python-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile all modules
+        run: python -m compileall -q .
+
+      - name: Import smoke
+        # Placeholder keys satisfy the module-level os.environ reads in
+        # stock_screener.py. Importing makes no network calls, so the placeholders
+        # are never used against a live API.
+        env:
+          FRED_API_KEY: ci-placeholder
+          FINNHUB_API_KEY: ci-placeholder
+        run: python -c "import azqato, monitor, stock_screener"

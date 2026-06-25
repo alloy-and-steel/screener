@@ -29,7 +29,7 @@ RSI gauge, 52-week-range bar).
 - **Data sources:** yfinance (price, EPS history, dividends), Finnhub
   (`/stock/metric`: EPS, 5Y growth, margins, balance-sheet ratios, market cap),
   FRED (Moody's AAA yield, for Graham's rate adjustment), Wikipedia (universe).
-- **Hosting:** GitHub Pages via GitHub Actions (`.github/workflows/screener.yml`).
+- **Hosting:** GitHub Pages via GitHub Actions (`.github/workflows/deploy.yml`).
 
 ## Data flow (and the one decision that matters)
 
@@ -54,7 +54,9 @@ already-prefixed dict. The frontend reads those exact keys (`web/src/score.ts`,
 - `monitor.py` — falsifier / drift checks.
 - `web/src/` — SPA. `score.ts` (verdicts), `columns.tsx` (grid), `DataTable.tsx`,
   `Scorecard.tsx`, `format.tsx`, `Toolbar.tsx`, `MethodologyDialog.tsx`, `App.tsx`.
-- `.github/workflows/screener.yml` — build + deploy.
+- `.github/workflows/deploy.yml` — cron + manual: run screener -> build -> deploy.
+- `.github/workflows/ci-python.yml` — on `**.py` change: compile + import smoke.
+- `.github/workflows/ci-frontend.yml` — on `web/**` change: typecheck + build.
 - `diagnose_finnhub.py`, `diagnose_yfinance.py` — ad-hoc data-source probes.
 
 ## Local development

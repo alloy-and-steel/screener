@@ -1,0 +1,53 @@
+name: CI - Frontend
+
+# Type-checks and builds the SPA on every change to web/. Catches type errors
+# (vite build strips types without checking them) and build breaks before they
+# reach a deploy. Does NOT deploy — deploy.yml ships the built SPA with fresh data
+# on the cron schedule. The build needs no results.json: the SPA fetches it at
+# runtime, so an absent dataset does not fail the build.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "web/**"
+      - ".github/workflows/ci-frontend.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - ".github/workflows/ci-frontend.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11   # must be 10+: pnpm-workspace.yaml uses the `allowBuilds` key
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"   # pnpm 11 requires Node >=22.13 (uses node:sqlite)
+
+      - name: Install dependencies
+        # --frozen-lockfile: the gate fails if package.json and the lockfile drift
+        # (deploy.yml installs unpinned so a periodic publish stays resilient).
+        run: pnpm -C web install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm -C web run typecheck
+
+      - name: Build
+        run: pnpm -C web build
