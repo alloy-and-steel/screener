@@ -10,8 +10,8 @@ Three pieces:
   - pct_of_52w_range()  : where price sits in the trailing 52-week range
   - azqato_profile()    : evaluate the 8 "strong" bands -> pass / score / coverage
 
-Band definitions follow docs/azqato-stocks-methodology.md (the manual discipline
-this automates) and the screener's §1 spec. Forward estimates (PEG FWD, EPS
+Band definitions follow the azqato "individual stocks" methodology (the manual
+discipline this automates) and the screener's §1 spec. Forward estimates (PEG FWD, EPS
 Growth FWD, P/E FWD) are premium on Finnhub free tier, so the caller feeds the
 engine's TRAILING values as a proxy — flagged with basis="trailing_proxy".
 

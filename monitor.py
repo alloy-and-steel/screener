@@ -21,7 +21,7 @@ that silently never fires reads as "monitored" while being dead.
 import re
 
 # Closed set of numeric row keys a quantitative falsifier may reference.
-# Verified against the committed docs/data/results.json schema.
+# Verified against the web/public/data/results.json schema (built fresh, not committed).
 #
 # CRITICAL: Lynch/Graham metric keys are DOUBLE-prefixed. process_ticker does
 #   row.update({f"Graham_{k}": v for k, v in graham_metrics(...).items()})

@@ -55,7 +55,6 @@ already-prefixed dict. The frontend reads those exact keys (`web/src/score.ts`,
 - `web/src/` — SPA. `score.ts` (verdicts), `columns.tsx` (grid), `DataTable.tsx`,
   `Scorecard.tsx`, `format.tsx`, `Toolbar.tsx`, `MethodologyDialog.tsx`, `App.tsx`.
 - `.github/workflows/screener.yml` — build + deploy.
-- `docs/`, `.planning/` — **legacy** (see Deprecated below).
 - `diagnose_finnhub.py`, `diagnose_yfinance.py` — ad-hoc data-source probes.
 
 ## Local development
@@ -97,9 +96,8 @@ Then it runs on the weekday cron (`0 11 * * 1-5`) or via **Run workflow**
 ## Gotchas
 
 - **`.gitignore` ignores `*.json`.** Any JSON that must be tracked needs an
-  explicit `!path` exception (see `web/package.json`, `web/tsconfig.json`,
-  `.planning/*.json`). `web/public/data/results.json` is intentionally NOT
-  excepted — it stays ignored.
+  explicit `!path` exception (see `web/package.json`, `web/tsconfig.json`).
+  `web/public/data/results.json` is intentionally NOT excepted — it stays ignored.
 - **pnpm must be 10+** (the workspace `allowBuilds` allowlist that lets
   esbuild / `@tailwindcss/oxide` run their native build scripts is a pnpm 10+
   feature). CI pins pnpm 11; build locally with the same.
@@ -110,11 +108,3 @@ Then it runs on the weekday cron (`0 11 * * 1-5`) or via **Run workflow**
 - Names with non-positive or uncomputable growth are kept **visible** with
   valuation N/A (Graham-defensive + Azqato still computed). Only no-usable-EPS /
   no-price names are hard-excluded as error rows.
-
-## Deprecated (safe to remove, kept only for history)
-
-- `docs/` — the original Tabulator-CDN / vanilla-JS dashboard. Superseded by the
-  Vite SPA in `web/`; no longer the Pages source. Dead.
-- `.planning/` — GSD artifacts from the original Google-Sheets -> Pages migration.
-  Historical; the current architecture (React rebuild + Azqato layer) supersedes
-  that plan. `.env.example` and `README.md` referenced by older docs no longer exist.

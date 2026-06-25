@@ -1,7 +1,6 @@
 # ── Credentials & secrets ─────────────────────────────────────────────────────
 .env
 *.json
-!.planning/*.json
 # Frontend config JSON must be tracked. The generated dataset
 # (web/public/data/results.json) stays ignored — built fresh in CI and shipped
 # in the Pages artifact, never committed (fixes the daily gitlink churn).
