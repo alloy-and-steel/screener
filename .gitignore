@@ -2,7 +2,12 @@
 .env
 *.json
 !.planning/*.json
-!docs/data/results.json
+# Frontend config JSON must be tracked. The generated dataset
+# (web/public/data/results.json) stays ignored — built fresh in CI and shipped
+# in the Pages artifact, never committed (fixes the daily gitlink churn).
+!web/package.json
+!web/tsconfig.json
+!web/tsconfig.node.json
 # If you ever download your service account key into the project folder,
 # this prevents it from being committed. Keep it outside the repo if possible.
 
@@ -22,6 +27,10 @@ venv/
 .venv/
 env/
 .env/          # folder named .env (different from the .env secrets file)
+
+# ── Frontend (Vite SPA under web/) ────────────────────────────────────────────
+node_modules/
+web/dist/
 
 # ── Output / data files ───────────────────────────────────────────────────────
 *.csv

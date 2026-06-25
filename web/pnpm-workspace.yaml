@@ -1,0 +1,6 @@
+# pnpm requires native build scripts to be explicitly allowed. esbuild (Vite's
+# bundler) and @tailwindcss/oxide (Tailwind v4 engine) ship prebuilt binaries;
+# without this, `pnpm install` warns and `pnpm build` aborts on the deps check.
+allowBuilds:
+  esbuild: true
+  "@tailwindcss/oxide": true

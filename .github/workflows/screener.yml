@@ -1,17 +1,26 @@
-name: Run Stock Screener
+name: Screen and Deploy
 
 on:
   schedule:
-    - cron: "0 11 * * 1-5"
+    - cron: "0 11 * * 1-5"   # 6am ET weekdays
   workflow_dispatch:
 
+# Deploy data + SPA as a Pages build artifact (no committed results.json -> no
+# gitlink churn in the pie superproject). Pages source must be set to
+# "GitHub Actions" in repo Settings -> Pages (one-time, operator).
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let an in-progress run finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
-  run-screener:
+  build:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -19,24 +28,45 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Run screener
+      - name: Run screener (writes web/public/data/results.json)
         env:
-          FRED_API_KEY:        ${{ secrets.FRED_API_KEY }}
-          FINNHUB_API_KEY:     ${{ secrets.FINNHUB_API_KEY }}
+          FRED_API_KEY:    ${{ secrets.FRED_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: python stock_screener.py
 
-      - name: Commit and push results
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build frontend
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/data/results.json
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: update screener results"
-            git push
-          fi
+          pnpm -C web install
+          pnpm -C web build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

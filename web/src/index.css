@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/* Linear/Vercel-style dark luminance ladder — depth from tonal surfaces + 1px
+   hairlines, not drop shadows. */
+@theme {
+  --color-canvas: #0a0b0d;
+  --color-surface-1: #101214;
+  --color-surface-2: #16181c;
+  --color-surface-3: #1e2126;
+  --color-hairline: #23262b;
+  --color-edge: #2c3036;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: #e6e8eb; /* off-white, never pure #fff */
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures so numeric columns align in the virtualized grid. */
+.tnum {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Modern thin scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2c3036 transparent;
+}
+*::-webkit-scrollbar {
+  height: 9px;
+  width: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2c3036;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #3a3f46;
+}
+
+@keyframes skeleton {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+.skeleton {
+  animation: skeleton 1.3s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

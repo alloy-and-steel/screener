@@ -3,8 +3,8 @@ Lynch & Graham Stock Screener
 ==============================
 Fetches S&P 500, Dow 30, and Nasdaq-100 constituents dynamically,
 pulls fundamentals from yfinance and Finnhub, computes Lynch and
-Graham valuation metrics, and writes results to docs/data/results.json
-for GitHub Pages.
+Graham valuation metrics, and writes results to web/public/data/results.json,
+which the Vite frontend ships as a same-origin Pages artifact.
 
 Local setup:
     1. Copy .env.example to .env and fill in your API keys.
@@ -23,9 +23,11 @@ import logging
 import requests
 import pandas as pd
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from fredapi import Fred
 from dotenv import load_dotenv
+
+from azqato import azqato_profile, pct_of_52w_range, wilder_rsi
 
 # Load .env when running locally; no-op in GitHub Actions (env vars already set)
 load_dotenv()
@@ -33,41 +35,41 @@ load_dotenv()
 # ─────────────────────────────────────────────
 # CONFIGURATION — all values come from env vars
 # ─────────────────────────────────────────────
-FRED_API_KEY     = os.environ["FRED_API_KEY"]
-FINNHUB_API_KEY  = os.environ["FINNHUB_API_KEY"]
+FRED_API_KEY = os.environ["FRED_API_KEY"]
+FINNHUB_API_KEY = os.environ["FINNHUB_API_KEY"]
 
 # Screener parameters
-GROWTH_CAP          = 25.0   # cap 'g' at this % to prevent distortion
-GRAHAM_NO_GROWTH_PE = 8.5    # classic Graham baseline P/E; change to 7 for conservative
-GRAHAM_HIST_AAA     = 4.4    # Graham's original historical AAA yield constant
-FRED_AAA_SERIES     = "AAA"  # Moody's AAA corporate bond yield series on FRED
+GROWTH_CAP = 25.0  # cap 'g' at this % to prevent distortion
+GRAHAM_NO_GROWTH_PE = 8.5  # classic Graham baseline P/E; change to 7 for conservative
+GRAHAM_HIST_AAA = 4.4  # Graham's original historical AAA yield constant
+FRED_AAA_SERIES = "AAA"  # Moody's AAA corporate bond yield series on FRED
 
 # Graham defensive-investor filter thresholds
-MIN_MARKET_CAP_B    = 2.0    # minimum market cap in $B
-MIN_CURRENT_RATIO   = 2.0    # current assets / current liabilities
-MAX_DEBT_EQUITY     = 1.0    # long-term debt / equity
-MIN_POSITIVE_EPS_YRS = 8     # out of last 10 fiscal years
-MIN_DIV_YEARS       = 5      # paid dividend in at least N of last 10 years
-MIN_EPS_GROWTH_10Y  = 33.0   # cumulative % EPS growth over 10 years (~3%/yr)
-MAX_PE_GRAHAM       = 15.0   # P/E ≤ 15 (based on 3-yr avg EPS)
-MAX_PB_GRAHAM       = 1.5    # P/B ≤ 1.5
-MAX_PE_X_PB         = 22.5   # P/E × P/B ≤ 22.5
-DEFENSIVE_PASS_SCORE = 6     # minimum score to be "Pass"
-DEFENSIVE_BORDER_SCORE = 4   # minimum score to be "Borderline" (below = Fail)
+MIN_MARKET_CAP_B = 2.0  # minimum market cap in $B
+MIN_CURRENT_RATIO = 2.0  # current assets / current liabilities
+MAX_DEBT_EQUITY = 1.0  # long-term debt / equity
+MIN_POSITIVE_EPS_YRS = 8  # out of last 10 fiscal years
+MIN_DIV_YEARS = 5  # paid dividend in at least N of last 10 years
+MIN_EPS_GROWTH_10Y = 33.0  # cumulative % EPS growth over 10 years (~3%/yr)
+MAX_PE_GRAHAM = 15.0  # P/E ≤ 15 (based on 3-yr avg EPS)
+MAX_PB_GRAHAM = 1.5  # P/B ≤ 1.5
+MAX_PE_X_PB = 22.5  # P/E × P/B ≤ 22.5
+DEFENSIVE_PASS_SCORE = 6  # minimum score to be "Pass"
+DEFENSIVE_BORDER_SCORE = 4  # minimum score to be "Borderline" (below = Fail)
 
 # Lynch price-band multipliers
-LYNCH_PEG_CHEAP     = 0.7
-LYNCH_PEG_FAIR      = 1.0
-LYNCH_PEGY_CHEAP    = 0.8
-LYNCH_PEGY_FAIR     = 1.2
+LYNCH_PEG_CHEAP = 0.7
+LYNCH_PEG_FAIR = 1.0
+LYNCH_PEGY_CHEAP = 0.8
+LYNCH_PEGY_FAIR = 1.2
 LYNCH_LV_STRONG_BUY = 0.7
-LYNCH_LV_BUY        = 1.0
-LYNCH_LV_HOLD       = 1.3
+LYNCH_LV_BUY = 1.0
+LYNCH_LV_HOLD = 1.3
 
 # Graham price-band multipliers (fraction of fair value)
-GRAHAM_DEEP_BUY     = 0.60
-GRAHAM_BUY          = 0.80
-GRAHAM_WATCH        = 0.95
+GRAHAM_DEEP_BUY = 0.60
+GRAHAM_BUY = 0.80
+GRAHAM_WATCH = 0.95
 
 # Category-specific Lynch buy discount factors
 LYNCH_DISCOUNT = {"Slow": 0.75, "Stalwart": 0.80, "Fast": 0.70}
@@ -86,17 +88,14 @@ log = logging.getLogger(__name__)
 # Wikipedia blocks requests that don't include a browser-like User-Agent.
 # We fetch the HTML ourselves with requests, then pass it to pd.read_html().
 WIKI_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
-    )
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 }
 
 
 def _wiki_tables(url: str) -> list:
     """Fetch a Wikipedia page and return all HTML tables as a list of DataFrames."""
     from io import StringIO
+
     resp = requests.get(url, headers=WIKI_HEADERS, timeout=15)
     resp.raise_for_status()
     return pd.read_html(StringIO(resp.text))
@@ -137,17 +136,20 @@ def fetch_nasdaq100() -> set:
 
 def get_universe() -> pd.DataFrame:
     """Return a deduplicated DataFrame with columns: ticker, indexes."""
-    sp500   = fetch_sp500()
-    dow30   = fetch_dow30()
-    nasdaq  = fetch_nasdaq100()
+    sp500 = fetch_sp500()
+    dow30 = fetch_dow30()
+    nasdaq = fetch_nasdaq100()
     all_tickers = sp500 | dow30 | nasdaq
 
     rows = []
     for t in sorted(all_tickers):
         membership = []
-        if t in sp500:   membership.append("S&P500")
-        if t in dow30:   membership.append("Dow30")
-        if t in nasdaq:  membership.append("Nasdaq100")
+        if t in sp500:
+            membership.append("S&P500")
+        if t in dow30:
+            membership.append("Dow30")
+        if t in nasdaq:
+            membership.append("Nasdaq100")
         rows.append({"ticker": t, "indexes": ", ".join(membership)})
 
     df = pd.DataFrame(rows)
@@ -158,6 +160,7 @@ def get_universe() -> pd.DataFrame:
 # ═════════════════════════════════════════════
 # STEP 2 — FETCH AAA YIELD FROM FRED
 # ═════════════════════════════════════════════
+
 
 def fetch_aaa_yield() -> float:
     """Fetch the latest Moody's AAA corporate bond yield from FRED."""
@@ -208,20 +211,56 @@ def _safe_float(v) -> float | None:
     """Return float or None for any null-like value including np.nan."""
     try:
         f = float(v)
-        return None if f != f else f   # f != f is True only for nan
-    except (TypeError, ValueError):
+        return None if f != f else f  # f != f is True only for nan
+    except TypeError, ValueError:
         return None
+
+
+# yfinance balance-sheet index labels vary by ticker; try the broadest cash
+# concept first (azqato's "Total Cash" = cash, equivalents, short-term liquid
+# investments), then narrower. Absolute dollars feed the azqato Cash>Debt band —
+# Finnhub free /stock/metric exposes only ratios, not dollar cash/debt.
+CASH_BS_ROWS = (
+    "Cash Cash Equivalents And Short Term Investments",
+    "Cash And Cash Equivalents",
+    "Cash Financial",
+)
+DEBT_BS_ROWS = (
+    "Total Debt",
+    "Total Debt And Capital Lease Obligation",
+)
+
+
+def _bs_lookup(bs, col, candidate_rows: tuple) -> float | None:
+    """First matching balance-sheet row value for `col`, or None if none match."""
+    for row_name in candidate_rows:
+        if row_name in bs.index:
+            return _safe_float(bs.loc[row_name, col])
+    return None
 
 
 def get_yf_price_and_history(ticker: str) -> dict:
     """
-    Fetch price and historical EPS (for defensive checks) from yfinance.
-    Returns: { price, annual_eps, annual_dividends }
+    Fetch from yfinance: price, historical EPS (defensive checks), dividends,
+    1y daily closes (RSI + 52-week range), and absolute total cash / total debt
+    (azqato Cash>Debt band). Each fetch is independently guarded so one failure
+    does not lose the others.
+    Returns: { price, annual_eps, annual_dividends, closes, high_52w, low_52w,
+               total_cash, total_debt }
     """
-    result = {"price": None, "annual_eps": [], "annual_dividends": []}
-    try:
-        t = yf.Ticker(ticker)
+    result = {
+        "price": None,
+        "annual_eps": [],
+        "annual_dividends": [],
+        "closes": [],
+        "high_52w": None,
+        "low_52w": None,
+        "total_cash": None,
+        "total_debt": None,
+    }
+    t = yf.Ticker(ticker)
 
+    try:
         # ── Price ───────────────────────────────────────────────────────
         fi = t.fast_info
         result["price"] = getattr(fi, "last_price", None)
@@ -244,6 +283,33 @@ def get_yf_price_and_history(ticker: str) -> dict:
 
     except Exception as e:
         log.warning(f"yfinance error for {ticker}: {e}")
+
+    # ── 1y daily bars → RSI(14) from closes + 52-week range from intraday
+    #    High/Low. auto_adjust=False keeps NOMINAL prices, matching the raw
+    #    fast_info last price and the Finviz/azqato nominal 52-week convention ──
+    try:
+        hist = t.history(period="1y", auto_adjust=False)
+        if hist is not None and not hist.empty and "Close" in hist.columns:
+            result["closes"] = [float(c) for c in hist["Close"].dropna().tolist()]
+            if "High" in hist.columns and not hist["High"].dropna().empty:
+                result["high_52w"] = float(hist["High"].dropna().max())
+            if "Low" in hist.columns and not hist["Low"].dropna().empty:
+                result["low_52w"] = float(hist["Low"].dropna().min())
+    except Exception as e:
+        log.warning(f"yfinance history error for {ticker}: {e}")
+
+    # ── Absolute total cash / total debt → azqato Cash>Debt band ────────
+    # Best-effort: any gap leaves None so the band is unevaluable rather than
+    # fabricated (financial-integrity rule).
+    try:
+        bs = t.balance_sheet
+        if bs is not None and not bs.empty:
+            recent = bs.columns[0]  # most recent period
+            result["total_cash"] = _bs_lookup(bs, recent, CASH_BS_ROWS)
+            result["total_debt"] = _bs_lookup(bs, recent, DEBT_BS_ROWS)
+    except Exception as e:
+        log.warning(f"yfinance balance sheet error for {ticker}: {e}")
+
     return result
 
 
@@ -256,32 +322,45 @@ def get_combined_data(ticker: str) -> dict:
     Returns a unified dict with all fields downstream code expects:
         price, market_cap_b, annual_eps, annual_dividends,
         ttm_eps, ttm_dps, growth_pct,
-        current_ratio, debt_equity, book_value_ps
+        current_ratio, debt_equity, book_value_ps,
+        closes, high_52w, low_52w, total_cash, total_debt,
+        gross_margin, net_margin, revenue_growth
     """
     yf_data = get_yf_price_and_history(ticker)
-    fh      = get_finnhub_metrics(ticker)
+    fh = get_finnhub_metrics(ticker)
 
     # ── Price (yfinance is fastest) ─────────────────────────────────
     price = yf_data["price"]
 
     # ── Current EPS — Finnhub first, yfinance history as fallback ───
-    ttm_eps = _safe_float(fh.get("epsAnnual") or fh.get("epsBasicExclExtraItemsAnnual"))
+    eps_annual = fh.get("epsAnnual")
+    ttm_eps = _safe_float(eps_annual if eps_annual is not None else fh.get("epsBasicExclExtraItemsAnnual"))
     # BRK-B: Finnhub returns Class A equivalent EPS; scale to Class B before falling back.
     # yfinance already reports per-Class-B-share EPS, so the fallback needs no scaling.
     if ticker in ("BRK-B", "BRK.B") and ttm_eps is not None:
         ttm_eps = ttm_eps / 1500.0
-    if not ttm_eps and yf_data["annual_eps"]:
+    # Fall back to yfinance history when Finnhub EPS is missing OR non-positive —
+    # a stale/negative Finnhub value should not block a usable trailing EPS.
+    if (ttm_eps is None or ttm_eps <= 0) and yf_data["annual_eps"]:
         valid = [e for e in yf_data["annual_eps"] if e is not None and e == e]
-        ttm_eps = valid[-1] if valid else None
+        ttm_eps = valid[-1] if valid else ttm_eps
 
     # ── EPS growth — Finnhub pre-calculated CAGR ────────────────────
     # Prefer 5Y, fall back to 3Y, then compute from history
-    growth_pct = _safe_float(fh.get("epsGrowth5Y") or fh.get("epsGrowth3Y"))
+    # Finnhub /stock/metric returns these as whole-number percents (e.g. 11.79 ==
+    # 11.79%), NOT decimal fractions — do NOT rescale by 100. Explicit None check
+    # so a genuine 0.0 (flat earnings) is not discarded in favour of the 3Y value.
+    growth_5y = fh.get("epsGrowth5Y")
+    growth_pct = _safe_float(growth_5y if growth_5y is not None else fh.get("epsGrowth3Y"))
     if growth_pct is not None:
-        growth_pct = round(growth_pct * 100, 4)  # Finnhub returns decimal fraction (0.15 = 15%)
+        growth_pct = round(growth_pct, 2)
 
     # ── Dividends per share ─────────────────────────────────────────
-    ttm_dps = _safe_float(fh.get("dividendPerShareAnnual") or fh.get("dividendPerShareTTM")) or 0.0
+    # Explicit None check so a genuine 0.0 in the annual field is not replaced by
+    # the TTM field. A truly missing value (None) defaults to 0.0 — the common
+    # non-payer case (a dividend payer with a Finnhub data gap is rare).
+    dps_annual = fh.get("dividendPerShareAnnual")
+    ttm_dps = _safe_float(dps_annual if dps_annual is not None else fh.get("dividendPerShareTTM")) or 0.0
 
     # ── Market cap ──────────────────────────────────────────────────
     # Finnhub returns marketCapitalization in $millions
@@ -292,30 +371,45 @@ def get_combined_data(ticker: str) -> dict:
 
     # ── Balance sheet ratios (Finnhub direct) ───────────────────────
     current_ratio = _safe_float(fh.get("currentRatioAnnual") or fh.get("currentRatioQuarterly"))
-    debt_equity   = _safe_float(fh.get("totalDebt/totalEquityAnnual"))
+    debt_equity = _safe_float(fh.get("totalDebt/totalEquityAnnual"))
     book_value_ps = _safe_float(fh.get("bookValuePerShareAnnual") or fh.get("bookValuePerShareQuarterly"))
-    pb_ratio      = _safe_float(fh.get("pb"))
+    pb_ratio = _safe_float(fh.get("pb"))
+
+    # ── Azqato margins (Finnhub, percent values) ────────────────────
+    # Live /stock/metric keys are grossMarginTTM and netProfitMarginTTM — there
+    # is no "netMarginTTM". Margins are whole-number percents (e.g. 43.3 == 43.3%).
+    gross_margin = _safe_float(fh.get("grossMarginTTM"))
+    net_margin = _safe_float(fh.get("netProfitMarginTTM"))
+    revenue_growth = _safe_float(fh.get("revenueGrowthTTMYoy"))
 
     return {
-        "price":            price,
-        "market_cap_b":     mkt_cap_b,
-        "annual_eps":       yf_data["annual_eps"],      # historical list for defensive checks
+        "price": price,
+        "market_cap_b": mkt_cap_b,
+        "annual_eps": yf_data["annual_eps"],  # historical list for defensive checks
         "annual_dividends": yf_data["annual_dividends"],
-        "ttm_eps":          ttm_eps,
-        "ttm_dps":          ttm_dps,
-        "growth_pct":       growth_pct,                 # Finnhub 5Y CAGR
-        "current_ratio":    current_ratio,
-        "debt_equity":      debt_equity,
-        "book_value_ps":    book_value_ps,
-        "pb_ratio":         pb_ratio,
+        "ttm_eps": ttm_eps,
+        "ttm_dps": ttm_dps,
+        "growth_pct": growth_pct,  # Finnhub 5Y CAGR
+        "current_ratio": current_ratio,
+        "debt_equity": debt_equity,
+        "book_value_ps": book_value_ps,
+        "pb_ratio": pb_ratio,
+        # ── Azqato profile inputs ───────────────────────────────────
+        "closes": yf_data["closes"],  # 1y daily closes (RSI)
+        "high_52w": yf_data["high_52w"],
+        "low_52w": yf_data["low_52w"],
+        "total_cash": yf_data["total_cash"],
+        "total_debt": yf_data["total_debt"],
+        "gross_margin": gross_margin,
+        "net_margin": net_margin,
+        "revenue_growth": revenue_growth,
     }
-
-
 
 
 # ═════════════════════════════════════════════
 # STEP 4 — COMPUTE METRICS
 # ═════════════════════════════════════════════
+
 
 def compute_growth_5yr_cagr(annual_eps: list) -> float | None:
     """
@@ -329,9 +423,9 @@ def compute_growth_5yr_cagr(annual_eps: list) -> float | None:
     eps = [e for e in annual_eps if e is not None and e == e]  # e == e filters np.nan
     if len(eps) < 2:
         return None
-    eps_now  = eps[-1]
-    eps_base = eps[0]   # oldest available
-    years    = len(eps) - 1
+    eps_now = eps[-1]
+    eps_base = eps[0]  # oldest available
+    years = len(eps) - 1
     if eps_base <= 0 or eps_now <= 0:
         return None
     cagr = ((eps_now / eps_base) ** (1 / years) - 1) * 100
@@ -349,15 +443,15 @@ def lynch_metrics(price: float, eps: float, g: float, dy: float) -> dict:
         return {"error": "Non-positive EPS or growth"}
 
     pe = price / eps
-    m["PE"]            = round(pe, 2)
-    m["PEG"]           = round(pe / g, 3)
-    m["PEGY"]          = round(pe / (g + dy), 3) if (g + dy) > 0 else None
-    m["Lynch_Score"]   = round((g + dy) / pe, 3) if pe > 0 else None  # inverse PEGY
+    m["PE"] = round(pe, 2)
+    m["PEG"] = round(pe / g, 3)
+    m["PEGY"] = round(pe / (g + dy), 3) if (g + dy) > 0 else None
+    m["Lynch_Score"] = round((g + dy) / pe, 3) if pe > 0 else None  # inverse PEGY
 
     # Fair values
-    m["FV_PEG"]        = round(eps * g, 2)                  # PEG=1 fair value
-    m["FV_PEG_Con"]    = round(eps * 0.8 * g, 2)            # conservative (PEG=0.8)
-    m["FV_GplusD"]     = round(eps * (g + dy), 2)           # G+D method
+    m["FV_PEG"] = round(eps * g, 2)  # PEG=1 fair value
+    m["FV_PEG_Con"] = round(eps * 0.8 * g, 2)  # conservative (PEG=0.8)
+    m["FV_GplusD"] = round(eps * (g + dy), 2)  # G+D method
 
     # Category — thresholds per Lynch's One Up on Wall Street (Ch. 8)
     if g < 10:
@@ -401,7 +495,7 @@ def lynch_metrics(price: float, eps: float, g: float, dy: float) -> dict:
 
     # Price band status (PEG-based)
     fv_con = m["FV_PEG_Con"]
-    fv     = m["FV_PEG"]
+    fv = m["FV_PEG"]
     if price <= 0.7 * fv_con:
         m["Lynch_PEG_Band"] = "Strong Buy"
     elif price <= fv_con:
@@ -417,8 +511,7 @@ def lynch_metrics(price: float, eps: float, g: float, dy: float) -> dict:
     return m
 
 
-def graham_metrics(price: float, eps: float, g: float, aaa_yield: float,
-                   pb: float | None) -> dict:
+def graham_metrics(price: float, eps: float, g: float, aaa_yield: float, pb: float | None) -> dict:
     """
     Compute Graham intrinsic value (both versions) and price bands.
     g is a whole-number percent, capped upstream.
@@ -475,22 +568,22 @@ def graham_defensive_score(
     checks = {}
 
     # 1) Size
-    checks["Size_OK"]       = int(market_cap_b is not None and market_cap_b >= MIN_MARKET_CAP_B)
+    checks["Size_OK"] = int(market_cap_b is not None and market_cap_b >= MIN_MARKET_CAP_B)
 
     # 2) Current ratio
-    checks["CurrRatio_OK"]  = int(current_ratio is not None and current_ratio >= MIN_CURRENT_RATIO)
+    checks["CurrRatio_OK"] = int(current_ratio is not None and current_ratio >= MIN_CURRENT_RATIO)
 
     # 3) Debt/Equity
-    checks["DebtEq_OK"]     = int(debt_equity is not None and debt_equity <= MAX_DEBT_EQUITY)
+    checks["DebtEq_OK"] = int(debt_equity is not None and debt_equity <= MAX_DEBT_EQUITY)
 
     # 4) Earnings stability — positive EPS in 8 of last 10 years
     valid_eps = [e for e in annual_eps if e is not None and e == e]  # e == e filters np.nan
     pos_eps_yrs = sum(1 for e in valid_eps[-10:] if e > 0)
-    checks["EPS_Stability"]  = int(pos_eps_yrs >= MIN_POSITIVE_EPS_YRS)
+    checks["EPS_Stability"] = int(pos_eps_yrs >= MIN_POSITIVE_EPS_YRS)
 
     # 5) Dividend record — paid in 5 of last 10 years
     div_years = sum(1 for d in annual_dividends[-10:] if d is not None and d > 0)
-    checks["Div_Record"]    = int(div_years >= MIN_DIV_YEARS)
+    checks["Div_Record"] = int(div_years >= MIN_DIV_YEARS)
 
     # 6) 10-year EPS growth ≥ 33% cumulative
     if len(valid_eps) >= 10 and valid_eps[-10] > 0:
@@ -502,16 +595,22 @@ def graham_defensive_score(
     # 7) P/E ≤ 15 (based on 3-yr avg EPS)
     if eps_3yr_avg and eps_3yr_avg > 0:
         pe_3yr = price / eps_3yr_avg
-        checks["PE_Limit"]  = int(pe_3yr <= MAX_PE_GRAHAM)
+        checks["PE_Limit"] = int(pe_3yr <= MAX_PE_GRAHAM)
     else:
-        checks["PE_Limit"]  = 0
+        checks["PE_Limit"] = 0
 
-    # 8) P/B ≤ 1.5 OR P/E × P/B ≤ 22.5
+    # 8) P/B ≤ 1.5 OR P/E × P/B ≤ 22.5. The P/E×P/B leg needs a POSITIVE current
+    # EPS — a loss-maker's negative P/E makes the product negative and would
+    # trivially satisfy the ≤ test, awarding the point it should fail.
     if pb and pb > 0:
-        pe_cur = price / (valid_eps[-1] if valid_eps else 1)
-        checks["PB_Limit"]  = int(pb <= MAX_PB_GRAHAM or (pe_cur * pb) <= MAX_PE_X_PB)
+        cur_eps = valid_eps[-1] if valid_eps else None
+        if cur_eps is not None and cur_eps > 0:
+            pe_cur = price / cur_eps
+            checks["PB_Limit"] = int(pb <= MAX_PB_GRAHAM or (pe_cur * pb) <= MAX_PE_X_PB)
+        else:
+            checks["PB_Limit"] = int(pb <= MAX_PB_GRAHAM)
     else:
-        checks["PB_Limit"]  = 0
+        checks["PB_Limit"] = 0
 
     score = sum(checks.values())
 
@@ -527,19 +626,21 @@ def graham_defensive_score(
 
 def combined_score(lynch_discount: float | None, graham_discount: float | None) -> float | None:
     """
-    Simple 50/50 blended price score (higher = cheaper relative to both frameworks).
-    Each discount is clipped to [0, 60]%.
+    Blended price score (higher = cheaper). Averages ONLY the legs that are
+    present — a missing (None) framework is excluded, never counted as a real 0%
+    discount. Each present discount is clipped to [0, 60]% (overvalued floors at 0).
     """
-    ld = min(max(lynch_discount or 0, 0), 60)
-    gd = min(max(graham_discount or 0, 0), 60)
-    if lynch_discount is None and graham_discount is None:
+    legs = [d for d in (lynch_discount, graham_discount) if d is not None]
+    if not legs:
         return None
-    return round(0.5 * ld + 0.5 * gd, 1)
+    clipped = [min(max(d, 0), 60) for d in legs]
+    return round(sum(clipped) / len(clipped), 1)
 
 
 # ═════════════════════════════════════════════
 # STEP 5 — PROCESS ALL TICKERS
 # ═════════════════════════════════════════════
+
 
 def process_ticker(ticker: str, aaa_yield: float) -> dict:
     """Run the full pipeline for one ticker. Returns a flat result dict."""
@@ -554,8 +655,8 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
         log.warning(f"{ticker}: no price data")
         row["Error"] = "No price"
         return row
-    row["Price"]      = round(float(price), 2)
-    mkt_cap_b         = fund["market_cap_b"]
+    row["Price"] = round(float(price), 2)
+    mkt_cap_b = fund["market_cap_b"]
 
     # ── EPS ─────────────────────────────────────────────────────────
     eps = fund["ttm_eps"]
@@ -563,7 +664,7 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
         log.warning(f"{ticker}: no usable EPS")
         row["Error"] = "No EPS"
         return row
-    row["EPS_TTM"]    = round(float(eps), 4)
+    row["EPS_TTM"] = round(float(eps), 4)
     row["EPS_Annual"] = str([round(e, 2) for e in fund["annual_eps"] if e is not None and e == e])
 
     # ── Dividend yield ───────────────────────────────────────────────
@@ -571,52 +672,57 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
     dy = round((float(dps) / float(price)) * 100, 4) if price and float(dps) > 0 else 0.0
     row["DivYield_Pct"] = round(dy, 2)
 
-    # ── Growth — use Finnhub 5Y CAGR, fall back to computed CAGR ────
+    # ── Growth — Finnhub 5Y CAGR, fall back to computed CAGR ────────
     g = fund["growth_pct"]
     if g is None:
-        # Fallback: compute from yfinance EPS history
         g = compute_growth_5yr_cagr(fund["annual_eps"])
-    if g is None:
-        log.info(f"{ticker}: growth not computable, skipping valuation")
-        row["Error"] = "Growth N/A"
-        return row
-    g = min(g, GROWTH_CAP)
-    if g <= 0:
-        log.info(f"{ticker}: negative/zero growth ({g:.1f}%), flooring to 1%")
-        g = 1.0
-    row["Growth_g_Pct"] = round(g, 2)
-    row["AAA_Yield"]    = aaa_yield
-    row["MarketCap_B"]  = round(mkt_cap_b, 2) if mkt_cap_b else None
+    if g is not None:
+        g = min(g, GROWTH_CAP)
+    row["Growth_g_Pct"] = round(g, 2) if g is not None else None
+    row["AAA_Yield"] = aaa_yield
+    row["MarketCap_B"] = round(mkt_cap_b, 2) if mkt_cap_b else None
+
+    # Lynch/Graham valuation needs POSITIVE growth. For a contracting (g <= 0) or
+    # growth-unknown (g is None) name the row stays VISIBLE — valuation is marked
+    # N/A and only the growth-independent signals (Graham defensive, azqato
+    # margins/cash/RSI/52w) are computed. We never fabricate a growth rate.
+    can_value = g is not None and g > 0
 
     # ── P/B ratio — Finnhub direct, or compute from BVPS ────────────
     pb = fund["pb_ratio"]
     if pb is None:
         bvps = fund["book_value_ps"]
-        pb   = round(float(price) / float(bvps), 2) if bvps and float(bvps) > 0 else None
+        pb = round(float(price) / float(bvps), 2) if bvps and float(bvps) > 0 else None
     row["PB_Ratio"] = pb
 
     # ── 3-yr avg EPS for Graham P/E check ───────────────────────────
-    valid_eps   = [e for e in fund["annual_eps"] if e is not None and e == e]
+    valid_eps = [e for e in fund["annual_eps"] if e is not None and e == e]
     eps_3yr_avg = sum(valid_eps[-3:]) / len(valid_eps[-3:]) if len(valid_eps) >= 3 else None
 
-    # ── Lynch ───────────────────────────────────────────────────────
-    lm = lynch_metrics(price, eps, g, dy)
-    row.update({f"Lynch_{k}": v for k, v in lm.items()})
-
-    # ── Graham ──────────────────────────────────────────────────────
-    gm = graham_metrics(price, eps, g, aaa_yield, pb)
-    row.update({f"Graham_{k}": v for k, v in gm.items()})
+    # ── Lynch + Graham valuation (positive growth only) ─────────────
+    lm: dict = {}
+    gm: dict = {}
+    if can_value:
+        lm = lynch_metrics(price, eps, g, dy)
+        row.update({f"Lynch_{k}": v for k, v in lm.items()})
+        gm = graham_metrics(price, eps, g, aaa_yield, pb)
+        row.update({f"Graham_{k}": v for k, v in gm.items()})
+    else:
+        reason = f"non-positive growth ({g:.1f}%)" if g is not None else "growth not computable"
+        log.info(f"{ticker}: {reason}, valuation N/A (kept visible)")
+        row["Lynch_Lynch_Status"] = "N/A"
+        row["Graham_Graham_Status"] = "N/A"
 
     # ── Graham defensive score ───────────────────────────────────────
     ds = graham_defensive_score(
-        market_cap_b     = mkt_cap_b,
-        current_ratio    = fund["current_ratio"],
-        debt_equity      = fund["debt_equity"],
-        annual_eps       = fund["annual_eps"],
-        annual_dividends = fund["annual_dividends"],
-        price            = price,
-        eps_3yr_avg      = eps_3yr_avg,
-        pb               = pb,
+        market_cap_b=mkt_cap_b,
+        current_ratio=fund["current_ratio"],
+        debt_equity=fund["debt_equity"],
+        annual_eps=fund["annual_eps"],
+        annual_dividends=fund["annual_dividends"],
+        price=price,
+        eps_3yr_avg=eps_3yr_avg,
+        pb=pb,
     )
     row.update(ds)
 
@@ -628,9 +734,31 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
 
     # ── Show? — at least one Buy signal ─────────────────────────────
     buy_signals = {"Strong Buy", "Buy", "Deep Buy"}
-    lynch_buy   = lm.get("Lynch_Status") in buy_signals or lm.get("Lynch_PEG_Band") in buy_signals
-    graham_buy  = gm.get("Graham_Status") in buy_signals
+    lynch_buy = lm.get("Lynch_Status") in buy_signals or lm.get("Lynch_PEG_Band") in buy_signals
+    graham_buy = gm.get("Graham_Status") in buy_signals
     row["Show"] = lynch_buy or graham_buy
+
+    # ── Azqato numeric profile (no AI) ──────────────────────────────
+    # Forward estimates are premium on Finnhub free tier, so PEG / EPS-growth /
+    # P/E use the engine's TRAILING values as a proxy (basis="trailing_proxy").
+    # P/E = price / EPS is valid for any profitable name (EPS > 0 guaranteed
+    # above), so it is computed here directly rather than via Lynch — keeping the
+    # technical profile populated even when valuation is N/A. PEG needs positive
+    # growth, so it stays None for contracting / growth-unknown names.
+    closes = fund.get("closes") or []
+    az_pe = round(float(price) / float(eps), 2)
+    az_peg = round(az_pe / g, 3) if can_value else None
+    row["azqato"] = azqato_profile(
+        peg=az_peg,
+        eps_growth_pct=g,
+        pe=az_pe,
+        total_cash=fund.get("total_cash"),
+        total_debt=fund.get("total_debt"),
+        gross_margin_pct=fund.get("gross_margin"),
+        net_margin_pct=fund.get("net_margin"),
+        rsi=wilder_rsi(closes),
+        pos_52w_pct=pct_of_52w_range(price, fund.get("low_52w"), fund.get("high_52w")),
+    )
 
     return row
 
@@ -640,7 +768,7 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float) -> pd.DataFrame:
     total = len(universe)
     for i, row in universe.iterrows():
         ticker = row["ticker"]
-        log.info(f"[{i+1}/{total}] Processing {ticker}...")
+        log.info(f"[{i + 1}/{total}] Processing {ticker}...")
         result = process_ticker(ticker, aaa_yield)
         result["Indexes"] = row["indexes"]
         results.append(result)
@@ -655,19 +783,30 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float) -> pd.DataFrame:
 # MAIN
 # ═════════════════════════════════════════════
 
-OUTPUT_PATH = Path("docs/data/results.json")
+OUTPUT_PATH = Path("web/public/data/results.json")
+MIN_VALID_ROWS = 100  # abort the publish if fewer real (non-error) rows than this
 
 
 def write_json(df: pd.DataFrame) -> None:
-    if len(df) < 100:
+    # Two independent publish guards against a degraded run:
+    #   n_valid  — rows that processed without a hard error. Catches a total
+    #              fetch outage that errors every ticker (~600 error rows).
+    #   n_valued — rows that carry a real Lynch/Graham valuation (positive growth
+    #              was available). Catches a GROWTH-FEED outage that leaves every
+    #              name visible-but-N/A — which n_valid alone would wave through,
+    #              since declining / growth-unknown rows now carry no Error.
+    n_valid = int(df["Error"].isna().sum()) if "Error" in df.columns else len(df)
+    n_valued = int((df["Lynch_Lynch_Status"].fillna("N/A") != "N/A").sum()) if "Lynch_Lynch_Status" in df.columns else 0
+    if n_valid < MIN_VALID_ROWS or n_valued < MIN_VALID_ROWS:
         log.error(
-            f"Only {len(df)} rows produced — aborting JSON write (minimum 100 required)"
+            f"Degraded run — {n_valid} non-error rows, {n_valued} with a valuation, "
+            f"of {len(df)} processed (minimum {MIN_VALID_ROWS} each) — aborting JSON write"
         )
         sys.exit(1)
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     rows = json.loads(df.to_json(orient="records"))
     payload = {
-        "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "rows": rows,
     }
     OUTPUT_PATH.write_text(

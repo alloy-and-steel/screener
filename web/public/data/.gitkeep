@@ -1,0 +1,3 @@
+# Keeps web/public/data/ in the repo so Vite always has the directory.
+# results.json itself is gitignored — the screener writes it here and the Pages
+# build ships it in the artifact (never committed).
