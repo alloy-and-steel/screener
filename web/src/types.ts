@@ -5,6 +5,7 @@
 
 export interface AzqatoBands {
   peg_lt_1: boolean | null
+  revenue_growth_gt_15: boolean | null
   eps_growth_gt_15: boolean | null
   pe_lt_growth: boolean | null
   cash_gt_debt: boolean | null
@@ -21,6 +22,7 @@ export interface Azqato {
   basis: string
   bands: AzqatoBands
   peg: number | null
+  revenue_growth_pct: number | null
   eps_growth_pct: number | null
   pe: number | null
   gross_margin_pct: number | null

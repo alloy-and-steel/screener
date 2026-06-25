@@ -741,15 +741,17 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
     # ── Azqato numeric profile (no AI) ──────────────────────────────
     # Forward estimates are premium on Finnhub free tier, so PEG / EPS-growth /
     # P/E use the engine's TRAILING values as a proxy (basis="trailing_proxy").
-    # P/E = price / EPS is valid for any profitable name (EPS > 0 guaranteed
-    # above), so it is computed here directly rather than via Lynch — keeping the
-    # technical profile populated even when valuation is N/A. PEG needs positive
-    # growth, so it stays None for contracting / growth-unknown names.
+    # Revenue growth is the doc's TTM metric directly (revenueGrowthTTMYoy), not a
+    # forward proxy. P/E = price / EPS is valid for any profitable name (EPS > 0
+    # guaranteed above), so it is computed here directly rather than via Lynch —
+    # keeping the technical profile populated even when valuation is N/A. PEG needs
+    # positive growth, so it stays None for contracting / growth-unknown names.
     closes = fund.get("closes") or []
     az_pe = round(float(price) / float(eps), 2)
     az_peg = round(az_pe / g, 3) if can_value else None
     row["azqato"] = azqato_profile(
         peg=az_peg,
+        revenue_growth_pct=fund.get("revenue_growth"),
         eps_growth_pct=g,
         pe=az_pe,
         total_cash=fund.get("total_cash"),

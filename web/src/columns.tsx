@@ -111,7 +111,7 @@ export const columns: ColumnDef<Row>[] = [
         cell: ({ getValue, row }) => {
           const s = getValue() as number | undefined
           const cov = row.original.azqato?.coverage
-          return s === undefined ? DASH : `${s}/${cov ?? 8}`
+          return s === undefined ? DASH : `${s}/${cov ?? 9}`
         },
         meta: { align: 'right' } satisfies ColMeta,
       },

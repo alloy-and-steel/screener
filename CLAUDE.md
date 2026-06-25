@@ -9,8 +9,8 @@ weekday schedule — a public, shareable URL, no account required.
 
 The three screens (decoupled on purpose — disagreement is the signal):
 
-- **Azqato** — pure, no-AI 8-band growth + technical-entry screen; binary
-  pass/fail (`azqato.py`). Pass = clears >= 6 of 8 bands.
+- **Azqato** — pure, no-AI 9-band growth + technical-entry screen; binary
+  pass/fail (`azqato.py`). Pass = clears >= 7 of 9 bands.
 - **Lynch** — growth at a reasonable price (PEG / fair-value bands).
 - **Graham** — rate-adjusted intrinsic value + 8 defensive balance-sheet checks.
 

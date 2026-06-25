@@ -8,7 +8,7 @@ a verdict, so the math is unit-testable in isolation from the data pipeline.
 Three pieces:
   - wilder_rsi()        : 14-day Wilder RSI from a close series (entry timing)
   - pct_of_52w_range()  : where price sits in the trailing 52-week range
-  - azqato_profile()    : evaluate the 8 "strong" bands -> pass / score / coverage
+  - azqato_profile()    : evaluate the 9 "strong" bands -> pass / score / coverage
 
 Band definitions follow the azqato "individual stocks" methodology (the manual
 discipline this automates) and the screener's §1 spec. Forward estimates (PEG FWD, EPS
@@ -25,7 +25,8 @@ RSI_PERIOD = 14
 
 # ── Azqato "strong" pass bands ─────────────────────────────────────────────────
 AZQATO_PEG_MAX = 1.0  # PEG (FWD; trailing proxy) below 1.0 — primary
-AZQATO_EPS_GROWTH_MIN = 15.0  # EPS growth % (FWD; trailing proxy) above 15
+AZQATO_REVENUE_GROWTH_MIN = 15.0  # revenue growth % (TTM YoY) above 15
+AZQATO_EPS_GROWTH_MIN = 15.0  # EPS growth % (FWD; trailing 5Y-CAGR proxy) above 15
 AZQATO_GROSS_MARGIN_MIN = 50.0  # gross margin % above 50
 AZQATO_NET_MARGIN_MIN = 25.0  # net margin % above 25
 AZQATO_RSI_LOW = 30.0  # RSI entry band lower bound (see note below)
@@ -37,10 +38,12 @@ AZQATO_52W_LOWER_MAX = 25.0  # price in the lower 25% of the 52-week range
 # working band; widen AZQATO_RSI_HIGH to 50 to match the FAQ if preferred.
 
 # Pass threshold: count-of-bands-met needed for azqato_pass. Mirrors the
-# screener's existing DEFENSIVE_PASS_SCORE convention (6 of its checks). With 8
-# bands here and the Cash>Debt band often unevaluable on free data, 6 is a
+# screener's existing DEFENSIVE_PASS_SCORE convention. With 9 bands here, the
+# Cash>Debt band often unevaluable on free data, and the peg_lt_1 / pe_lt_growth
+# pair degenerate (both reduce to P/E < growth under the trailing proxy), 7
+# (~78% of bands, holding the original 6-of-8 = 75% intent) is a
 # demanding-but-reachable bar; tune as forward data / margins coverage improves.
-AZQATO_PASS_SCORE = 6
+AZQATO_PASS_SCORE = 7
 
 
 def wilder_rsi(closes: list, period: int = RSI_PERIOD) -> float | None:
@@ -92,6 +95,7 @@ def pct_of_52w_range(price: float | None, low_52w: float | None, high_52w: float
 def azqato_profile(
     *,
     peg: float | None,
+    revenue_growth_pct: float | None,
     eps_growth_pct: float | None,
     pe: float | None,
     total_cash: float | None,
@@ -102,7 +106,7 @@ def azqato_profile(
     pos_52w_pct: float | None,
 ) -> dict:
     """
-    Evaluate the 8 azqato "strong" bands. Each band is True / False / None
+    Evaluate the 9 azqato "strong" bands. Each band is True / False / None
     (None = input missing -> unevaluable). Returns:
         pass     : score >= AZQATO_PASS_SCORE
         score    : count of bands met
@@ -121,6 +125,7 @@ def azqato_profile(
     """
     bands = {
         "peg_lt_1": None if peg is None else peg < AZQATO_PEG_MAX,
+        "revenue_growth_gt_15": None if revenue_growth_pct is None else revenue_growth_pct > AZQATO_REVENUE_GROWTH_MIN,
         "eps_growth_gt_15": None if eps_growth_pct is None else eps_growth_pct > AZQATO_EPS_GROWTH_MIN,
         "pe_lt_growth": None if (pe is None or eps_growth_pct is None) else pe < eps_growth_pct,
         "cash_gt_debt": None if (total_cash is None or total_debt is None) else total_cash > total_debt,
@@ -140,6 +145,7 @@ def azqato_profile(
         "basis": "trailing_proxy",
         "bands": bands,
         "peg": peg,
+        "revenue_growth_pct": revenue_growth_pct,
         "eps_growth_pct": eps_growth_pct,
         "pe": pe,
         "gross_margin_pct": gross_margin_pct,

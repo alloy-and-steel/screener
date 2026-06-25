@@ -52,10 +52,12 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
           </p>
 
           <Block title="Azqato — growth + technical entry" dot>
-            A binary pass/fail screen of eight growth bands: PEG &lt; 1.0, EPS growth &gt; 15%, P/E below the growth rate,
-            net cash (cash &gt; debt), gross margin &gt; 50%, net margin &gt; 25%, RSI(14) in 30&ndash;45, and price in the
-            lower 25% of its 52-week range. A stock <strong className="text-slate-100">passes</strong> when it clears at
-            least 6 of the 8. Forward estimates are premium data, so growth / PEG / P-E use trailing figures as a proxy.
+            A binary pass/fail screen of nine growth bands: revenue growth &gt; 15%, EPS growth &gt; 15%, PEG &lt; 1.0,
+            P/E below the growth rate, net cash (cash &gt; debt), gross margin &gt; 50%, net margin &gt; 25%, RSI(14) in
+            30&ndash;45, and price in the lower 25% of its 52-week range. A stock{' '}
+            <strong className="text-slate-100">passes</strong> when it clears at least 7 of the 9. Forward estimates are
+            premium data, so PEG, P-E, and EPS growth use trailing figures as a proxy (EPS growth is a 5-year CAGR);
+            revenue growth is trailing-twelve-month.
           </Block>
 
           <Block title="Lynch — growth at a reasonable price" dot>

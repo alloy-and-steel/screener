@@ -132,7 +132,8 @@ export function Meter({ level, tone, segments = 5 }: { level: number; tone: Tone
 // high). For a value/entry screen, near-low is the opportunity (emerald).
 export function RangeBar({ pct: p }: { pct: number | null | undefined }) {
   if (isMissing(p) || typeof p !== 'number') return <span className="text-slate-500">{DASH}</span>
-  const tone: Tone = p <= 33 ? 'green' : p >= 75 ? 'red' : 'slate'
+  // Green matches the azqato pos_52w_lower_25 pass band (lower 25% of the range).
+  const tone: Tone = p <= 25 ? 'green' : p >= 75 ? 'red' : 'slate'
   return (
     <span className="inline-flex w-full items-center gap-2">
       <span className="relative h-1.5 flex-1 rounded-full bg-surface-3">
@@ -149,7 +150,9 @@ export function RangeBar({ pct: p }: { pct: number | null | undefined }) {
 // RSI(14) gauge 0..100 with oversold/overbought marker.
 export function RsiGauge({ rsi }: { rsi: number | null | undefined }) {
   if (isMissing(rsi) || typeof rsi !== 'number') return <span className="text-slate-500">{DASH}</span>
-  const tone: Tone = rsi < 30 ? 'green' : rsi > 70 ? 'red' : 'slate'
+  // Green matches the azqato rsi_30_45 entry band; below 30 is deep-oversold
+  // (fails the band — verify the thesis first), above 70 overbought.
+  const tone: Tone = rsi >= 30 && rsi <= 45 ? 'green' : rsi > 70 ? 'red' : 'slate'
   return (
     <span className="inline-flex w-full items-center gap-2">
       <span className="relative h-1.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500/30 via-slate-600/40 to-rose-500/30">
