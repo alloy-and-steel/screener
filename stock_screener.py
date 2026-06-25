@@ -40,20 +40,20 @@ FINNHUB_API_KEY = os.environ["FINNHUB_API_KEY"]
 
 # Screener parameters
 GROWTH_CAP = 25.0  # cap 'g' at this % to prevent distortion
-GRAHAM_NO_GROWTH_PE = 8.5  # classic Graham baseline P/E; change to 7 for conservative
+GRAHAM_NO_GROWTH_PE = 8.5  # Graham's base no-growth P/E (revised 1962 formula)
+GRAHAM_GROWTH_CAP = 15.0  # practitioner cap on g inside the Graham formula (NOT Graham's own rule)
 GRAHAM_HIST_AAA = 4.4  # Graham's original historical AAA yield constant
 FRED_AAA_SERIES = "AAA"  # Moody's AAA corporate bond yield series on FRED
 
-# Graham defensive-investor filter thresholds
-MIN_MARKET_CAP_B = 2.0  # minimum market cap in $B
-MIN_CURRENT_RATIO = 2.0  # current assets / current liabilities
-MAX_DEBT_EQUITY = 1.0  # long-term debt / equity
-MIN_POSITIVE_EPS_YRS = 8  # out of last 10 fiscal years
-MIN_DIV_YEARS = 5  # paid dividend in at least N of last 10 years
-MIN_EPS_GROWTH_10Y = 33.0  # cumulative % EPS growth over 10 years (~3%/yr)
-MAX_PE_GRAHAM = 15.0  # P/E ≤ 15 (based on 3-yr avg EPS)
-MAX_PB_GRAHAM = 1.5  # P/B ≤ 1.5
-MAX_PE_X_PB = 22.5  # P/E × P/B ≤ 22.5
+# Graham defensive-investor filter thresholds (canonical -- The Intelligent Investor, Ch. 14)
+MIN_MARKET_CAP_B = 2.0  # adequate size: modern market-cap proxy for Graham's sales/assets floor
+MIN_CURRENT_RATIO = 2.0  # current assets / current liabilities >= 2
+REQUIRED_EPS_YEARS = 10  # earnings stability + 10y growth both span the last 10 fiscal years
+MIN_DIV_YEARS = 20  # uninterrupted dividends for at least the last 20 years
+MIN_EPS_GROWTH_10Y = 33.0  # cumulative % EPS growth over 10y (3-yr-avg endpoints), ~one-third
+MAX_PE_GRAHAM = 15.0  # P/E <= 15 (based on 3-yr avg EPS)
+MAX_PB_GRAHAM = 1.5  # P/B <= 1.5
+MAX_PE_X_PB = 22.5  # P/E x P/B <= 22.5
 DEFENSIVE_PASS_SCORE = 6  # minimum score to be "Pass"
 DEFENSIVE_BORDER_SCORE = 4  # minimum score to be "Borderline" (below = Fail)
 
@@ -229,6 +229,21 @@ DEBT_BS_ROWS = (
     "Total Debt",
     "Total Debt And Capital Lease Obligation",
 )
+# Graham's defensive financial-condition test compares LONG-TERM debt against
+# working capital (current assets - current liabilities) -- absolute dollars,
+# from the yfinance balance sheet (Finnhub free exposes only ratios).
+LONG_TERM_DEBT_BS_ROWS = (
+    "Long Term Debt",
+    "Long Term Debt And Capital Lease Obligation",
+)
+CURRENT_ASSETS_BS_ROWS = (
+    "Current Assets",
+    "Total Current Assets",
+)
+CURRENT_LIABILITIES_BS_ROWS = (
+    "Current Liabilities",
+    "Total Current Liabilities",
+)
 
 
 def _bs_lookup(bs, col, candidate_rows: tuple) -> float | None:
@@ -257,6 +272,9 @@ def get_yf_price_and_history(ticker: str) -> dict:
         "low_52w": None,
         "total_cash": None,
         "total_debt": None,
+        "long_term_debt": None,
+        "current_assets": None,
+        "current_liabilities": None,
     }
     t = yf.Ticker(ticker)
 
@@ -275,11 +293,14 @@ def get_yf_price_and_history(ticker: str) -> dict:
                     break
 
         # ── Dividend history ────────────────────────────────────────────
+        # Keep up to 25 years so the Graham defensive check can test the full
+        # 20-year uninterrupted record. resample("YE") fills a gap year inside the
+        # span with 0, so an interruption surfaces as a zero bin (not dropped).
         divs = t.dividends
         if divs is not None and not divs.empty:
             divs.index = divs.index.tz_localize(None) if divs.index.tz else divs.index
             annual_divs = divs.resample("YE").sum()
-            result["annual_dividends"] = [float(v) for v in annual_divs.values[-10:]]
+            result["annual_dividends"] = [float(v) for v in annual_divs.values[-25:]]
 
     except Exception as e:
         log.warning(f"yfinance error for {ticker}: {e}")
@@ -307,6 +328,9 @@ def get_yf_price_and_history(ticker: str) -> dict:
             recent = bs.columns[0]  # most recent period
             result["total_cash"] = _bs_lookup(bs, recent, CASH_BS_ROWS)
             result["total_debt"] = _bs_lookup(bs, recent, DEBT_BS_ROWS)
+            result["long_term_debt"] = _bs_lookup(bs, recent, LONG_TERM_DEBT_BS_ROWS)
+            result["current_assets"] = _bs_lookup(bs, recent, CURRENT_ASSETS_BS_ROWS)
+            result["current_liabilities"] = _bs_lookup(bs, recent, CURRENT_LIABILITIES_BS_ROWS)
     except Exception as e:
         log.warning(f"yfinance balance sheet error for {ticker}: {e}")
 
@@ -322,8 +346,9 @@ def get_combined_data(ticker: str) -> dict:
     Returns a unified dict with all fields downstream code expects:
         price, market_cap_b, annual_eps, annual_dividends,
         ttm_eps, ttm_dps, growth_pct,
-        current_ratio, debt_equity, book_value_ps,
+        current_ratio, book_value_ps,
         closes, high_52w, low_52w, total_cash, total_debt,
+        long_term_debt, current_assets, current_liabilities,
         gross_margin, net_margin, revenue_growth
     """
     yf_data = get_yf_price_and_history(ticker)
@@ -370,8 +395,10 @@ def get_combined_data(ticker: str) -> dict:
         mkt_cap_b = fh_mktcap / 1000.0  # millions → billions
 
     # ── Balance sheet ratios (Finnhub direct) ───────────────────────
+    # Graham's financial-condition test uses long-term debt vs working capital
+    # (absolute dollars from the yfinance balance sheet), not a debt/equity ratio,
+    # so no Finnhub leverage ratio is pulled here.
     current_ratio = _safe_float(fh.get("currentRatioAnnual") or fh.get("currentRatioQuarterly"))
-    debt_equity = _safe_float(fh.get("totalDebt/totalEquityAnnual"))
     book_value_ps = _safe_float(fh.get("bookValuePerShareAnnual") or fh.get("bookValuePerShareQuarterly"))
     pb_ratio = _safe_float(fh.get("pb"))
 
@@ -391,9 +418,12 @@ def get_combined_data(ticker: str) -> dict:
         "ttm_dps": ttm_dps,
         "growth_pct": growth_pct,  # Finnhub 5Y CAGR
         "current_ratio": current_ratio,
-        "debt_equity": debt_equity,
         "book_value_ps": book_value_ps,
         "pb_ratio": pb_ratio,
+        # ── Graham defensive working-capital inputs (yfinance balance sheet) ──
+        "long_term_debt": yf_data["long_term_debt"],
+        "current_assets": yf_data["current_assets"],
+        "current_liabilities": yf_data["current_liabilities"],
         # ── Azqato profile inputs ───────────────────────────────────
         "closes": yf_data["closes"],  # 1y daily closes (RSI)
         "high_52w": yf_data["high_52w"],
@@ -453,7 +483,10 @@ def lynch_metrics(price: float, eps: float, g: float, dy: float) -> dict:
     m["FV_PEG_Con"] = round(eps * 0.8 * g, 2)  # conservative (PEG=0.8)
     m["FV_GplusD"] = round(eps * (g + dy), 2)  # G+D method
 
-    # Category — thresholds per Lynch's One Up on Wall Street (Ch. 8)
+    # Category — Lynch's Slow / Stalwart / Fast tiers (One Up on Wall Street, Ch. 8).
+    # The exact cutoffs are a house quantization: Lynch pegs stalwarts at ~10-12%
+    # and fast growers at ~20-25%, leaving 13-19% undefined; we fold that gap into
+    # Stalwart (10-20) so it lands in the more conservative bucket.
     if g < 10:
         cat = "Slow"
     elif g <= 20:
@@ -511,9 +544,9 @@ def lynch_metrics(price: float, eps: float, g: float, dy: float) -> dict:
     return m
 
 
-def graham_metrics(price: float, eps: float, g: float, aaa_yield: float, pb: float | None) -> dict:
+def graham_metrics(price: float, eps: float, g: float, aaa_yield: float) -> dict:
     """
-    Compute Graham intrinsic value (both versions) and price bands.
+    Compute Graham's rate-adjusted intrinsic value and price bands.
     g is a whole-number percent, capped upstream.
     """
     m = {}
@@ -521,16 +554,11 @@ def graham_metrics(price: float, eps: float, g: float, aaa_yield: float, pb: flo
     if eps <= 0 or aaa_yield <= 0:
         return {"error": "Non-positive EPS or AAA yield"}
 
-    g_capped = min(g, 15.0)  # Graham himself suggested capping at 15
+    g_capped = min(g, GRAHAM_GROWTH_CAP)  # practitioner cap (not Graham's), see constant
 
-    # Version A — classic rate-adjusted
-    m["Graham_VA"] = round(eps * (GRAHAM_NO_GROWTH_PE + 2 * g_capped) * GRAHAM_HIST_AAA / aaa_yield, 2)
-
-    # Version B — conservative (lower base PE, single g multiplier)
-    m["Graham_VB"] = round(eps * (7 + g_capped) * GRAHAM_HIST_AAA / aaa_yield, 2)
-
-    # Use the more conservative (lower) of the two
-    m["Graham_FV"] = min(m["Graham_VA"], m["Graham_VB"])
+    # Graham's revised intrinsic value (The Intelligent Investor, Ch. 11):
+    #   V = EPS x (8.5 + 2g) x 4.4 / current AAA corporate-bond yield.
+    m["Graham_FV"] = round(eps * (GRAHAM_NO_GROWTH_PE + 2 * g_capped) * GRAHAM_HIST_AAA / aaa_yield, 2)
 
     # Price band
     fv = m["Graham_FV"]
@@ -554,7 +582,9 @@ def graham_metrics(price: float, eps: float, g: float, aaa_yield: float, pb: flo
 def graham_defensive_score(
     market_cap_b: float | None,
     current_ratio: float | None,
-    debt_equity: float | None,
+    long_term_debt: float | None,
+    current_assets: float | None,
+    current_liabilities: float | None,
     annual_eps: list,
     annual_dividends: list,
     price: float,
@@ -564,6 +594,11 @@ def graham_defensive_score(
     """
     Score each Graham defensive-investor criterion (0 or 1 per check).
     Returns score, breakdown, and Pass/Borderline/Fail label.
+
+    A criterion whose inputs are missing scores 0 (cannot confirm safety) --
+    consistent with the rest of the defensive screen. The 10-year EPS criteria
+    require a full 10 fiscal years of data; the free yfinance income statement
+    usually supplies fewer, so those two checks rarely fire on this data source.
     """
     checks = {}
 
@@ -573,26 +608,38 @@ def graham_defensive_score(
     # 2) Current ratio
     checks["CurrRatio_OK"] = int(current_ratio is not None and current_ratio >= MIN_CURRENT_RATIO)
 
-    # 3) Debt/Equity
-    checks["DebtEq_OK"] = int(debt_equity is not None and debt_equity <= MAX_DEBT_EQUITY)
+    # 3) Financial condition — Graham: long-term debt must not exceed net current
+    #    assets (working capital = current assets - current liabilities).
+    if long_term_debt is not None and current_assets is not None and current_liabilities is not None:
+        working_capital = current_assets - current_liabilities
+        checks["LTDebt_OK"] = int(working_capital > 0 and long_term_debt <= working_capital)
+    else:
+        checks["LTDebt_OK"] = 0
 
-    # 4) Earnings stability — positive EPS in 8 of last 10 years
+    # 4) Earnings stability — positive EPS in EACH of the last 10 years
     valid_eps = [e for e in annual_eps if e is not None and e == e]  # e == e filters np.nan
-    pos_eps_yrs = sum(1 for e in valid_eps[-10:] if e > 0)
-    checks["EPS_Stability"] = int(pos_eps_yrs >= MIN_POSITIVE_EPS_YRS)
+    recent_eps = valid_eps[-REQUIRED_EPS_YEARS:]
+    checks["EPS_Stability"] = int(len(recent_eps) >= REQUIRED_EPS_YEARS and all(e > 0 for e in recent_eps))
 
-    # 5) Dividend record — paid in 5 of last 10 years
-    div_years = sum(1 for d in annual_dividends[-10:] if d is not None and d > 0)
-    checks["Div_Record"] = int(div_years >= MIN_DIV_YEARS)
+    # 5) Dividend record — uninterrupted dividends for at least the last 20 years
+    recent_divs = annual_dividends[-MIN_DIV_YEARS:]
+    checks["Div_Record"] = int(len(recent_divs) >= MIN_DIV_YEARS and all(d is not None and d > 0 for d in recent_divs))
 
-    # 6) 10-year EPS growth ≥ 33% cumulative
-    if len(valid_eps) >= 10 and valid_eps[-10] > 0:
-        cum_growth = (valid_eps[-1] / valid_eps[-10] - 1) * 100
-        checks["EPS_Growth10Y"] = int(cum_growth >= MIN_EPS_GROWTH_10Y)
+    # 6) 10-year EPS growth >= 33% cumulative, using 3-year averages at the
+    #    beginning (years 1-3) and end (years 8-10) of the 10-year span.
+    if len(valid_eps) >= REQUIRED_EPS_YEARS:
+        window = valid_eps[-REQUIRED_EPS_YEARS:]
+        begin_avg = sum(window[:3]) / 3
+        end_avg = sum(window[-3:]) / 3
+        if begin_avg > 0:
+            cum_growth = (end_avg / begin_avg - 1) * 100
+            checks["EPS_Growth10Y"] = int(cum_growth >= MIN_EPS_GROWTH_10Y)
+        else:
+            checks["EPS_Growth10Y"] = 0
     else:
         checks["EPS_Growth10Y"] = 0
 
-    # 7) P/E ≤ 15 (based on 3-yr avg EPS)
+    # 7) P/E <= 15 (based on 3-yr avg EPS)
     if eps_3yr_avg and eps_3yr_avg > 0:
         pe_3yr = price / eps_3yr_avg
         checks["PE_Limit"] = int(pe_3yr <= MAX_PE_GRAHAM)
@@ -705,7 +752,7 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
     if can_value:
         lm = lynch_metrics(price, eps, g, dy)
         row.update({f"Lynch_{k}": v for k, v in lm.items()})
-        gm = graham_metrics(price, eps, g, aaa_yield, pb)
+        gm = graham_metrics(price, eps, g, aaa_yield)
         row.update({f"Graham_{k}": v for k, v in gm.items()})
     else:
         reason = f"non-positive growth ({g:.1f}%)" if g is not None else "growth not computable"
@@ -717,7 +764,9 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
     ds = graham_defensive_score(
         market_cap_b=mkt_cap_b,
         current_ratio=fund["current_ratio"],
-        debt_equity=fund["debt_equity"],
+        long_term_debt=fund["long_term_debt"],
+        current_assets=fund["current_assets"],
+        current_liabilities=fund["current_liabilities"],
         annual_eps=fund["annual_eps"],
         annual_dividends=fund["annual_dividends"],
         price=price,

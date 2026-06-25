@@ -68,11 +68,13 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
           </Block>
 
           <Block title="Graham — intrinsic value + balance-sheet safety" dot>
-            Benjamin Graham&rsquo;s two orthogonal checks. <strong className="text-slate-100">Valuation</strong>: a
-            rate-adjusted intrinsic value (Graham&rsquo;s formula, discounted by the current AAA corporate-bond yield),
-            graded Deep Buy / Buy / Watch / Avoid by margin of safety. <strong className="text-slate-100">Defensive</strong>:
-            eight balance-sheet criteria (size, current ratio &ge; 2, low debt/equity, 8-of-10 years of positive EPS,
-            dividend record, 10-year EPS growth, P/E &le; 15, P/B &le; 1.5) &mdash; Pass / Borderline / Fail.
+            Benjamin Graham&rsquo;s two orthogonal checks. <strong className="text-slate-100">Valuation</strong>: his
+            revised intrinsic-value formula &mdash; earnings &times; (8.5 + 2 &times; growth), rate-adjusted by the current
+            AAA corporate-bond yield &mdash; graded Deep Buy / Buy / Watch / Avoid by margin of safety.{' '}
+            <strong className="text-slate-100">Defensive</strong>: eight balance-sheet criteria (size, current ratio &ge; 2,
+            long-term debt &le; working capital, positive EPS every year for 10 years, 20 years of uninterrupted dividends,
+            33% 10-year EPS growth, P/E &le; 15, P/B &le; 1.5) &mdash; Pass / Borderline / Fail. The 10-year EPS criteria
+            need a full decade of statements, which the free data source rarely supplies, so few names clear them.
           </Block>
 
           <Block title="Reading the screen">
