@@ -1,21 +1,35 @@
-name: Screen and Deploy
+name: Deploy
 
-# Periodic data refresh + publish. Runs the Python screener against LIVE data
-# (FRED / Finnhub / yfinance), builds the SPA, and ships data + frontend together
-# as a single GitHub Pages artifact. Code-change validation lives in the sibling
-# CI workflows (ci-python.yml, ci-frontend.yml) — those never deploy.
+# Build + publish ONLY -- decoupled from screening. Fetches the latest
+# results.json from the `data` branch (produced by screen.yml), builds the SPA,
+# and ships data + frontend together as one same-origin GitHub Pages artifact.
+# Never runs the screener: the data is reused, so a frontend change republishes
+# WITHOUT a ~515-call rescreen.
 #
-# The dataset is NEVER committed: it is generated fresh here and lives only inside
-# the Pages artifact (committing it churned the pie superproject gitlink daily).
-# So a deploy ALWAYS runs the screener first — a frontend-only change reaches
-# production via the next cron tick or a manual "Run workflow".
+# Triggers:
+#   - web/** push   -> redeploy on a frontend change (reuses the last data)
+#   - workflow_run  -> deploy after a successful Screen (fresh data)
+#   - manual        -> republish on demand
+#
+# A GITHUB_TOKEN push to the data branch does NOT emit a push event (GitHub loop
+# guard), so screen.yml CANNOT trigger this via `push: [data]` -- workflow_run is
+# the required link.
+#
+# Bootstrap: the `data` branch must exist first. Run the Screen workflow once;
+# until then the fetch step below fails loud with instructions.
 #
 # Pages source must be set to "GitHub Actions" in repo Settings -> Pages
 # (one-time, operator).
 
 on:
-  schedule:
-    - cron: "0 11 * * 1-5"   # 6am ET weekdays
+  push:
+    branches: [master]
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy.yml"
+  workflow_run:
+    workflows: ["Screen"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -31,24 +45,25 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Skip a deploy chained off a FAILED Screen; push / manual always proceed.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-          cache: "pip"
-
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run screener (writes web/public/data/results.json)
-        env:
-          FRED_API_KEY:    ${{ secrets.FRED_API_KEY }}
-          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-        run: python stock_screener.py
+      - name: Fetch latest results.json from the data branch
+        run: |
+          set -euo pipefail
+          if ! git fetch -q --depth=1 origin data; then
+            echo "::error::No 'data' branch yet. Run the Screen workflow once to seed results.json."
+            exit 1
+          fi
+          mkdir -p web/public/data
+          git show origin/data:web/public/data/results.json > web/public/data/results.json
+          jq -e '.rows | length > 0' web/public/data/results.json > /dev/null \
+            || { echo "::error::results.json from the data branch is empty or corrupt"; exit 1; }
+          echo "Fetched $(jq '.rows | length' web/public/data/results.json) rows" \
+               "(generated $(jq -r '.generated_at' web/public/data/results.json))."
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4

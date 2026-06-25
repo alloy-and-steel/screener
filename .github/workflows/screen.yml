@@ -1,0 +1,69 @@
+name: Screen
+
+# Periodic data refresh ONLY -- decoupled from publishing. Runs the screener
+# against LIVE data (FRED / Finnhub / yfinance) and force-pushes the resulting
+# results.json to the orphan `data` branch (single flat commit, latest-only).
+# Does NOT build or deploy: on success it triggers deploy.yml via workflow_run.
+#
+# Why a `data` branch: results.json must never land on `master` (committing it
+# there churns the pie superproject's gitlink). The `data` branch is isolated --
+# the superproject never points at it -- so a refresh never moves the submodule
+# pointer, while still giving the data a durable home a later deploy can fetch.
+
+on:
+  schedule:
+    - cron: "0 11 * * 1-5"   # 6am ET weekdays
+  workflow_dispatch:
+
+permissions:
+  contents: write   # push the `data` branch
+
+# One screen at a time; let an in-progress run finish (it owns the data branch).
+concurrency:
+  group: screen
+  cancel-in-progress: false
+
+jobs:
+  screen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run screener (writes web/public/data/results.json)
+        env:
+          FRED_API_KEY:    ${{ secrets.FRED_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        run: python stock_screener.py
+
+      - name: Publish results.json to the data branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The screener's own publish guard already aborted on a degraded run;
+          # this is a last non-empty check before the data leaves the runner.
+          test -s web/public/data/results.json
+          ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          work="${RUNNER_TEMP}/data-branch"
+          mkdir -p "${work}/web/public/data"
+          cp web/public/data/results.json "${work}/web/public/data/results.json"
+          cd "${work}"
+          git init -q
+          git checkout -q -b data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/public/data/results.json
+          git commit -qm "data: screener results ${ts}"
+          # Force-push a fresh single commit: the data branch is latest-only.
+          git push -fq "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
+          echo "Pushed results.json to the data branch (${ts})."

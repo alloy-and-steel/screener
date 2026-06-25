@@ -29,17 +29,36 @@ RSI gauge, 52-week-range bar).
 - **Data sources:** yfinance (price, EPS history, dividends), Finnhub
   (`/stock/metric`: EPS, 5Y growth, margins, balance-sheet ratios, market cap),
   FRED (Moody's AAA yield, for Graham's rate adjustment), Wikipedia (universe).
-- **Hosting:** GitHub Pages via GitHub Actions (`.github/workflows/deploy.yml`).
+- **Hosting:** GitHub Pages via GitHub Actions. Screen and deploy are SEPARATE:
+  `screen.yml` (cron -> fresh data on the `data` branch) and `deploy.yml`
+  (fetch that data -> build -> publish). CI gates: `ci-python.yml`, `ci-frontend.yml`.
 
 ## Data flow (and the one decision that matters)
 
-Weekday Action: run screener -> writes `web/public/data/results.json` -> `pnpm build`
--> upload `web/dist` as a Pages artifact -> `deploy-pages`.
+Screen and publish are SEPARATE workflows, decoupled through a dedicated
+`data` branch:
 
-**The dataset is NEVER committed.** It is generated fresh in CI and shipped inside
-the Pages build artifact. This is deliberate: the old design committed
-`docs/data/results.json` every run, which churned the submodule gitlink in the
-`pie` superproject daily. Do not reintroduce a committed dataset.
+- **`screen.yml`** (cron + manual): run the screener -> `web/public/data/results.json`
+  -> force-push that one file to the orphan **`data` branch** (single flat commit,
+  latest-only). On success it triggers `deploy.yml` via `workflow_run`.
+- **`deploy.yml`** (a `web/**` push, a successful Screen, or manual): fetch
+  `results.json` from `origin/data` -> `pnpm build` -> upload `web/dist` as a Pages
+  artifact -> `deploy-pages`.
+
+**The dataset is NEVER committed to `master`.** It lives only on the isolated
+`data` branch, which the `pie` superproject's gitlink never points at -- so a data
+refresh never churns the submodule pointer (the original reason data was kept off
+`master`; the old design committed `docs/data/results.json` to the tracked branch
+and churned it daily). A frontend-only change redeploys immediately by REUSING the
+last screened data; it does not re-run the ~515-call screener. Fresh data comes
+from the cron screen (or a manual Screen run).
+
+Bootstrap: the `data` branch must exist before the first deploy. Run **Screen**
+once; `deploy.yml` fails loud with instructions if `origin/data` is missing.
+
+Why `workflow_run` (not `push: [data]`): a `GITHUB_TOKEN` push emits no push
+event (GitHub's loop guard), so the data-branch push cannot trigger deploy
+directly -- Screen completion is the link.
 
 `results.json` shape: a flat row per ticker. Lynch/Graham keys are
 **double-prefixed** (`Graham_Graham_Status`, `Lynch_Lynch_Status`) because
@@ -54,7 +73,10 @@ already-prefixed dict. The frontend reads those exact keys (`web/src/score.ts`,
 - `monitor.py` — falsifier / drift checks.
 - `web/src/` — SPA. `score.ts` (verdicts), `columns.tsx` (grid), `DataTable.tsx`,
   `Scorecard.tsx`, `format.tsx`, `Toolbar.tsx`, `MethodologyDialog.tsx`, `App.tsx`.
-- `.github/workflows/deploy.yml` — cron + manual: run screener -> build -> deploy.
+- `.github/workflows/screen.yml` — cron + manual: run screener -> push results.json
+  to the `data` branch -> trigger deploy.
+- `.github/workflows/deploy.yml` — `web/**` push / Screen done / manual: fetch data
+  from the `data` branch -> build -> deploy to Pages.
 - `.github/workflows/ci-python.yml` — on `**.py` change: compile + import smoke.
 - `.github/workflows/ci-frontend.yml` — on `web/**` change: typecheck + build.
 - `diagnose_finnhub.py`, `diagnose_yfinance.py` — ad-hoc data-source probes.
@@ -77,9 +99,15 @@ One-time repo setup (operator, in repo Settings):
 
 1. Add Actions secrets `FRED_API_KEY` and `FINNHUB_API_KEY`.
 2. Pages -> Source = **"GitHub Actions"** (not "Deploy from a branch").
+3. Actions -> General -> Workflow permissions = **read and write** (so `screen.yml`
+   can push the `data` branch). The workflow's explicit `permissions: contents:
+   write` already requests it; this clears any org-level read-only default.
+4. Seed the data: **Run workflow** on **Screen** once -- the `data` branch must
+   exist before the first deploy.
 
-Then it runs on the weekday cron (`0 11 * * 1-5`) or via **Run workflow**
-(`workflow_dispatch`). Site: `https://<owner>.github.io/screener/`.
+After that: the weekday cron (`0 11 * * 1-5`) refreshes data and auto-deploys (via
+`workflow_run`); a `web/**` push redeploys with the last data; **Run workflow** on
+**Deploy** republishes on demand. Site: `https://<owner>.github.io/screener/`.
 
 ## Financial-integrity rules (non-negotiable — this is financial data)
 
