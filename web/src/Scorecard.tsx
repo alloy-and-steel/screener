@@ -25,9 +25,9 @@ function AzqatoViz({ az }: { az: Azqato }) {
         <div className="mb-1 text-[11px] text-slate-500">52-week position</div>
         <RangeBar pct={az.pos_52w_pct} />
       </div>
-      {az.basis === 'trailing_proxy' ? (
+      {az.basis === 'forward' ? (
         <div className="text-[10px] leading-tight text-slate-500">
-          PEG / P&#8209;E / EPS-growth bands use trailing figures (forward data is premium).
+          Revenue / EPS growth, P&#8209;E and PEG bands use forward analyst-consensus estimates.
         </div>
       ) : null}
     </div>

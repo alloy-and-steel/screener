@@ -69,9 +69,9 @@ export function azqatoVerdict(row: Row): Verdict {
     pass: az.pass,
     drivers: [
       { label: 'Bands met', value: `${az.score}/${az.coverage}` },
-      { label: 'PEG (trailing)', value: num(az.peg), tone: bandTone(az.bands.peg_lt_1) },
-      { label: 'Revenue growth (TTM)', value: pct(az.revenue_growth_pct), tone: bandTone(az.bands.revenue_growth_gt_15) },
-      { label: 'EPS growth (5Y)', value: pct(az.eps_growth_pct), tone: bandTone(az.bands.eps_growth_gt_15) },
+      { label: 'PEG (fwd)', value: num(az.peg), tone: bandTone(az.bands.peg_lt_1) },
+      { label: 'Revenue growth (fwd)', value: pct(az.revenue_growth_pct), tone: bandTone(az.bands.revenue_growth_gt_15) },
+      { label: 'EPS growth (fwd)', value: pct(az.eps_growth_pct), tone: bandTone(az.bands.eps_growth_gt_15) },
       { label: 'Gross margin', value: pct(az.gross_margin_pct), tone: bandTone(az.bands.gross_gt_50) },
       { label: 'Net margin', value: pct(az.net_margin_pct), tone: bandTone(az.bands.net_gt_25) },
     ],

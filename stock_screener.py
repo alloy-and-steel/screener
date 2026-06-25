@@ -275,6 +275,9 @@ def get_yf_price_and_history(ticker: str) -> dict:
         "long_term_debt": None,
         "current_assets": None,
         "current_liabilities": None,
+        "forward_eps": None,
+        "forward_eps_growth_pct": None,
+        "forward_revenue_growth_pct": None,
     }
     t = yf.Ticker(ticker)
 
@@ -334,6 +337,37 @@ def get_yf_price_and_history(ticker: str) -> dict:
     except Exception as e:
         log.warning(f"yfinance balance sheet error for {ticker}: {e}")
 
+    # ── Forward estimates → azqato FORWARD EPS-growth / P-E / PEG bands ──
+    # azqato defines these as forward (analyst-consensus). yfinance `info` carries
+    # forwardEps = consensus next-12-month EPS for free (Finnhub's forward fields
+    # are premium). Forward EPS growth = forwardEps vs trailing-twelve-month EPS,
+    # BOTH Yahoo figures so the ratio is source-consistent (mixing a yfinance
+    # forward with a Finnhub trailing base would distort the rate). azqato's PEG
+    # FWD is then forward P/E / this growth (computed in process_ticker) — NOT
+    # Yahoo's 5yr-expected trailingPegRatio, a different metric. Any gap leaves
+    # None so the band is unevaluable rather than fabricated.
+    try:
+        info = t.info
+        fwd_eps = _safe_float(info.get("forwardEps"))
+        ttm_eps_yf = _safe_float(info.get("trailingEps"))
+        result["forward_eps"] = fwd_eps
+        if fwd_eps is not None and ttm_eps_yf is not None and ttm_eps_yf > 0:
+            result["forward_eps_growth_pct"] = round((fwd_eps / ttm_eps_yf - 1.0) * 100.0, 2)
+    except Exception as e:
+        log.warning(f"yfinance info error for {ticker}: {e}")
+
+    # ── Forward revenue growth → azqato Revenue Growth FWD band ─────────
+    # azqato's revenue filter is the consensus estimate for the NEXT FISCAL YEAR
+    # (the '+1y' row of yfinance's revenue_estimate), as a fraction -> percent.
+    try:
+        rev_est = t.revenue_estimate
+        if rev_est is not None and not rev_est.empty and "+1y" in rev_est.index and "growth" in rev_est.columns:
+            g_rev = _safe_float(rev_est.loc["+1y", "growth"])
+            if g_rev is not None:
+                result["forward_revenue_growth_pct"] = round(g_rev * 100.0, 2)
+    except Exception as e:
+        log.warning(f"yfinance revenue estimate error for {ticker}: {e}")
+
     return result
 
 
@@ -349,7 +383,8 @@ def get_combined_data(ticker: str) -> dict:
         current_ratio, book_value_ps,
         closes, high_52w, low_52w, total_cash, total_debt,
         long_term_debt, current_assets, current_liabilities,
-        gross_margin, net_margin, revenue_growth
+        gross_margin, net_margin,
+        forward_eps, forward_eps_growth_pct, forward_revenue_growth_pct
     """
     yf_data = get_yf_price_and_history(ticker)
     fh = get_finnhub_metrics(ticker)
@@ -407,7 +442,6 @@ def get_combined_data(ticker: str) -> dict:
     # is no "netMarginTTM". Margins are whole-number percents (e.g. 43.3 == 43.3%).
     gross_margin = _safe_float(fh.get("grossMarginTTM"))
     net_margin = _safe_float(fh.get("netProfitMarginTTM"))
-    revenue_growth = _safe_float(fh.get("revenueGrowthTTMYoy"))
 
     return {
         "price": price,
@@ -432,7 +466,9 @@ def get_combined_data(ticker: str) -> dict:
         "total_debt": yf_data["total_debt"],
         "gross_margin": gross_margin,
         "net_margin": net_margin,
-        "revenue_growth": revenue_growth,
+        "forward_eps": yf_data["forward_eps"],  # consensus NTM EPS (forward P/E)
+        "forward_eps_growth_pct": yf_data["forward_eps_growth_pct"],  # NTM EPS growth %
+        "forward_revenue_growth_pct": yf_data["forward_revenue_growth_pct"],  # next-FY rev growth %
     }
 
 
@@ -787,21 +823,28 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
     graham_buy = gm.get("Graham_Status") in buy_signals
     row["Show"] = lynch_buy or graham_buy
 
-    # ── Azqato numeric profile (no AI) ──────────────────────────────
-    # Forward estimates are premium on Finnhub free tier, so PEG / EPS-growth /
-    # P/E use the engine's TRAILING values as a proxy (basis="trailing_proxy").
-    # Revenue growth is the doc's TTM metric directly (revenueGrowthTTMYoy), not a
-    # forward proxy. P/E = price / EPS is valid for any profitable name (EPS > 0
-    # guaranteed above), so it is computed here directly rather than via Lynch —
-    # keeping the technical profile populated even when valuation is N/A. PEG needs
-    # positive growth, so it stays None for contracting / growth-unknown names.
+    # ── Azqato numeric profile (no AI) — FORWARD basis ──────────────
+    # azqato's growth/valuation bands are FORWARD analyst-consensus (yfinance):
+    #   forward_eps                 -> consensus next-12-month EPS (forward P/E)
+    #   forward_eps_growth_pct      -> NTM EPS growth (forwardEps vs trailing EPS)
+    #   forward_revenue_growth_pct  -> next-fiscal-year revenue growth estimate
+    # Forward P/E = price / forward_eps. azqato's PEG FWD is forward P/E divided by
+    # the forward EPS growth rate (its worked examples: P/E 26 / 32% = 0.81) — so
+    # it is computed here, NOT taken from Yahoo's 5yr-expected PEG. PEG and the
+    # P/E-below-growth band are the same inequality by construction (azqato lists
+    # both yet notes the equivalence); PEG is left None for non-positive growth so
+    # a declining name's sign-flipped PEG never spuriously reads < 1.0. Margins
+    # stay TTM (azqato evaluates them as research signals). A missing forward input
+    # leaves the band None (unevaluable), never fabricated.
     closes = fund.get("closes") or []
-    az_pe = round(float(price) / float(eps), 2)
-    az_peg = round(az_pe / g, 3) if can_value else None
+    fwd_eps = fund.get("forward_eps")
+    az_pe = round(float(price) / fwd_eps, 2) if (fwd_eps is not None and fwd_eps > 0) else None
+    az_eps_growth = fund.get("forward_eps_growth_pct")
+    az_peg = round(az_pe / az_eps_growth, 2) if (az_pe is not None and az_eps_growth is not None and az_eps_growth > 0) else None
     row["azqato"] = azqato_profile(
         peg=az_peg,
-        revenue_growth_pct=fund.get("revenue_growth"),
-        eps_growth_pct=g,
+        revenue_growth_pct=fund.get("forward_revenue_growth_pct"),
+        eps_growth_pct=az_eps_growth,
         pe=az_pe,
         total_cash=fund.get("total_cash"),
         total_debt=fund.get("total_debt"),

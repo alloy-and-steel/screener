@@ -11,9 +11,11 @@ Three pieces:
   - azqato_profile()    : evaluate the 9 "strong" bands -> pass / score / coverage
 
 Band definitions follow the azqato "individual stocks" methodology (the manual
-discipline this automates) and the screener's §1 spec. Forward estimates (PEG FWD, EPS
-Growth FWD, P/E FWD) are premium on Finnhub free tier, so the caller feeds the
-engine's TRAILING values as a proxy — flagged with basis="trailing_proxy".
+discipline this automates) and the screener's §1 spec. Revenue growth, EPS growth,
+P/E, and PEG are FORWARD by azqato's definition; the caller sources them from
+yfinance analyst-consensus figures (next-fiscal-year revenue growth, next-12-month
+EPS growth, forward P/E, and PEG = forward P/E / forward EPS growth) and flags
+basis="forward". Margins are evaluated TTM (azqato treats them as research signals).
 
 Integrity: a missing input is None, never 0. A band with a None input evaluates
 to None (unevaluable) and is excluded from both the score and the coverage count
@@ -24,9 +26,9 @@ to None (unevaluable) and is excluded from both the score and the coverage count
 RSI_PERIOD = 14
 
 # ── Azqato "strong" pass bands ─────────────────────────────────────────────────
-AZQATO_PEG_MAX = 1.0  # PEG (FWD; trailing proxy) below 1.0 — primary
-AZQATO_REVENUE_GROWTH_MIN = 15.0  # revenue growth % (TTM YoY) above 15
-AZQATO_EPS_GROWTH_MIN = 15.0  # EPS growth % (FWD; trailing 5Y-CAGR proxy) above 15
+AZQATO_PEG_MAX = 1.0  # PEG (FWD = forward P/E / forward EPS growth) below 1.0 — primary
+AZQATO_REVENUE_GROWTH_MIN = 15.0  # revenue growth % (FWD, next fiscal year) above 15
+AZQATO_EPS_GROWTH_MIN = 15.0  # EPS growth % (FWD, next-12-month) above 15
 AZQATO_GROSS_MARGIN_MIN = 50.0  # gross margin % above 50
 AZQATO_NET_MARGIN_MIN = 25.0  # net margin % above 25
 AZQATO_RSI_LOW = 30.0  # RSI entry band lower bound (see note below)
@@ -38,11 +40,11 @@ AZQATO_52W_LOWER_MAX = 25.0  # price in the lower 25% of the 52-week range
 # working band; widen AZQATO_RSI_HIGH to 50 to match the FAQ if preferred.
 
 # Pass threshold: count-of-bands-met needed for azqato_pass. Mirrors the
-# screener's existing DEFENSIVE_PASS_SCORE convention. With 9 bands here, the
-# Cash>Debt band often unevaluable on free data, and the peg_lt_1 / pe_lt_growth
-# pair degenerate (both reduce to P/E < growth under the trailing proxy), 7
-# (~78% of bands, holding the original 6-of-8 = 75% intent) is a
-# demanding-but-reachable bar; tune as forward data / margins coverage improves.
+# screener's existing DEFENSIVE_PASS_SCORE convention. 7 of 9 (~78%, holding the
+# original 6-of-8 = 75% intent) is a demanding-but-reachable bar. Note peg_lt_1
+# and pe_lt_growth are the SAME inequality (PEG = P/E / growth, so PEG < 1 iff
+# P/E < growth) — azqato lists both as separate signals yet states the equivalence,
+# so both count, faithful to its checklist. Tune as forward / margin coverage shifts.
 AZQATO_PASS_SCORE = 7
 
 
@@ -111,17 +113,16 @@ def azqato_profile(
         pass     : score >= AZQATO_PASS_SCORE
         score    : count of bands met
         coverage : count of bands evaluable (not None)
-        basis    : "trailing_proxy" (PEG/growth/P-E are trailing, not forward)
+        basis    : "forward" (revenue/EPS growth, P/E, PEG use forward estimates)
         bands    : per-band True/False/None
         plus the input metrics echoed for the dashboard / detail drawer.
 
-    Note: under the trailing proxy WITH positive growth, `peg_lt_1` and
-    `pe_lt_growth` are the same inequality (PEG = P/E / growth), so they move
-    together and both count — faithful to azqato's checklist, which lists them
-    separately. They DIVERGE for declining / growth-unknown names: the caller
-    passes peg=None (peg_lt_1 unevaluable) to avoid a negative-growth PEG spuriously
-    reading < 1.0, while pe_lt_growth may still evaluate (False for negative growth).
-    With real forward inputs (different growth bases) they also diverge.
+    Note: azqato's PEG FWD is forward P/E / forward EPS growth, so `peg_lt_1` and
+    `pe_lt_growth` are the SAME inequality (PEG < 1 iff P/E < growth). azqato lists
+    them as separate signals while stating the equivalence, so both count here,
+    faithful to its checklist. The caller passes peg=None when forward growth is
+    non-positive, so a declining name's sign-flipped PEG never spuriously reads
+    < 1.0; pe_lt_growth still evaluates (False) in that case.
     """
     bands = {
         "peg_lt_1": None if peg is None else peg < AZQATO_PEG_MAX,
@@ -142,7 +143,7 @@ def azqato_profile(
         "pass": score >= AZQATO_PASS_SCORE,
         "score": score,
         "coverage": coverage,
-        "basis": "trailing_proxy",
+        "basis": "forward",
         "bands": bands,
         "peg": peg,
         "revenue_growth_pct": revenue_growth_pct,
