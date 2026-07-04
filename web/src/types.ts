@@ -1,36 +1,34 @@
 // Shapes mirror stock_screener.py's output row. Lynch/Graham metric keys are
 // DOUBLE-prefixed (e.g. Lynch_Lynch_Status, Graham_Graham_Discount_Pct) because
 // process_ticker re-prefixes dicts whose keys already carry the prefix. The
-// `azqato` block is the nested no-AI profile (azqato.py / azqato_profile).
+// `azqato` block is the nested no-AI relative score (azqato.py / azqato_score_all).
 
-export interface AzqatoBands {
-  peg_lt_1: boolean | null
-  revenue_growth_gt_15: boolean | null
-  eps_growth_gt_15: boolean | null
-  pe_lt_growth: boolean | null
-  cash_gt_debt: boolean | null
-  gross_gt_50: boolean | null
-  net_gt_25: boolean | null
-  rsi_30_45: boolean | null
-  pos_52w_lower_25: boolean | null
-}
+// Rank tiers of the azqato relative percentile model: S = top 10% of scored
+// names, A = next 10%, B = 20-50%, C = 50-75%, F = bottom 25%; 'sp' (S+) = a
+// perfect 100. Ranks, not buy/sell ratings.
+export type AzqatoTier = 'sp' | 's' | 'a' | 'b' | 'c' | 'f'
+
+// The seven ranked metrics; peVsG (forward P/E vs growth) is a weight-0
+// context ratio — ranked for cell coloring only, never scored.
+export type AzqatoMetricKey = 'revTTM' | 'revFwd' | 'epsTTM' | 'epsFwd' | 'peVsG' | 'pegFwd' | 'cashDebt'
 
 export interface Azqato {
-  pass: boolean
-  score: number
-  coverage: number
-  basis: string
-  bands: AzqatoBands
-  peg: number | null
-  revenue_growth_pct: number | null
-  eps_growth_pct: number | null
-  pe: number | null
-  gross_margin_pct: number | null
-  net_margin_pct: number | null
-  rsi: number | null
-  pos_52w_pct: number | null
-  total_cash: number | null
-  total_debt: number | null
+  score: number | null // 0-100; null when no metric was evaluable
+  tier: AzqatoTier | null
+  passes: number // metrics in the upper part of the pack (points >= 15)
+  total: number // fixed 6 — a missing metric is a miss, not a pass
+  parts: Partial<Record<AzqatoMetricKey, number>> // points 0-20; missing key = hard zero
+  pctiles: Partial<Record<AzqatoMetricKey, number>> // raw percentile 0..1
+  revTTM: number | null
+  revFwd: number | null
+  epsTTM: number | null
+  epsFwd: number | null
+  peFwd: number | null
+  pegFwd: number | null
+  cash: number | null
+  debt: number | null
+  rsi: number | null // scorecard display only — not scored
+  pos_52w_pct: number | null // scorecard display only — not scored
 }
 
 export interface Row {

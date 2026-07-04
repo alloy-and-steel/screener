@@ -27,15 +27,30 @@ export function compactUsd(v: unknown): string {
   return v.toFixed(0)
 }
 
+// Ratio with an unbounded case: Infinity (cash with zero debt) renders as ∞.
+export function ratio(v: number | null | undefined): string {
+  if (isMissing(v) || typeof v !== 'number') return DASH
+  if (!Number.isFinite(v)) return '∞'
+  return `${v.toFixed(2)}x`
+}
+
 export type Tone = 'green' | 'yellow' | 'red' | 'slate'
+
+// Tone from an azqato metric's percentile points (0-20 scale): top of the pack
+// green, bottom red, middle amber. A SCORED metric with missing data is a hard
+// zero, so its cell reads red; pass scored=false for the weight-0 context
+// ratio, where missing is merely unranked (slate).
+export function ptsTone(p: number | null | undefined, scored = true): Tone {
+  if (p === null || p === undefined) return scored ? 'red' : 'slate'
+  if (p >= 20) return 'green'
+  if (p <= 0) return 'red'
+  return 'yellow'
+}
 
 // One shared semantic ramp — a color means the same thing in the grid and the
 // scorecard. Low-saturation tinted fill + ring reads as a status chip on the
 // near-black canvas (solid green/red glares).
-export const TONE: Record<
-  Tone,
-  { text: string; bg: string; ring: string; dot: string; fill: string; border: string }
-> = {
+export const TONE: Record<Tone, { text: string; bg: string; ring: string; dot: string; fill: string; border: string }> = {
   green: {
     text: 'text-emerald-300',
     bg: 'bg-emerald-500/15',
@@ -76,30 +91,32 @@ export const GLYPH: Record<Tone, string> = { green: '✓', yellow: '–', red: '
 export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
   const t = TONE[tone]
   return (
-    <span
-      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${t.bg} ${t.text} ${t.ring}`}
-    >
+    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${t.bg} ${t.text} ${t.ring}`}>
       {children}
     </span>
   )
 }
 
 // The canonical verdict chip — glyph + label, used in the grid and scorecard.
+// `colors` overrides the tone's palette (azqato tier colors); tier letters are
+// self-describing, so an override also drops the glyph.
 export function VerdictPill({
   tone,
   glyph = true,
+  colors,
   children,
 }: {
   tone: Tone
   glyph?: boolean
+  colors?: { text: string; bg: string; ring: string }
   children: ReactNode
 }) {
-  const t = TONE[tone]
+  const t = colors ?? TONE[tone]
   return (
     <span
       className={`inline-flex h-5 items-center gap-1 rounded-md px-2 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset ${t.bg} ${t.text} ${t.ring}`}
     >
-      {glyph && (
+      {glyph && !colors && (
         <span aria-hidden className="text-[10px] leading-none">
           {GLYPH[tone]}
         </span>
@@ -113,16 +130,15 @@ export function Dot({ tone }: { tone: Tone }) {
   return <span className={`inline-block size-2 shrink-0 rounded-full ${TONE[tone].dot}`} aria-hidden />
 }
 
-// 5-segment graded meter (Lynch/Graham). `level` is 0..1.
-export function Meter({ level, tone, segments = 5 }: { level: number; tone: Tone; segments?: number }) {
+// 5-segment graded meter. `level` is 0..1; `fillClass` overrides the tone's
+// fill (azqato tier colors).
+export function Meter({ level, tone, fillClass, segments = 5 }: { level: number; tone: Tone; fillClass?: string; segments?: number }) {
   const filled = Math.max(0, Math.min(segments, Math.round(level * segments)))
+  const fill = fillClass ?? TONE[tone].fill
   return (
     <span className="inline-flex gap-[3px]" aria-hidden>
       {Array.from({ length: segments }, (_, i) => (
-        <span
-          key={i}
-          className={`h-2.5 w-3 rounded-[2px] ${i < filled ? TONE[tone].fill : 'bg-slate-700/50'}`}
-        />
+        <span key={i} className={`h-2.5 w-3 rounded-[2px] ${i < filled ? fill : 'bg-slate-700/50'}`} />
       ))}
     </span>
   )
@@ -132,7 +148,8 @@ export function Meter({ level, tone, segments = 5 }: { level: number; tone: Tone
 // high). For a value/entry screen, near-low is the opportunity (emerald).
 export function RangeBar({ pct: p }: { pct: number | null | undefined }) {
   if (isMissing(p) || typeof p !== 'number') return <span className="text-slate-500">{DASH}</span>
-  // Green matches the azqato pos_52w_lower_25 pass band (lower 25% of the range).
+  // Lower ~25% of the range is azqato's favorable entry band (timing context —
+  // not part of the score).
   const tone: Tone = p <= 25 ? 'green' : p >= 75 ? 'red' : 'slate'
   return (
     <span className="inline-flex w-full items-center gap-2">
@@ -150,8 +167,8 @@ export function RangeBar({ pct: p }: { pct: number | null | undefined }) {
 // RSI(14) gauge 0..100 with oversold/overbought marker.
 export function RsiGauge({ rsi }: { rsi: number | null | undefined }) {
   if (isMissing(rsi) || typeof rsi !== 'number') return <span className="text-slate-500">{DASH}</span>
-  // Green matches the azqato rsi_30_45 entry band; below 30 is deep-oversold
-  // (fails the band — verify the thesis first), above 70 overbought.
+  // azqato's 30-45 entry band reads green (timing context — not part of the
+  // score); below 30 is deep-oversold, above 70 overbought.
   const tone: Tone = rsi >= 30 && rsi <= 45 ? 'green' : rsi > 70 ? 'red' : 'slate'
   return (
     <span className="inline-flex w-full items-center gap-2">

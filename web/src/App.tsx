@@ -9,10 +9,7 @@ import type { Dataset } from './types'
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/results.json`
 
-type LoadState =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; data: Dataset }
+type LoadState = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; data: Dataset }
 
 export default function App() {
   const [load, setLoad] = useState<LoadState>({ status: 'loading' })
@@ -48,10 +45,7 @@ export default function App() {
     }
   }, [rows])
 
-  const exactMatch = useMemo(
-    () => (q ? rows.find((r) => r.Ticker?.toUpperCase() === q) : undefined),
-    [rows, q],
-  )
+  const exactMatch = useMemo(() => (q ? rows.find((r) => r.Ticker?.toUpperCase() === q) : undefined), [rows, q])
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {

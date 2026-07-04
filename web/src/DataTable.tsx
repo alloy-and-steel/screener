@@ -1,10 +1,5 @@
 import { useRef } from 'react'
-import {
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-} from '@tanstack/react-table'
+import { flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
 import type { ColumnDef, OnChangeFn, SortingState, VisibilityState } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Row } from './types'
@@ -28,14 +23,7 @@ interface DataTableProps {
   onRowClick: (row: Row) => void
 }
 
-export default function DataTable({
-  data,
-  columns,
-  sorting,
-  onSortingChange,
-  columnVisibility,
-  onRowClick,
-}: DataTableProps) {
+export default function DataTable({ data, columns, sorting, onSortingChange, columnVisibility, onRowClick }: DataTableProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   const table = useReactTable({
@@ -105,12 +93,8 @@ export default function DataTable({
                         pinned ? 'sticky left-0 z-30 bg-surface-2' : ''
                       }`}
                     >
-                      <span className="truncate">
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                      </span>
-                      <span className="w-2 shrink-0 text-[8px] text-sky-400">
-                        {sorted === 'asc' ? '▲' : sorted === 'desc' ? '▼' : ''}
-                      </span>
+                      <span className="truncate">{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                      <span className="w-2 shrink-0 text-[8px] text-sky-400">{sorted === 'asc' ? '▲' : sorted === 'desc' ? '▼' : ''}</span>
                     </div>
                   )
                 })}

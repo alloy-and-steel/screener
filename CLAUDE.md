@@ -9,8 +9,17 @@ weekday schedule — a public, shareable URL, no account required.
 
 The three screens (decoupled on purpose — disagreement is the signal):
 
-- **Azqato** — pure, no-AI 9-band growth + technical-entry screen; binary
-  pass/fail (`azqato.py`). Pass = clears >= 7 of 9 bands.
+- **Azqato** — pure, no-AI RELATIVE percentile model (`azqato.py`), a port of
+  the live azqato screener's scoring v2 (azqato.github.io/stocks/screener.js).
+  Six metrics in three pillars (Growth 60: rev TTM 10 / rev FWD 20 / EPS TTM 10 /
+  EPS FWD 20; Valuation 20: PEG FWD; Balance sheet 20: cash vs debt); points
+  ramp with percentile rank vs the loaded universe (top/bottom 22% clamp);
+  missing data = hard zero. Score 0-100 -> rank tiers (S = top 10%, A = next
+  10%, B = 20-50%, C = 50-75%, F = rest; perfect 100 = S+). Tiers are computed
+  in ONE cross-sectional pass in `run_screener` after all tickers fetch — they
+  are relative, so per-ticker code can't produce them. Pass (for the 3-system
+  gate) = tier A or better. RSI(14) + 52-week position are scorecard display
+  only, not scored.
 - **Lynch** — growth at a reasonable price (PEG / fair-value bands).
 - **Graham** — rate-adjusted intrinsic value + 8 defensive balance-sheet checks.
 
@@ -26,9 +35,12 @@ RSI gauge, 52-week-range bar).
 - **Frontend:** Vite 6 + React 19 + TypeScript 5.7 + Tailwind v4
   (`@tailwindcss/vite`, `@theme` tokens) + TanStack Table v8 / Virtual v3, under
   `web/`. Package manager **pnpm 11**.
-- **Data sources:** yfinance (price, EPS history, dividends), Finnhub
-  (`/stock/metric`: EPS, 5Y growth, margins, balance-sheet ratios, market cap),
-  FRED (Moody's AAA yield, for Graham's rate adjustment), Wikipedia (universe).
+- **Data sources:** yfinance (price, EPS history, dividends, and ALL azqato
+  model inputs — matching azqato's own feed generator field for field: `info`
+  revenueGrowth/earningsGrowth/totalCash/totalDebt/priceEpsCurrentYear/pegRatio,
+  current-fiscal-year "0y" analyst estimates), Finnhub (`/stock/metric`: EPS,
+  5Y growth, balance-sheet ratios, market cap), FRED (Moody's AAA yield, for
+  Graham's rate adjustment), Wikipedia (universe).
 - **Hosting:** GitHub Pages via GitHub Actions. Screen and deploy are SEPARATE:
   `screen.yml` (cron -> fresh data on the `data` branch) and `deploy.yml`
   (fetch that data -> build -> publish). CI gates: `ci-python.yml`, `ci-frontend.yml`.
@@ -135,6 +147,8 @@ After that: the weekday cron (`0 11 * * 1-5`) refreshes data and auto-deploys (v
   a basis with the raw `fast_info` last price and the Finviz/azqato convention.
 - **Finnhub free tier is 60 req/min** (~515 calls/run). yfinance latency paces it
   under the limit; the publish guard covers a rate-limit-induced degraded run.
-- Names with non-positive or uncomputable growth are kept **visible** with
-  valuation N/A (Graham-defensive + Azqato still computed). Only no-usable-EPS /
-  no-price names are hard-excluded as error rows.
+- Names with no usable (positive) EPS or non-positive/uncomputable growth are
+  kept **visible** with valuation N/A (Graham-defensive + Azqato still
+  computed — the azqato model ranks loss-makers worst on valuation instead of
+  dropping them, matching the upstream screener). Only no-price names are
+  hard-excluded as error rows.

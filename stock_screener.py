@@ -19,6 +19,7 @@ GitHub Actions setup:
 import os
 import sys
 import json
+import math
 import logging
 import requests
 import pandas as pd
@@ -27,7 +28,7 @@ from datetime import datetime, timezone
 from fredapi import Fred
 from dotenv import load_dotenv
 
-from azqato import azqato_profile, pct_of_52w_range, wilder_rsi
+from azqato import azqato_score_all, pct_of_52w_range, wilder_rsi
 
 # Load .env when running locally; no-op in GitHub Actions (env vars already set)
 load_dotenv()
@@ -208,27 +209,14 @@ def get_finnhub_metrics(ticker: str) -> dict:
 
 
 def _safe_float(v) -> float | None:
-    """Return float or None for any null-like value including np.nan."""
+    """Return a FINITE float, else None (rejects None, np.nan, and ±inf)."""
     try:
         f = float(v)
-        return None if f != f else f  # f != f is True only for nan
+        return f if math.isfinite(f) else None
     except TypeError, ValueError:
         return None
 
 
-# yfinance balance-sheet index labels vary by ticker; try the broadest cash
-# concept first (azqato's "Total Cash" = cash, equivalents, short-term liquid
-# investments), then narrower. Absolute dollars feed the azqato Cash>Debt band —
-# Finnhub free /stock/metric exposes only ratios, not dollar cash/debt.
-CASH_BS_ROWS = (
-    "Cash Cash Equivalents And Short Term Investments",
-    "Cash And Cash Equivalents",
-    "Cash Financial",
-)
-DEBT_BS_ROWS = (
-    "Total Debt",
-    "Total Debt And Capital Lease Obligation",
-)
 # Graham's defensive financial-condition test compares LONG-TERM debt against
 # working capital (current assets - current liabilities) -- absolute dollars,
 # from the yfinance balance sheet (Finnhub free exposes only ratios).
@@ -257,11 +245,9 @@ def _bs_lookup(bs, col, candidate_rows: tuple) -> float | None:
 def get_yf_price_and_history(ticker: str) -> dict:
     """
     Fetch from yfinance: price, historical EPS (defensive checks), dividends,
-    1y daily closes (RSI + 52-week range), and absolute total cash / total debt
-    (azqato Cash>Debt band). Each fetch is independently guarded so one failure
-    does not lose the others.
-    Returns: { price, annual_eps, annual_dividends, closes, high_52w, low_52w,
-               total_cash, total_debt }
+    1y daily closes (RSI + 52-week range), Graham working-capital rows, and the
+    azqato scoring-model inputs (TTM/FWD growth, forward P/E, PEG, cash, debt).
+    Each fetch is independently guarded so one failure does not lose the others.
     """
     result = {
         "price": None,
@@ -270,14 +256,17 @@ def get_yf_price_and_history(ticker: str) -> dict:
         "closes": [],
         "high_52w": None,
         "low_52w": None,
-        "total_cash": None,
-        "total_debt": None,
         "long_term_debt": None,
         "current_assets": None,
         "current_liabilities": None,
-        "forward_eps": None,
-        "forward_eps_growth_pct": None,
-        "forward_revenue_growth_pct": None,
+        "az_rev_ttm": None,
+        "az_rev_fwd": None,
+        "az_eps_ttm": None,
+        "az_eps_fwd": None,
+        "az_pe_fwd": None,
+        "az_peg_fwd": None,
+        "az_cash": None,
+        "az_debt": None,
     }
     t = yf.Ticker(ticker)
 
@@ -322,51 +311,83 @@ def get_yf_price_and_history(ticker: str) -> dict:
     except Exception as e:
         log.warning(f"yfinance history error for {ticker}: {e}")
 
-    # ── Absolute total cash / total debt → azqato Cash>Debt band ────────
-    # Best-effort: any gap leaves None so the band is unevaluable rather than
+    # ── Graham working-capital rows (yfinance balance sheet) ────────────
+    # Best-effort: any gap leaves None so the check is unevaluable rather than
     # fabricated (financial-integrity rule).
     try:
         bs = t.balance_sheet
         if bs is not None and not bs.empty:
             recent = bs.columns[0]  # most recent period
-            result["total_cash"] = _bs_lookup(bs, recent, CASH_BS_ROWS)
-            result["total_debt"] = _bs_lookup(bs, recent, DEBT_BS_ROWS)
             result["long_term_debt"] = _bs_lookup(bs, recent, LONG_TERM_DEBT_BS_ROWS)
             result["current_assets"] = _bs_lookup(bs, recent, CURRENT_ASSETS_BS_ROWS)
             result["current_liabilities"] = _bs_lookup(bs, recent, CURRENT_LIABILITIES_BS_ROWS)
     except Exception as e:
         log.warning(f"yfinance balance sheet error for {ticker}: {e}")
 
-    # ── Forward estimates → azqato FORWARD EPS-growth / P-E / PEG bands ──
-    # azqato defines these as forward (analyst-consensus). yfinance `info` carries
-    # forwardEps = consensus next-12-month EPS for free (Finnhub's forward fields
-    # are premium). Forward EPS growth = forwardEps vs trailing-twelve-month EPS,
-    # BOTH Yahoo figures so the ratio is source-consistent (mixing a yfinance
-    # forward with a Finnhub trailing base would distort the rate). azqato's PEG
-    # FWD is then forward P/E / this growth (computed in process_ticker) — NOT
-    # Yahoo's 5yr-expected trailingPegRatio, a different metric. Any gap leaves
-    # None so the band is unevaluable rather than fabricated.
+    # ── Azqato scoring-model inputs ──────────────────────────────────────
+    # Definitions match azqato's own feed generator (Azqato/stocks
+    # scripts/fetch_screener_data.py) field for field, so our scores rank the
+    # same quantities his live screener ranks:
+    #   revTTM/epsTTM  = Yahoo info revenueGrowth / earningsGrowth (as percent)
+    #   cash/debt      = Yahoo info totalCash / totalDebt (absolute dollars)
+    #   FWD figures    = CURRENT fiscal-year ("0y") analyst consensus, matching
+    #                    Seeking Alpha's "FWD" convention — NOT forwardEps/"+1y",
+    #                    which look a year further out and read too low
+    #   peFwd          = priceEpsCurrentYear, falling back to price / 0y EPS
+    #                    estimate, then forwardPE
+    #   pegFwd         = Yahoo pegRatio (tracks SA's long-term-growth PEG),
+    #                    falling back to trailingPegRatio, then peFwd / epsFwd
+    # Any gap leaves None so the metric is unevaluable rather than fabricated.
     try:
         info = t.info
-        fwd_eps = _safe_float(info.get("forwardEps"))
-        ttm_eps_yf = _safe_float(info.get("trailingEps"))
-        result["forward_eps"] = fwd_eps
-        if fwd_eps is not None and ttm_eps_yf is not None and ttm_eps_yf > 0:
-            result["forward_eps_growth_pct"] = round((fwd_eps / ttm_eps_yf - 1.0) * 100.0, 2)
+        rg = _safe_float(info.get("revenueGrowth"))
+        result["az_rev_ttm"] = rg * 100.0 if rg is not None else None
+        eg = _safe_float(info.get("earningsGrowth"))
+        result["az_eps_ttm"] = eg * 100.0 if eg is not None else None
+        result["az_cash"] = _safe_float(info.get("totalCash"))
+        result["az_debt"] = _safe_float(info.get("totalDebt"))
     except Exception as e:
         log.warning(f"yfinance info error for {ticker}: {e}")
+        info = {}
 
-    # ── Forward revenue growth → azqato Revenue Growth FWD band ─────────
-    # azqato's revenue filter is the consensus estimate for the NEXT FISCAL YEAR
-    # (the '+1y' row of yfinance's revenue_estimate), as a fraction -> percent.
+    earn_est = None
+    rev_est = None
+    try:
+        earn_est = t.earnings_estimate
+    except Exception as e:
+        log.warning(f"yfinance earnings estimate error for {ticker}: {e}")
     try:
         rev_est = t.revenue_estimate
-        if rev_est is not None and not rev_est.empty and "+1y" in rev_est.index and "growth" in rev_est.columns:
-            g_rev = _safe_float(rev_est.loc["+1y", "growth"])
-            if g_rev is not None:
-                result["forward_revenue_growth_pct"] = round(g_rev * 100.0, 2)
     except Exception as e:
         log.warning(f"yfinance revenue estimate error for {ticker}: {e}")
+
+    def _estimate(df, col) -> float | None:
+        try:
+            return _safe_float(df.loc["0y", col])
+        except Exception:
+            return None
+
+    eg_fwd = _estimate(earn_est, "growth")
+    result["az_eps_fwd"] = eg_fwd * 100.0 if eg_fwd is not None else None
+    rg_fwd = _estimate(rev_est, "growth")
+    result["az_rev_fwd"] = rg_fwd * 100.0 if rg_fwd is not None else None
+
+    price = result["price"]
+    pe = _safe_float(info.get("priceEpsCurrentYear"))
+    if pe is None:
+        eps_cur = _estimate(earn_est, "avg")
+        if price is not None and eps_cur is not None and eps_cur > 0:
+            pe = price / eps_cur
+        else:
+            pe = _safe_float(info.get("forwardPE"))
+    result["az_pe_fwd"] = pe
+
+    peg = _safe_float(info.get("pegRatio"))
+    if peg is None or peg == 0:
+        peg = _safe_float(info.get("trailingPegRatio"))
+    if (peg is None or peg == 0) and pe is not None and result["az_eps_fwd"] is not None and result["az_eps_fwd"] > 0:
+        peg = pe / result["az_eps_fwd"]
+    result["az_peg_fwd"] = peg
 
     return result
 
@@ -381,10 +402,10 @@ def get_combined_data(ticker: str) -> dict:
         price, market_cap_b, annual_eps, annual_dividends,
         ttm_eps, ttm_dps, growth_pct,
         current_ratio, book_value_ps,
-        closes, high_52w, low_52w, total_cash, total_debt,
+        closes, high_52w, low_52w,
         long_term_debt, current_assets, current_liabilities,
-        gross_margin, net_margin,
-        forward_eps, forward_eps_growth_pct, forward_revenue_growth_pct
+        az_rev_ttm, az_rev_fwd, az_eps_ttm, az_eps_fwd,
+        az_pe_fwd, az_peg_fwd, az_cash, az_debt
     """
     yf_data = get_yf_price_and_history(ticker)
     fh = get_finnhub_metrics(ticker)
@@ -437,12 +458,6 @@ def get_combined_data(ticker: str) -> dict:
     book_value_ps = _safe_float(fh.get("bookValuePerShareAnnual") or fh.get("bookValuePerShareQuarterly"))
     pb_ratio = _safe_float(fh.get("pb"))
 
-    # ── Azqato margins (Finnhub, percent values) ────────────────────
-    # Live /stock/metric keys are grossMarginTTM and netProfitMarginTTM — there
-    # is no "netMarginTTM". Margins are whole-number percents (e.g. 43.3 == 43.3%).
-    gross_margin = _safe_float(fh.get("grossMarginTTM"))
-    net_margin = _safe_float(fh.get("netProfitMarginTTM"))
-
     return {
         "price": price,
         "market_cap_b": mkt_cap_b,
@@ -458,17 +473,18 @@ def get_combined_data(ticker: str) -> dict:
         "long_term_debt": yf_data["long_term_debt"],
         "current_assets": yf_data["current_assets"],
         "current_liabilities": yf_data["current_liabilities"],
-        # ── Azqato profile inputs ───────────────────────────────────
+        # ── Azqato scoring-model inputs + scorecard timing display ──
         "closes": yf_data["closes"],  # 1y daily closes (RSI)
         "high_52w": yf_data["high_52w"],
         "low_52w": yf_data["low_52w"],
-        "total_cash": yf_data["total_cash"],
-        "total_debt": yf_data["total_debt"],
-        "gross_margin": gross_margin,
-        "net_margin": net_margin,
-        "forward_eps": yf_data["forward_eps"],  # consensus NTM EPS (forward P/E)
-        "forward_eps_growth_pct": yf_data["forward_eps_growth_pct"],  # NTM EPS growth %
-        "forward_revenue_growth_pct": yf_data["forward_revenue_growth_pct"],  # next-FY rev growth %
+        "az_rev_ttm": yf_data["az_rev_ttm"],
+        "az_rev_fwd": yf_data["az_rev_fwd"],
+        "az_eps_ttm": yf_data["az_eps_ttm"],
+        "az_eps_fwd": yf_data["az_eps_fwd"],
+        "az_pe_fwd": yf_data["az_pe_fwd"],
+        "az_peg_fwd": yf_data["az_peg_fwd"],
+        "az_cash": yf_data["az_cash"],
+        "az_debt": yf_data["az_debt"],
     }
 
 
@@ -742,12 +758,14 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
     mkt_cap_b = fund["market_cap_b"]
 
     # ── EPS ─────────────────────────────────────────────────────────
+    # A name with no usable (positive) trailing EPS stays VISIBLE: Lynch/Graham
+    # need positive earnings and are marked N/A, but the azqato relative model
+    # deliberately ranks unprofitable names (worst on valuation) instead of
+    # dropping them — matching his live screener, which scores every listed name.
     eps = fund["ttm_eps"]
-    if not eps or eps <= 0:
-        log.warning(f"{ticker}: no usable EPS")
-        row["Error"] = "No EPS"
-        return row
-    row["EPS_TTM"] = round(float(eps), 4)
+    usable_eps = eps is not None and eps > 0
+    if usable_eps:
+        row["EPS_TTM"] = round(float(eps), 4)
     row["EPS_Annual"] = str([round(e, 2) for e in fund["annual_eps"] if e is not None and e == e])
 
     # ── Dividend yield ───────────────────────────────────────────────
@@ -765,11 +783,12 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
     row["AAA_Yield"] = aaa_yield
     row["MarketCap_B"] = round(mkt_cap_b, 2) if mkt_cap_b else None
 
-    # Lynch/Graham valuation needs POSITIVE growth. For a contracting (g <= 0) or
-    # growth-unknown (g is None) name the row stays VISIBLE — valuation is marked
-    # N/A and only the growth-independent signals (Graham defensive, azqato
-    # margins/cash/RSI/52w) are computed. We never fabricate a growth rate.
-    can_value = g is not None and g > 0
+    # Lynch/Graham valuation needs POSITIVE EPS and POSITIVE growth. For a
+    # loss-making, contracting (g <= 0), or growth-unknown name the row stays
+    # VISIBLE — valuation is marked N/A and only the earnings-independent
+    # signals (Graham defensive, the azqato model) are computed. We never
+    # fabricate an EPS or a growth rate.
+    can_value = usable_eps and g is not None and g > 0
 
     # ── P/B ratio — Finnhub direct, or compute from BVPS ────────────
     pb = fund["pb_ratio"]
@@ -791,7 +810,12 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
         gm = graham_metrics(price, eps, g, aaa_yield)
         row.update({f"Graham_{k}": v for k, v in gm.items()})
     else:
-        reason = f"non-positive growth ({g:.1f}%)" if g is not None else "growth not computable"
+        if not usable_eps:
+            reason = "no usable (positive) EPS"
+        elif g is not None:
+            reason = f"non-positive growth ({g:.1f}%)"
+        else:
+            reason = "growth not computable"
         log.info(f"{ticker}: {reason}, valuation N/A (kept visible)")
         row["Lynch_Lynch_Status"] = "N/A"
         row["Graham_Graham_Status"] = "N/A"
@@ -823,36 +847,24 @@ def process_ticker(ticker: str, aaa_yield: float) -> dict:
     graham_buy = gm.get("Graham_Status") in buy_signals
     row["Show"] = lynch_buy or graham_buy
 
-    # ── Azqato numeric profile (no AI) — FORWARD basis ──────────────
-    # azqato's growth/valuation bands are FORWARD analyst-consensus (yfinance):
-    #   forward_eps                 -> consensus next-12-month EPS (forward P/E)
-    #   forward_eps_growth_pct      -> NTM EPS growth (forwardEps vs trailing EPS)
-    #   forward_revenue_growth_pct  -> next-fiscal-year revenue growth estimate
-    # Forward P/E = price / forward_eps. azqato's PEG FWD is forward P/E divided by
-    # the forward EPS growth rate (its worked examples: P/E 26 / 32% = 0.81) — so
-    # it is computed here, NOT taken from Yahoo's 5yr-expected PEG. PEG and the
-    # P/E-below-growth band are the same inequality by construction (azqato lists
-    # both yet notes the equivalence); PEG is left None for non-positive growth so
-    # a declining name's sign-flipped PEG never spuriously reads < 1.0. Margins
-    # stay TTM (azqato evaluates them as research signals). A missing forward input
-    # leaves the band None (unevaluable), never fabricated.
+    # ── Azqato scoring-model inputs (no AI) ─────────────────────────
+    # Metric values only here; the score/tier are RELATIVE (percentile rank vs
+    # the whole universe), so they are computed in one cross-sectional pass in
+    # run_screener once every ticker is fetched. RSI and the 52-week position
+    # are scorecard display only — the model does not score them.
     closes = fund.get("closes") or []
-    fwd_eps = fund.get("forward_eps")
-    az_pe = round(float(price) / fwd_eps, 2) if (fwd_eps is not None and fwd_eps > 0) else None
-    az_eps_growth = fund.get("forward_eps_growth_pct")
-    az_peg = round(az_pe / az_eps_growth, 2) if (az_pe is not None and az_eps_growth is not None and az_eps_growth > 0) else None
-    row["azqato"] = azqato_profile(
-        peg=az_peg,
-        revenue_growth_pct=fund.get("forward_revenue_growth_pct"),
-        eps_growth_pct=az_eps_growth,
-        pe=az_pe,
-        total_cash=fund.get("total_cash"),
-        total_debt=fund.get("total_debt"),
-        gross_margin_pct=fund.get("gross_margin"),
-        net_margin_pct=fund.get("net_margin"),
-        rsi=wilder_rsi(closes),
-        pos_52w_pct=pct_of_52w_range(price, fund.get("low_52w"), fund.get("high_52w")),
-    )
+    row["azqato"] = {
+        "revTTM": fund["az_rev_ttm"],
+        "revFwd": fund["az_rev_fwd"],
+        "epsTTM": fund["az_eps_ttm"],
+        "epsFwd": fund["az_eps_fwd"],
+        "peFwd": fund["az_pe_fwd"],
+        "pegFwd": fund["az_peg_fwd"],
+        "cash": fund["az_cash"],
+        "debt": fund["az_debt"],
+        "rsi": wilder_rsi(closes),
+        "pos_52w_pct": pct_of_52w_range(price, fund.get("low_52w"), fund.get("high_52w")),
+    }
 
     return row
 
@@ -866,6 +878,19 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float) -> pd.DataFrame:
         result = process_ticker(ticker, aaa_yield)
         result["Indexes"] = row["indexes"]
         results.append(result)
+
+    # ── Azqato relative scoring — one cross-sectional pass ──────────────
+    # The model ranks every metric against the loaded peers, so it can only run
+    # once the whole universe is fetched. Error rows (no price) carry no azqato
+    # block and are excluded from the peer pool; loss-makers stay in and rank.
+    scorable = {r["Ticker"]: r["azqato"] for r in results if "azqato" in r}
+    scored = azqato_score_all(scorable)
+    for r in results:
+        if "azqato" in r:
+            r["azqato"].update(scored[r["Ticker"]])
+    tier_counts = pd.Series([s["tier"] for s in scored.values()]).value_counts().to_dict()
+    log.info(f"Azqato tiers over {len(scorable)} names: {tier_counts}")
+
     df = pd.DataFrame(results)
     # Sort by CombinedScore descending (best opportunities first)
     if "CombinedScore" in df.columns:

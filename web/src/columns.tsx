@@ -1,7 +1,7 @@
 import type { ColumnDef, VisibilityState } from '@tanstack/react-table'
-import type { Row } from './types'
-import { DASH, TONE, VerdictPill, num, pct, signalTone } from './format'
-import { azqatoVerdict, combinedVerdict, grahamVerdict, lynchVerdict, type Verdict } from './score'
+import type { Azqato, AzqatoMetricKey, Row } from './types'
+import { DASH, TONE, VerdictPill, compactUsd, num, pct, ptsTone, ratio, signalTone } from './format'
+import { azCashDebt, azPegDisplay, azqatoVerdict, combinedVerdict, grahamVerdict, lynchVerdict, type Verdict } from './score'
 
 export interface ColMeta {
   summary?: boolean
@@ -65,9 +65,42 @@ function verdictLeaf(id: string, fn: (r: Row) => Verdict, size = 108): ColumnDef
       // "N/A" pill — a distinct signal from a numeric dash, never a bare gap that
       // would read as a fetch failure.
       const v = fn(row.original)
-      return <VerdictPill tone={v.tone}>{v.label}</VerdictPill>
+      return (
+        <VerdictPill tone={v.tone} colors={v.pillColors}>
+          {v.label}
+        </VerdictPill>
+      )
     },
     meta: { summary: true } satisfies ColMeta,
+  }
+}
+
+function worstIfNonPositive(v: number | null): number | null {
+  return v !== null && v <= 0 ? Infinity : v
+}
+
+// Azqato metric cell, tinted by the stock's percentile points on that metric
+// (green = top of the pack, red = bottom or missing-on-a-scored-metric, amber =
+// middle). `sortOn` overrides the sort value for derived metrics (peVsG,
+// display PEG, cash/debt ratio).
+function azMetricLeaf(
+  key: AzqatoMetricKey,
+  header: string,
+  fmt: (az: Azqato) => string,
+  opts: { scored?: boolean; sortOn?: (az: Azqato) => number | null } = {},
+): ColumnDef<Row> {
+  const { scored = true, sortOn } = opts
+  return {
+    id: `azqato_${key}`,
+    header,
+    size: 88,
+    accessorFn: (r) => (r.azqato ? (sortOn ? sortOn(r.azqato) : (r.azqato[key as keyof Azqato] as number | null)) : null),
+    cell: ({ row }) => {
+      const az = row.original.azqato
+      if (!az) return DASH
+      return <span className={TONE[ptsTone(az.parts?.[key], scored)].text}>{fmt(az)}</span>
+    },
+    meta: { align: 'right' } satisfies ColMeta,
   }
 }
 
@@ -76,9 +109,7 @@ export const columns: ColumnDef<Row>[] = [
     accessorKey: 'Ticker',
     header: 'Ticker',
     size: 96,
-    cell: ({ getValue }) => (
-      <span className="font-mono text-[13px] font-semibold text-slate-100">{getValue() as string}</span>
-    ),
+    cell: ({ getValue }) => <span className="font-mono text-[13px] font-semibold text-slate-100">{getValue() as string}</span>,
     meta: { summary: true, pinned: true } satisfies ColMeta,
   },
   {
@@ -102,19 +133,57 @@ export const columns: ColumnDef<Row>[] = [
     id: 'g_azqato',
     header: 'Azqato',
     columns: [
-      verdictLeaf('azqato_verdict', azqatoVerdict),
+      verdictLeaf('azqato_verdict', azqatoVerdict, 76),
       {
-        id: 'azqato_bands',
-        header: 'Bands',
+        id: 'azqato_score',
+        header: 'Score',
+        size: 76,
+        // `!= null` on tier gates out a stale pre-tier dataset shape too.
+        accessorFn: (r) => (r.azqato?.tier != null ? r.azqato.score : null),
+        sortDescFirst: true,
+        cell: ({ getValue }) => {
+          const s = getValue() as number | null | undefined
+          return typeof s === 'number' ? `${s}/100` : DASH
+        },
+        meta: { summary: true, align: 'right' } satisfies ColMeta,
+      },
+      {
+        id: 'azqato_factors',
+        header: 'Factors',
         size: 78,
-        accessorFn: (r) => r.azqato?.score,
-        cell: ({ getValue, row }) => {
-          const s = getValue() as number | undefined
-          const cov = row.original.azqato?.coverage
-          return s === undefined ? DASH : `${s}/${cov ?? 9}`
+        accessorFn: (r) => (r.azqato?.total ? (r.azqato.passes ?? 0) / r.azqato.total : null),
+        sortDescFirst: true,
+        cell: ({ row }) => {
+          const az = row.original.azqato
+          return az?.total ? `${az.passes}/${az.total}` : DASH
         },
         meta: { align: 'right' } satisfies ColMeta,
       },
+      azMetricLeaf('revTTM', 'Rev TTM', (az) => pct(az.revTTM)),
+      azMetricLeaf('revFwd', 'Rev FWD', (az) => pct(az.revFwd)),
+      azMetricLeaf('epsTTM', 'EPS TTM', (az) => pct(az.epsTTM)),
+      azMetricLeaf('epsFwd', 'EPS FWD', (az) => pct(az.epsFwd)),
+      // Sorting: a negative P/E or PEG is "worst" (unprofitable) — sort it like
+      // a very high value rather than a cheap low one (screener.js sortRows).
+      azMetricLeaf('peVsG', 'P/E FWD', (az) => num(az.peFwd), { scored: false, sortOn: (az) => worstIfNonPositive(az.peFwd) }),
+      azMetricLeaf('pegFwd', 'PEG FWD', (az) => num(azPegDisplay(az)), { sortOn: (az) => worstIfNonPositive(azPegDisplay(az)) }),
+      {
+        id: 'azqato_cash',
+        header: 'Cash',
+        size: 88,
+        accessorFn: (r) => r.azqato?.cash,
+        cell: ({ getValue }) => compactUsd(getValue()),
+        meta: { align: 'right' } satisfies ColMeta,
+      },
+      {
+        id: 'azqato_debt',
+        header: 'Debt',
+        size: 88,
+        accessorFn: (r) => r.azqato?.debt,
+        cell: ({ getValue }) => compactUsd(getValue()),
+        meta: { align: 'right' } satisfies ColMeta,
+      },
+      azMetricLeaf('cashDebt', 'Cash/Debt', (az) => ratio(azCashDebt(az)), { sortOn: azCashDebt }),
       {
         id: 'azqato_rsi',
         header: 'RSI(14)',
@@ -196,9 +265,7 @@ export const columns: ColumnDef<Row>[] = [
 ]
 
 function leaves(cols: ColumnDef<Row>[]): ColumnDef<Row>[] {
-  return cols.flatMap((c) =>
-    (c as { columns?: ColumnDef<Row>[] }).columns ? leaves((c as { columns: ColumnDef<Row>[] }).columns) : [c],
-  )
+  return cols.flatMap((c) => ((c as { columns?: ColumnDef<Row>[] }).columns ? leaves((c as { columns: ColumnDef<Row>[] }).columns) : [c]))
 }
 
 function colId(c: ColumnDef<Row>): string {

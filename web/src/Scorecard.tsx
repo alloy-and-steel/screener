@@ -1,6 +1,6 @@
 import type { Row, Azqato } from './types'
 import { Dot, Meter, RangeBar, RsiGauge, TONE, num, VerdictPill } from './format'
-import { combinedVerdict, NA_LABEL, verdictLines, verdicts, type Driver, type Verdict } from './score'
+import { combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
   return (
@@ -25,18 +25,16 @@ function AzqatoViz({ az }: { az: Azqato }) {
         <div className="mb-1 text-[11px] text-slate-500">52-week position</div>
         <RangeBar pct={az.pos_52w_pct} />
       </div>
-      {az.basis === 'forward' ? (
-        <div className="text-[10px] leading-tight text-slate-500">
-          Revenue / EPS growth, P&#8209;E and PEG bands use forward analyst-consensus estimates.
-        </div>
-      ) : null}
+      <div className="text-[10px] leading-tight text-slate-500">
+        Each metric is ranked against every screened name (green = top of the pack, red = bottom; a missing metric scores zero). RSI and
+        52-week position are entry-timing context, not scored.
+      </div>
     </div>
   )
 }
 
 function Card({ v, row }: { v: Verdict; row: Row }) {
   const lines = verdictLines(v.system, row)
-  const single = lines.length === 1 ? lines[0] : null
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-edge bg-surface-2 p-4">
       <div>
@@ -44,34 +42,19 @@ function Card({ v, row }: { v: Verdict; row: Row }) {
         <div className="text-xs text-slate-500">{v.question}</div>
       </div>
 
-      {/* Verdict(s) — Azqato is a single binary gate; Lynch & Graham each have two */}
+      {/* Verdict(s) — Azqato is a single rank tier; Lynch & Graham each have two */}
       <div className="min-h-[44px]">
-        {single && single.kind === 'binary' ? (
-          single.label === NA_LABEL ? (
-            <span className="text-slate-500">No data</span>
-          ) : (
-            <div
-              className={`inline-flex h-11 items-center gap-2 rounded-lg px-4 ring-1 ring-inset ${TONE[single.tone].bg} ${TONE[single.tone].ring}`}
-            >
-              <span className={`text-xl leading-none ${TONE[single.tone].text}`} aria-hidden>
-                {single.tone === 'green' ? '✓' : '✕'}
+        <div className="space-y-2.5">
+          {lines.map((line) => (
+            <div key={line.name} className="flex items-center justify-between gap-3">
+              <span className="text-[11px] uppercase tracking-[0.06em] text-slate-500">{line.name}</span>
+              <span className="flex items-center gap-2">
+                <Meter level={line.level} tone={line.tone} fillClass={line.colors?.fill} />
+                <span className={`w-24 text-right text-sm font-semibold ${line.colors?.text ?? TONE[line.tone].text}`}>{line.label}</span>
               </span>
-              <span className={`text-lg font-bold uppercase ${TONE[single.tone].text}`}>{single.label}</span>
             </div>
-          )
-        ) : (
-          <div className="space-y-2.5">
-            {lines.map((line) => (
-              <div key={line.name} className="flex items-center justify-between gap-3">
-                <span className="text-[11px] uppercase tracking-[0.06em] text-slate-500">{line.name}</span>
-                <span className="flex items-center gap-2">
-                  <Meter level={line.level} tone={line.tone} />
-                  <span className={`w-24 text-right text-sm font-semibold ${TONE[line.tone].text}`}>{line.label}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
       </div>
 
       <div className="text-sm text-slate-300">{v.tagline}</div>
@@ -143,8 +126,8 @@ export default function Scorecard({ row, onBack }: { row: Row; onBack: () => voi
               <span className="inline-flex items-center gap-1">
                 <VerdictPill tone="green">Pass</VerdictPill>
               </span>
-              Three independent systems. They often disagree — that disagreement is the signal. The
-              screener's default list shows only names that clear all three.
+              Three independent systems. They often disagree — that disagreement is the signal. The screener's default list shows only names
+              that clear all three.
             </p>
           </>
         )}

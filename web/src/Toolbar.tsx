@@ -25,15 +25,7 @@ interface ToolbarProps {
   generatedAt?: string
 }
 
-function Seg({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
+function Seg({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -48,13 +40,7 @@ function Seg({
   )
 }
 
-function ColumnsMenu({
-  visibility,
-  onVisibility,
-}: {
-  visibility: VisibilityState
-  onVisibility: (v: VisibilityState) => void
-}) {
+function ColumnsMenu({ visibility, onVisibility }: { visibility: VisibilityState; onVisibility: (v: VisibilityState) => void }) {
   const [open, setOpen] = useState(false)
   const isVisible = (id: string) => visibility[id] !== false
   const shown = pickerGroups.reduce((n, g) => n + g.items.filter((i) => isVisible(i.id)).length, 0)
@@ -93,20 +79,13 @@ function ColumnsMenu({
             <div className="max-h-[60vh] overflow-auto pr-1">
               {pickerGroups.map((g) => (
                 <div key={g.group} className="mb-1">
-                  <div className="px-1 pb-0.5 pt-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                    {g.group}
-                  </div>
+                  <div className="px-1 pb-0.5 pt-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500">{g.group}</div>
                   {g.items.map((it) => (
                     <label
                       key={it.id}
                       className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-[13px] text-slate-300 hover:bg-surface-3"
                     >
-                      <input
-                        type="checkbox"
-                        checked={isVisible(it.id)}
-                        onChange={() => toggle(it.id)}
-                        className="accent-sky-500"
-                      />
+                      <input type="checkbox" checked={isVisible(it.id)} onChange={() => toggle(it.id)} className="accent-sky-500" />
                       {it.header}
                     </label>
                   ))}
@@ -149,68 +128,68 @@ export default function Toolbar(props: ToolbarProps) {
 
   return (
     <>
-    <header className="border-b border-hairline bg-surface-2">
-      {/* Title row */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-2.5">
-        <span className="flex items-center gap-2">
-          <Logo className="h-5 w-5 text-emerald-400" />
-          <span className="text-[16px] font-bold tracking-tight text-slate-100">Screener3000</span>
-        </span>
-        <button
-          type="button"
-          onClick={() => setInfoOpen(true)}
-          title="How the three screens work"
-          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 ring-1 ring-inset ring-hairline hover:text-slate-100"
-        >
-          ⓘ Methodology
-        </button>
-        <div className="flex items-center gap-3 text-[11px] text-slate-400">
-          <span className="inline-flex items-center gap-1.5" title="Growth + technical entry screen (binary pass/fail)">
-            <Dot tone="green" /> Azqato
+      <header className="border-b border-hairline bg-surface-2">
+        {/* Title row */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-2.5">
+          <span className="flex items-center gap-2">
+            <Logo className="h-5 w-5 text-emerald-400" />
+            <span className="text-[16px] font-bold tracking-tight text-slate-100">Screener3000</span>
           </span>
-          <span className="inline-flex items-center gap-1.5" title="Growth at a reasonable price (Buy / Hold / Avoid)">
-            <Dot tone="green" /> Lynch
-          </span>
-          <span className="inline-flex items-center gap-1.5" title="Intrinsic value + balance-sheet safety">
-            <Dot tone="green" /> Graham
-          </span>
-        </div>
-        <span className={`text-[11px] ${stale ? 'text-amber-300' : 'text-slate-500'}`}>
-          {label}
-          {stale ? ' · stale' : ''}
-        </span>
-        <input
-          type="search"
-          value={props.query}
-          onChange={(e) => props.onQuery(e.target.value)}
-          placeholder="Look up a symbol…"
-          aria-label="Symbol lookup"
-          autoComplete="off"
-          spellCheck={false}
-          className="ml-auto h-8 w-56 rounded-md border border-edge bg-surface-1 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
-        />
-      </div>
-
-      {/* Framing row */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-hairline px-5 py-2">
-        <span className="text-[13px] text-slate-300">{sentence(props.minPass, props.shown)}</span>
-
-        <div className="ml-auto flex items-center gap-3">
-          <div className="flex items-center gap-1 rounded-lg bg-surface-1 p-1 ring-1 ring-inset ring-hairline">
-            <span className="px-1 text-[10px] uppercase tracking-wide text-slate-500">Pass</span>
-            {RELAX.map((r) => (
-              <Seg key={r.level} active={props.minPass === r.level} onClick={() => props.onMinPass(r.level)}>
-                {r.label}
-                <span className="ml-1 text-[10px] text-slate-500">{props.counts[r.level as keyof PassCounts]}</span>
-              </Seg>
-            ))}
+          <button
+            type="button"
+            onClick={() => setInfoOpen(true)}
+            title="How the three screens work"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 ring-1 ring-inset ring-hairline hover:text-slate-100"
+          >
+            ⓘ Methodology
+          </button>
+          <div className="flex items-center gap-3 text-[11px] text-slate-400">
+            <span className="inline-flex items-center gap-1.5" title="Relative growth score — tier A or better passes">
+              <Dot tone="green" /> Azqato
+            </span>
+            <span className="inline-flex items-center gap-1.5" title="Growth at a reasonable price (Buy / Hold / Avoid)">
+              <Dot tone="green" /> Lynch
+            </span>
+            <span className="inline-flex items-center gap-1.5" title="Intrinsic value + balance-sheet safety">
+              <Dot tone="green" /> Graham
+            </span>
           </div>
-
-          <ColumnsMenu visibility={props.visibility} onVisibility={props.onVisibility} />
+          <span className={`text-[11px] ${stale ? 'text-amber-300' : 'text-slate-500'}`}>
+            {label}
+            {stale ? ' · stale' : ''}
+          </span>
+          <input
+            type="search"
+            value={props.query}
+            onChange={(e) => props.onQuery(e.target.value)}
+            placeholder="Look up a symbol…"
+            aria-label="Symbol lookup"
+            autoComplete="off"
+            spellCheck={false}
+            className="ml-auto h-8 w-56 rounded-md border border-edge bg-surface-1 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
+          />
         </div>
-      </div>
-    </header>
-    {infoOpen ? <MethodologyDialog onClose={() => setInfoOpen(false)} /> : null}
+
+        {/* Framing row */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-hairline px-5 py-2">
+          <span className="text-[13px] text-slate-300">{sentence(props.minPass, props.shown)}</span>
+
+          <div className="ml-auto flex items-center gap-3">
+            <div className="flex items-center gap-1 rounded-lg bg-surface-1 p-1 ring-1 ring-inset ring-hairline">
+              <span className="px-1 text-[10px] uppercase tracking-wide text-slate-500">Pass</span>
+              {RELAX.map((r) => (
+                <Seg key={r.level} active={props.minPass === r.level} onClick={() => props.onMinPass(r.level)}>
+                  {r.label}
+                  <span className="ml-1 text-[10px] text-slate-500">{props.counts[r.level as keyof PassCounts]}</span>
+                </Seg>
+              ))}
+            </div>
+
+            <ColumnsMenu visibility={props.visibility} onVisibility={props.onVisibility} />
+          </div>
+        </div>
+      </header>
+      {infoOpen ? <MethodologyDialog onClose={() => setInfoOpen(false)} /> : null}
     </>
   )
 }
