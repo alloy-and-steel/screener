@@ -52,3 +52,14 @@ jobs:
           FRED_API_KEY: ci-placeholder
           FINNHUB_API_KEY: ci-placeholder
         run: python -c "import azqato, monitor, stock_screener"
+
+      - name: Run offline regression tests
+        # tests/test_*.py are pure/offline (no network, no live API keys) --
+        # each sets its own placeholder env vars.
+        run: |
+          set -e
+          for f in tests/test_*.py; do
+            echo "::group::$f"
+            python "$f"
+            echo "::endgroup::"
+          done

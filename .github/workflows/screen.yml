@@ -39,31 +39,84 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Run screener (writes web/public/data/results.json)
+      - name: Run offline regression tests
+        # Fail fast on a broken scoring function before spending the Finnhub
+        # rate-limit budget (~515 calls/run) on a live run that would abort anyway.
+        run: |
+          set -e
+          for f in tests/test_*.py; do
+            python "$f"
+          done
+
+      - name: Check if first weekday of month
+        id: check-date
+        run: |
+          python -c "
+          from datetime import date
+          import stock_screener as s
+          print('is_first_weekday=' + str(s._is_first_weekday_of_month(date.today())).lower())
+          " >> "$GITHUB_OUTPUT"
+
+      - name: Run screener (writes web/public/data/results.json + stats.json)
         env:
           FRED_API_KEY:    ${{ secrets.FRED_API_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: python stock_screener.py
 
-      - name: Publish results.json to the data branch
+      - name: Publish results.json + stats.json (+ monthly snapshot) to the data branch
         env:
           GH_TOKEN: ${{ github.token }}
+          IS_FIRST_WEEKDAY: ${{ steps.check-date.outputs.is_first_weekday }}
         run: |
           set -euo pipefail
           # The screener's own publish guard already aborted on a degraded run;
           # this is a last non-empty check before the data leaves the runner.
           test -s web/public/data/results.json
+          test -s web/public/data/stats.json
           ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          today="$(date -u +%Y-%m-%d)"
           work="${RUNNER_TEMP}/data-branch"
           mkdir -p "${work}/web/public/data"
+
+          # The data branch is force-pushed as a single flat commit each run (see
+          # header comment: results.json must never accumulate history on a
+          # tracked branch). Snapshots therefore can't rely on branch history --
+          # pull forward any snapshot files already on origin/data first (via a
+          # shallow clone; GitHub does not support `git archive --remote`), so a
+          # monthly snapshot taken on a prior run survives this run's force-push.
+          if git ls-remote --exit-code --heads origin data >/dev/null 2>&1; then
+            prev="${RUNNER_TEMP}/data-branch-prev"
+            git clone -q --depth 1 --branch data --single-branch \
+              "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${prev}"
+            if [ -d "${prev}/web/public/data/snapshots" ]; then
+              mkdir -p "${work}/web/public/data/snapshots"
+              cp -r "${prev}/web/public/data/snapshots/." "${work}/web/public/data/snapshots/"
+            fi
+          fi
+
           cp web/public/data/results.json "${work}/web/public/data/results.json"
+          cp web/public/data/stats.json "${work}/web/public/data/stats.json"
+
+          if [ "${IS_FIRST_WEEKDAY}" = "true" ]; then
+            mkdir -p "${work}/web/public/data/snapshots"
+            cp web/public/data/results.json "${work}/web/public/data/snapshots/${today}.json"
+            python -c "
+          from pathlib import Path
+          import stock_screener as s
+          s.SNAPSHOTS_DIR = Path('${work}/web/public/data/snapshots')
+          s.SNAPSHOTS_INDEX = s.SNAPSHOTS_DIR / 'index.json'
+          s.update_snapshot_manifest('${today}.json')
+          "
+          fi
+
           cd "${work}"
           git init -q
           git checkout -q -b data
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web/public/data/results.json
+          git add web/public/data
           git commit -qm "data: screener results ${ts}"
-          # Force-push a fresh single commit: the data branch is latest-only.
+          # Force-push a fresh single commit: the data branch is latest-only
+          # (except for snapshot files, restored above before this commit).
           git push -fq "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
-          echo "Pushed results.json to the data branch (${ts})."
+          echo "Pushed results.json + stats.json to the data branch (${ts})."
