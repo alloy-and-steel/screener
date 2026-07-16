@@ -69,8 +69,49 @@ export interface Row {
   Indexes_?: never
   azqato?: Azqato
 
+  // ── OverallScore (ported v2.0 methodology) — informational 4-pillar
+  // composite. Does NOT participate in the Azqato/Lynch/Graham pass gate
+  // (score.ts's verdicts()/combinedVerdict()/passesAll() are unchanged).
+  OverallScore?: number | null
+  Sector?: string | null
+  Trap_Reasons?: string | null
+  Piotroski_F?: number | null
+  Altman_Z?: number | null
+  DCF_Intrinsic_Value?: number | null
+  DCF_Value_Low?: number | null
+  DCF_Value_High?: number | null
+  DCF_Discount_Pct?: number | null
+  DCF_Implied_Growth?: number | null
+  DCF_WACC_Pct?: number | null
+  DCF_Method?: string | null
+  DCF_Data_Warning?: string | null
+  DCF_Cyclical_Flag?: boolean | null
+  FCF_Yield_Pct?: number | null
+  EV_EBIT?: number | null
+  Earnings_Yield_Pct?: number | null
+  ROIC_Pct?: number | null
+  Shareholder_Yield_Pct?: number | null
+  scores?: Scores
+
   // Tolerate the full set of emitted columns without enumerating every one.
   [key: string]: unknown
+}
+
+export interface Scores {
+  overall: number | null
+  value: number | null
+  value_discount: number | null
+  value_yield: number | null
+  value_price: number | null
+  value_dcf?: number | null
+  quality: number | null
+  growth: number | null
+  safety: number | null
+  coverage_pct: number
+  trap: boolean
+  piotroski: number | null
+  altman: number | null
+  dcf_discount: number | null
 }
 
 export interface Dataset {

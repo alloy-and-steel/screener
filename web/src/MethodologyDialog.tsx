@@ -78,6 +78,18 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
             10-year EPS criteria need a full decade of statements, which the free data source rarely supplies, so few names clear them.
           </Block>
 
+          <Block title="Overall — informational 4-pillar composite">
+            A separate, absolute 0&ndash;100 score shown alongside the three systems above &mdash; it does{' '}
+            <strong className="text-slate-100">not</strong> count toward the <em>Pass</em> filter or the N/3 chip.{' '}
+            <strong className="text-slate-100">Value 35%</strong> (Lynch/Graham discount, FCF/earnings/shareholder yield, distance from the
+            52-week and 5-year low, DCF discount), <strong className="text-slate-100">Quality 30%</strong> (Graham defensive score,
+            debt/equity, current ratio, ROIC), <strong className="text-slate-100">Growth 20%</strong> (growth rate and its stability across
+            available years), <strong className="text-slate-100">Safety 15%</strong> (Piotroski F-Score, Altman Z&Prime;, plus the Quality
+            leverage/liquidity signals). Discount thresholds scale with the live AAA yield &mdash; the same discount is less impressive when
+            rates are high. Financial-sector names skip the Altman/DCF/earnings-yield legs (those formulas don&rsquo;t apply to bank balance
+            sheets); a missing pillar is simply excluded from the average rather than penalized.
+          </Block>
+
           <Block title="Reading the screen">
             Each row&rsquo;s left rail and the <strong className="text-slate-100">N/3</strong> chip show how many systems a stock clears.
             Click any row (or search a ticker) for the full scorecard &mdash; every verdict, its drivers, an RSI gauge, and a 52-week-range

@@ -241,6 +241,32 @@ export const columns: ColumnDef<Row>[] = [
   },
 
   {
+    id: 'g_overall',
+    header: 'Overall',
+    columns: [
+      numLeaf('OverallScore', 'Score', 1, true, 76),
+      numLeaf('scores.value', 'Value', 1),
+      numLeaf('scores.quality', 'Quality', 1),
+      numLeaf('scores.growth', 'Growth', 1),
+      numLeaf('scores.safety', 'Safety', 1),
+      textLeaf('Sector', 'Sector'),
+      {
+        accessorKey: 'Piotroski_F',
+        header: 'Piotroski',
+        size: 84,
+        cell: ({ getValue }) => {
+          const v = getValue()
+          return typeof v === 'number' ? `${v}/9` : DASH
+        },
+        meta: { align: 'right' } satisfies ColMeta,
+      },
+      numLeaf('Altman_Z', 'Altman Z', 2),
+      pctLeaf('DCF_Discount_Pct', 'DCF disc.'),
+      textLeaf('Trap_Reasons', 'Trap flags', 160),
+    ],
+  },
+
+  {
     id: 'g_snapshot',
     header: 'Snapshot',
     columns: [

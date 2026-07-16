@@ -1,5 +1,5 @@
 import type { Row, Azqato } from './types'
-import { Dot, Meter, RangeBar, RsiGauge, TONE, num, VerdictPill } from './format'
+import { DASH, Dot, Meter, RangeBar, RsiGauge, TONE, num, pct, VerdictPill } from './format'
 import { combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
@@ -70,6 +70,48 @@ function Card({ v, row }: { v: Verdict; row: Row }) {
   )
 }
 
+// Informational 4-pillar composite (ported v2.0 methodology) — NOT part of the
+// Azqato/Lynch/Graham pass gate above. Shown as separate context, not a 4th verdict.
+function OverallPanel({ row }: { row: Row }) {
+  const scores = row.scores
+  if (row.OverallScore == null && !scores) return null
+  const pillars: { label: string; value: number | null | undefined }[] = [
+    { label: 'Value', value: scores?.value },
+    { label: 'Quality', value: scores?.quality },
+    { label: 'Growth', value: scores?.growth },
+    { label: 'Safety', value: scores?.safety },
+  ]
+  return (
+    <div className="mt-3 rounded-xl border border-edge bg-surface-2 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Overall</div>
+          <div className="text-xs text-slate-500">Informational 4-pillar composite — not part of the pass gate above</div>
+        </div>
+        <span className="tnum text-lg font-bold text-slate-100">{num(row.OverallScore, 0)}/100</span>
+      </div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+        {pillars.map((p) => (
+          <div key={p.label} className="flex items-center justify-between gap-2">
+            <span className="text-[11px] uppercase tracking-[0.06em] text-slate-500">{p.label}</span>
+            <span className="tnum text-sm font-medium text-slate-200">{num(p.value, 0)}</span>
+          </div>
+        ))}
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-hairline pt-3 text-sm sm:grid-cols-3">
+        <DriverRow d={{ label: 'Sector', value: row.Sector ?? DASH }} />
+        <DriverRow d={{ label: 'Piotroski F', value: typeof row.Piotroski_F === 'number' ? `${row.Piotroski_F}/9` : DASH }} />
+        <DriverRow d={{ label: 'Altman Z', value: num(row.Altman_Z) }} />
+        <DriverRow d={{ label: 'DCF discount', value: pct(row.DCF_Discount_Pct) }} />
+        <DriverRow d={{ label: 'DCF implied growth', value: pct(row.DCF_Implied_Growth) }} />
+        <DriverRow d={{ label: 'DCF method', value: row.DCF_Method ?? DASH }} />
+      </dl>
+      {row.Trap_Reasons ? <p className="mt-2 text-xs text-amber-300/80">Research flags: {row.Trap_Reasons}</p> : null}
+      {row.DCF_Data_Warning ? <p className="mt-1 text-xs text-slate-500">DCF note: {row.DCF_Data_Warning}</p> : null}
+    </div>
+  )
+}
+
 export default function Scorecard({ row, onBack }: { row: Row; onBack: () => void }) {
   const c = combinedVerdict(row)
   const ct = TONE[c.tone]
@@ -122,6 +164,7 @@ export default function Scorecard({ row, onBack }: { row: Row; onBack: () => voi
                 <Card key={v.system} v={v} row={row} />
               ))}
             </div>
+            <OverallPanel row={row} />
             <p className="mt-4 flex items-center gap-2 text-xs text-slate-500">
               <span className="inline-flex items-center gap-1">
                 <VerdictPill tone="green">Pass</VerdictPill>
