@@ -2,10 +2,24 @@
 
 ## What this is
 
-A three-system stock screener over the S&P 500, Dow 30, and Nasdaq-100. A Python
-job fetches fundamentals and scores every name through **three independent
-screens**; a static React SPA renders the results. Deployed to GitHub Pages on a
-weekday schedule — a public, shareable URL, no account required.
+A three-system stock screener over the S&P 500, Dow 30, and Nasdaq-100, plus a
+4th **informational** composite score. A Python job fetches fundamentals and
+scores every name through **three independent screens** (the pass/fail gate);
+a static React SPA renders the results. Deployed to GitHub Pages on a weekday
+schedule — a public, shareable URL, no account required.
+
+This repo is a fork of `VoxMachina1/graham-screener` (`git remote -v` /
+`GET /repos/alloy-and-steel/screener` shows `parent`). Upstream diverged into
+its own "v2.0 Methodology Expansion" (a 4-pillar `OverallScore` engine, sector
++ cheap-factor data, Piotroski/Altman distress signals, a screen-grade
+FCFF/WACC DCF, `stats.json`, monthly snapshots) with a different frontend
+(vanilla `docs/` dashboard + a GSD `.planning/` tree) and CI/branch model. That
+scoring/data logic was hand-ported into this fork (not a `git merge` — the two
+trees only share 6 file paths and the frontends are incompatible by design;
+this fork kept its own Vite/React `web/`, `azqato.py`, and decoupled
+`data`-branch CI). Upstream's `OverallScore` was wired in as an **additional,
+non-gating** layer to preserve this fork's "three independent systems,
+disagreement is the signal" design — see the `Overall` bullet below.
 
 The three screens (decoupled on purpose — disagreement is the signal):
 
@@ -27,32 +41,68 @@ The default grid shows only names that clear **all three**; relax the filter to
 see 2/1/any. Each name also has a full scorecard (per-system verdicts + drivers,
 RSI gauge, 52-week-range bar).
 
+**Overall (informational, not gated)** — a 4th, absolute 0-100 composite
+(`overall_score()` in `stock_screener.py`), ported from upstream's v2.0
+methodology expansion. Does NOT feed `combinedVerdict`/`passesAll`
+(`web/src/score.ts` is unchanged) — shown as a separate `Overall` column group
+and a Scorecard panel only. Four renormalized-over-present pillars:
+**Value 35%** (Lynch/Graham discount + FCF/earnings/shareholder yield +
+distance from 52w/5y low + DCF discount), **Quality 30%** (Graham
+DefensiveScore, debt/equity, current ratio, ROIC), **Growth 20%** (growth
+level + stability), **Safety 15%** (Piotroski F-Score, Altman Z'', reused
+Quality leverage/liquidity signals). Discount bands are rate-relativized by
+the live AAA yield. A present-but-terrible input (the `WORST_DISCOUNT`
+sentinel, negative D/E, non-positive growth, negative DCF discount) scores 0;
+a genuinely-absent input is skipped (averaged over what's present); Piotroski/
+Altman absent -> neutral 50.0 each (not skipped) so sector-excluded names
+don't inherit an inflated Safety from the rest. Sector-gated: Financial
+Services/Real Estate skip DCF, Financial Services also skips Altman/EV-EBIT/
+earnings-yield (`_sector_allows`). All `SCORE_*`/`PILLAR_WEIGHTS`/`DCF_*`
+band constants are `[ASSUMED]` first-pass estimates — monitor `stats.json`'s
+`score_distribution`/`pillar_averages` before tuning them.
+
 ## Stack
 
-- **Backend:** Python 3.14. `stock_screener.py` (pipeline), `azqato.py` (pure
-  scoring, unit-testable), `monitor.py` (falsifier checks). Deps in
-  `requirements.txt` (requests, pandas, fredapi, python-dotenv, lxml, yfinance).
+- **Backend:** Python 3.14. `stock_screener.py` (pipeline + OverallScore
+  engine), `azqato.py` (pure scoring, unit-testable), `monitor.py` (falsifier
+  checks). Deps in `requirements.txt` (requests, pandas, fredapi,
+  python-dotenv, lxml, yfinance, scipy — scipy is only for
+  `_compute_fcff_reverse_dcf`'s `brentq` root-finder).
 - **Frontend:** Vite 6 + React 19 + TypeScript 5.7 + Tailwind v4
   (`@tailwindcss/vite`, `@theme` tokens) + TanStack Table v8 / Virtual v3, under
   `web/`. Package manager **pnpm 11**.
-- **Data sources:** yfinance (price, EPS history, dividends, and ALL azqato
-  model inputs — matching azqato's own feed generator field for field: `info`
+- **Data sources:** yfinance (price, EPS history, dividends, ALL azqato model
+  inputs — matching azqato's own feed generator field for field: `info`
   revenueGrowth/earningsGrowth/totalCash/totalDebt/priceEpsCurrentYear/pegRatio,
-  current-fiscal-year "0y" analyst estimates), Finnhub (`/stock/metric`: EPS,
-  5Y growth, balance-sheet ratios, market cap), FRED (Moody's AAA yield, for
-  Graham's rate adjustment), Wikipedia (universe).
+  current-fiscal-year "0y" analyst estimates — plus, for the Overall engine:
+  sector/beta/currency from `.info`, 5y weekly history for price-distance
+  signals, and raw cashflow/income/balance-sheet statements for the Phase 6
+  factors + Piotroski/Altman/DCF), Finnhub (`/stock/metric`: EPS, 5Y growth
+  — a WHOLE-NUMBER percent, e.g. 11.79 == 11.79%, verified against the live
+  API; do NOT rescale by 100, that was upstream's bug — balance-sheet ratios,
+  market cap), FRED (Moody's AAA yield for Graham's rate adjustment + 10-year
+  Treasury `DGS10` for the DCF's cost of equity), Wikipedia (universe).
 - **Hosting:** GitHub Pages via GitHub Actions. Screen and deploy are SEPARATE:
   `screen.yml` (cron -> fresh data on the `data` branch) and `deploy.yml`
-  (fetch that data -> build -> publish). CI gates: `ci-python.yml`, `ci-frontend.yml`.
+  (fetch that data -> build -> publish). CI gates: `ci-python.yml` (compile +
+  import smoke + `tests/test_*.py`), `ci-frontend.yml`.
 
 ## Data flow (and the one decision that matters)
 
 Screen and publish are SEPARATE workflows, decoupled through a dedicated
 `data` branch:
 
-- **`screen.yml`** (cron + manual): run the screener -> `web/public/data/results.json`
-  -> force-push that one file to the orphan **`data` branch** (single flat commit,
-  latest-only). On success it triggers `deploy.yml` via `workflow_run`.
+- **`screen.yml`** (cron + manual): offline `tests/test_*.py` pre-flight ->
+  run the screener -> `web/public/data/results.json` + `stats.json` (universe
+  aggregate stats: score distribution, sector breakdown, coverage — for future
+  monitoring, no dedicated UI page yet) -> force-push those files to the
+  orphan **`data` branch** (single flat commit, latest-only). On the first
+  weekday of the month, also copies `results.json` into
+  `web/public/data/snapshots/{date}.json` and updates its `index.json`
+  manifest -- BEFORE force-pushing, prior snapshot files are pulled forward
+  from `origin/data` (a shallow clone; GitHub doesn't support
+  `git archive --remote`) so they survive each run's flat-commit reset. On
+  success it triggers `deploy.yml` via `workflow_run`.
 - **`deploy.yml`** (a `web/**` push, a successful Screen, or manual): fetch
   `results.json` from `origin/data` -> `pnpm build` -> upload `web/dist` as a Pages
   artifact -> `deploy-pages`.
@@ -80,11 +130,24 @@ already-prefixed dict. The frontend reads those exact keys (`web/src/score.ts`,
 
 ## Layout
 
-- `stock_screener.py` — universe -> fetch -> score -> `write_json`. Entry point.
+- `stock_screener.py` — universe -> fetch -> score -> `write_json`. Entry
+  point. Also holds the `overall_score()` engine + its `SCORE_*`/`PILLAR_
+  WEIGHTS`/`DCF_*` constants, the Phase 6 factor helpers (`_compute_fcf_
+  yield`, `_compute_ev_ebit`, `_compute_roic`, `_compute_shareholder_yield`,
+  `_compute_price_signals`), the Phase 7 distress/DCF helpers (`_compute_
+  piotroski`, `_compute_altman_z`, the `_compute_fcff_*`/`_estimate_screen_
+  wacc` FCFF/WACC stack), and `_validate_output_dataframe`/`_compute_stats`.
 - `azqato.py` — `wilder_rsi`, `pct_of_52w_range`, `azqato_profile` (pure).
 - `monitor.py` — falsifier / drift checks.
-- `web/src/` — SPA. `score.ts` (verdicts), `columns.tsx` (grid), `DataTable.tsx`,
-  `Scorecard.tsx`, `format.tsx`, `Toolbar.tsx`, `MethodologyDialog.tsx`, `App.tsx`.
+- `tests/test_*.py` — offline regression suite (vanilla `assert`, no pytest,
+  no network) covering the OverallScore engine, Phase 6 factors, Piotroski/
+  Altman, the FCFF DCF stack, the output-validation guard, and the KO
+  Lynch/Graham formula fixture. Run individually (`python tests/test_X.py`)
+  or via the CI/pre-flight loop (`for f in tests/test_*.py; do python "$f"; done`).
+- `web/src/` — SPA. `score.ts` (verdicts — Azqato/Lynch/Graham gate only,
+  Overall is deliberately NOT here), `columns.tsx` (grid, incl. `g_overall`),
+  `DataTable.tsx`, `Scorecard.tsx` (incl. `OverallPanel`), `format.tsx`,
+  `Toolbar.tsx`, `MethodologyDialog.tsx`, `App.tsx`.
 - `.github/workflows/screen.yml` — cron + manual: run screener -> push results.json
   to the `data` branch -> trigger deploy.
 - `.github/workflows/deploy.yml` — `web/**` push / Screen done / manual: fetch data
@@ -99,7 +162,11 @@ already-prefixed dict. The frontend reads those exact keys (`web/src/score.ts`,
   `pip install -r requirements.txt && python stock_screener.py`. (Inside the `pie`
   superproject you can also run it with an ephemeral `uv run --no-project --with
   requests --with pandas --with fredapi --with python-dotenv --with lxml --with
-  yfinance python stock_screener.py`.) It writes `web/public/data/results.json`.
+  yfinance --with scipy python stock_screener.py`.) It writes
+  `web/public/data/results.json` and `web/public/data/stats.json`.
+- **Tests:** `for f in tests/test_*.py; do python "$f"; done` (or the ephemeral
+  `uv run` form above, per file) — offline, no API keys needed beyond the
+  dummy values each test file sets itself.
 - **Frontend:** `pnpm -C web install` then `pnpm -C web dev` ->
   `http://localhost:7273/screener/`. Port 7273 is fixed (`strictPort`); the
   `/screener/` base path matches the GitHub Pages repo name.
@@ -134,6 +201,11 @@ After that: the weekday cron (`0 11 * * 1-5`) refreshes data and auto-deploys (v
 - **Publish guard.** `write_json` aborts (exit 1) unless there are >= 100
   non-error rows **and** >= 100 rows carrying a real valuation — so a fetch outage
   or a growth-feed outage can't silently publish a degraded `results.json`.
+  `_validate_output_dataframe` (also called from `write_json`, also aborting)
+  adds richer checks on top: required columns present, no blank/duplicate
+  tickers, >= 60% of rows valid-and-scored, >= 60% with live Finnhub data,
+  >= 100 rows with a complete FCFF DCF whose value range/WACC/terminal-value
+  share are internally consistent.
 
 ## Gotchas
 
