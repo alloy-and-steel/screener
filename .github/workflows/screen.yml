@@ -50,6 +50,9 @@ jobs:
 
       - name: Check if first weekday of month
         id: check-date
+        env:
+          FRED_API_KEY:    ${{ secrets.FRED_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: |
           python -c "
           from datetime import date
