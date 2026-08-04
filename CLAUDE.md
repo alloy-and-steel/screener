@@ -21,6 +21,16 @@ this fork kept its own Vite/React `web/`, `azqato.py`, and decoupled
 non-gating** layer to preserve this fork's "three independent systems,
 disagreement is the signal" design — see the `Overall` bullet below.
 
+Synced with upstream through `a8cf842` (2026-07-16). Everything upstream has
+published since is `chore: update screener results` data commits (upstream
+commits its dataset to `master`; this fork keeps it on `data` by design).
+`a8cf842` itself and `d36a503` are vanilla-`docs/`-dashboard changes with no
+React analogue. Deliberately NOT ported: upstream's legacy discounted-earnings
+diagnostic (`_compute_discounted_earnings_*`) — upstream itself marks it "not
+an FCFF/FCFE DCF, does not feed the DCF value sub-score"; this fork already
+carries the real FCFF/WACC DCF and keeps a leaner output. To re-check for
+drift: `git fetch upstream && git log upstream/master --oneline -- . ':(exclude)docs/data'`.
+
 The three screens (decoupled on purpose — disagreement is the signal):
 
 - **Azqato** — pure, no-AI RELATIVE percentile model (`azqato.py`), a port of
@@ -93,6 +103,9 @@ Screen and publish are SEPARATE workflows, decoupled through a dedicated
 `data` branch:
 
 - **`screen.yml`** (cron + manual): offline `tests/test_*.py` pre-flight ->
+  shallow-clone `origin/data` and seed the previous `results.json` (so
+  `get_universe`'s constituent fallback has a last-known roster; the file is
+  gitignored on `master`, so without the seed the fallback is a no-op) ->
   run the screener -> `web/public/data/results.json` + `stats.json` (universe
   aggregate stats: score distribution, sector breakdown, coverage — for future
   monitoring, no dedicated UI page yet) -> force-push those files to the
@@ -100,9 +113,11 @@ Screen and publish are SEPARATE workflows, decoupled through a dedicated
   weekday of the month, also copies `results.json` into
   `web/public/data/snapshots/{date}.json` and updates its `index.json`
   manifest -- BEFORE force-pushing, prior snapshot files are pulled forward
-  from `origin/data` (a shallow clone; GitHub doesn't support
-  `git archive --remote`) so they survive each run's flat-commit reset. On
-  success it triggers `deploy.yml` via `workflow_run`.
+  from that same `origin/data` clone (GitHub doesn't support
+  `git archive --remote`) so they survive each run's flat-commit reset. The
+  publish step also refuses to push if `generated_at` still matches the seeded
+  copy -- proof the run produced fresh data rather than republishing the seed.
+  On success it triggers `deploy.yml` via `workflow_run`.
 - **`deploy.yml`** (a `web/**` push, a successful Screen, or manual): fetch
   `results.json` from `origin/data` -> `pnpm build` -> upload `web/dist` as a Pages
   artifact -> `deploy-pages`.
@@ -131,7 +146,11 @@ already-prefixed dict. The frontend reads those exact keys (`web/src/score.ts`,
 ## Layout
 
 - `stock_screener.py` — universe -> fetch -> score -> `write_json`. Entry
-  point. Also holds the `overall_score()` engine + its `SCORE_*`/`PILLAR_
+  point. `get_universe` wraps each Wikipedia fetch in
+  `_fetch_index_with_fallback`, which on failure falls back to that index's
+  membership in the last published `results.json` (`_cached_index_members`) and
+  logs a warning; with no cached members it re-raises rather than screening a
+  partial universe. Also holds the `overall_score()` engine + its `SCORE_*`/`PILLAR_
   WEIGHTS`/`DCF_*` constants, the Phase 6 factor helpers (`_compute_fcf_
   yield`, `_compute_ev_ebit`, `_compute_roic`, `_compute_shareholder_yield`,
   `_compute_price_signals`), the Phase 7 distress/DCF helpers (`_compute_

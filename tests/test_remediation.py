@@ -1,8 +1,11 @@
 """Offline regression tests for the FCFF/WACC DCF stack, output validation guard, and related ports."""
 
+import json
 import os
 import sys
+import tempfile
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 
@@ -313,6 +316,87 @@ def test_finnhub_preflight_rejects_empty_metric_bundle():
         screener.get_finnhub_metrics = original
 
 
+def test_safe_float_rejects_non_numeric_and_non_finite():
+    """
+    Guards the helper directly: a broken `except` clause here is a module-level
+    SyntaxError that takes the entire screener down, and every other test in the
+    suite fails with the same opaque message rather than pointing at this line.
+    """
+    assert screener._safe_float("12.5") == 12.5
+    assert screener._safe_float(0) == 0.0        # zero is a value, not a miss
+    assert screener._safe_float(None) is None    # TypeError branch
+    assert screener._safe_float("n/a") is None   # ValueError branch
+    assert screener._safe_float(float("nan")) is None
+    assert screener._safe_float(float("inf")) is None
+
+
+def _seed_published_results(rows):
+    """Point OUTPUT_PATH at a temp results.json holding `rows`. Returns the dir."""
+    tmp = tempfile.TemporaryDirectory()
+    path = Path(tmp.name) / "results.json"
+    path.write_text(json.dumps({"generated_at": "2026-01-01T00:00:00Z", "rows": rows}))
+    screener.OUTPUT_PATH = path
+    return tmp
+
+
+def test_universe_falls_back_to_last_published_members():
+    """
+    A Wikipedia outage must not kill the run. Membership changes slowly, so the
+    last published roster is a far better outcome than no screen -- and the stale
+    index is logged, never silent.
+    """
+    original_path = screener.OUTPUT_PATH
+    tmp = _seed_published_results([
+        {"Ticker": "AAPL", "Indexes": "S&P500, Nasdaq100"},
+        {"Ticker": "MSFT", "Indexes": "S&P500, Dow30, Nasdaq100"},
+        {"Ticker": "XOM", "Indexes": "S&P500"},
+        {"Ticker": "", "Indexes": "S&P500"},          # blank tickers dropped
+    ])
+    try:
+        def _down():
+            raise RuntimeError("Wikipedia 503")
+
+        assert screener._fetch_index_with_fallback("S&P500", _down) == {"AAPL", "MSFT", "XOM"}
+        assert screener._fetch_index_with_fallback("Dow30", _down) == {"MSFT"}
+        assert screener._fetch_index_with_fallback("Nasdaq100", _down) == {"AAPL", "MSFT"}
+        # A live fetch that works is passed through untouched.
+        assert screener._fetch_index_with_fallback("Dow30", lambda: {"KO"}) == {"KO"}
+    finally:
+        screener.OUTPUT_PATH = original_path
+        tmp.cleanup()
+
+
+def test_universe_reraises_when_no_cached_members_exist():
+    """
+    No seeded dataset (bootstrap run, or an index absent from it) means no
+    fallback: the fetch error propagates rather than screening a partial universe.
+    """
+    original_path = screener.OUTPUT_PATH
+    tmp = _seed_published_results([{"Ticker": "AAPL", "Indexes": "S&P500"}])
+    try:
+        def _down():
+            raise RuntimeError("Wikipedia 503")
+
+        # Index present in the seed but with zero members -> no silent partial run.
+        try:
+            screener._fetch_index_with_fallback("Dow30", _down)
+            assert False, "Expected the fetch error to propagate with no cached members"
+        except RuntimeError as exc:
+            assert "Wikipedia 503" in str(exc)
+
+        # Missing file entirely (bootstrap) -> same.
+        screener.OUTPUT_PATH = Path(tmp.name) / "absent.json"
+        assert screener._cached_index_members("S&P500") == set()
+        try:
+            screener._fetch_index_with_fallback("S&P500", _down)
+            assert False, "Expected the fetch error to propagate with no published dataset"
+        except RuntimeError as exc:
+            assert "Wikipedia 503" in str(exc)
+    finally:
+        screener.OUTPUT_PATH = original_path
+        tmp.cleanup()
+
+
 def run_all():
     tests = [
         test_aggregate_total_debt_is_not_double_counted,
@@ -337,6 +421,9 @@ def run_all():
         test_first_weekday_snapshot_logic_handles_weekends,
         test_reverse_fcff_is_pure_without_api_credentials,
         test_finnhub_preflight_rejects_empty_metric_bundle,
+        test_safe_float_rejects_non_numeric_and_non_finite,
+        test_universe_falls_back_to_last_published_members,
+        test_universe_reraises_when_no_cached_members_exist,
     ]
     failed = 0
     for test in tests:

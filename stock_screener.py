@@ -655,11 +655,54 @@ def fetch_nasdaq100() -> set:
     raise ValueError("Could not find Nasdaq-100 constituents table on Wikipedia.")
 
 
+def _cached_index_members(index_name: str) -> set:
+    """
+    Return the last published members for one index, or an empty set.
+
+    Reads the previous run's OUTPUT_PATH. On master that file is absent (it is
+    gitignored and lives only on the `data` branch), so screen.yml seeds it from
+    origin/data before running the screener -- see the "Seed previous results"
+    step there. No seed, no fallback: this returns an empty set and the caller
+    re-raises the live fetch error.
+    """
+    try:
+        payload = json.loads(OUTPUT_PATH.read_text(encoding="utf-8"))
+        members = {
+            str(row.get("Ticker", "")).strip()
+            for row in payload.get("rows", [])
+            if index_name in {part.strip() for part in str(row.get("Indexes", "")).split(",")}
+        }
+        return {ticker for ticker in members if ticker}
+    except (OSError, ValueError, TypeError):
+        return set()
+
+
+def _fetch_index_with_fallback(index_name: str, fetcher) -> set:
+    """
+    Fetch current members, falling back to the last published membership.
+
+    A Wikipedia outage or a renamed constituents table otherwise aborts the whole
+    run. Membership changes slowly, so a one-run-stale roster is a far better
+    outcome than no screen at all -- and it is logged loudly, not silent.
+    """
+    try:
+        return fetcher()
+    except Exception as exc:
+        cached = _cached_index_members(index_name)
+        if cached:
+            log.warning(
+                f"{index_name} live constituent fetch failed ({exc}); "
+                f"using {len(cached)} cached members from the last published dataset"
+            )
+            return cached
+        raise
+
+
 def get_universe() -> pd.DataFrame:
     """Return a deduplicated DataFrame with columns: ticker, indexes."""
-    sp500 = fetch_sp500()
-    dow30 = fetch_dow30()
-    nasdaq = fetch_nasdaq100()
+    sp500 = _fetch_index_with_fallback("S&P500", fetch_sp500)
+    dow30 = _fetch_index_with_fallback("Dow30", fetch_dow30)
+    nasdaq = _fetch_index_with_fallback("Nasdaq100", fetch_nasdaq100)
     all_tickers = sp500 | dow30 | nasdaq
 
     rows = []
@@ -754,7 +797,7 @@ def _safe_float(v) -> float | None:
     try:
         f = float(v)
         return f if math.isfinite(f) else None
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 

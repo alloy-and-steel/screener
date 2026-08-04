@@ -60,6 +60,32 @@ jobs:
           print('is_first_weekday=' + str(s._is_first_weekday_of_month(date.today())).lower())
           " >> "$GITHUB_OUTPUT"
 
+      - name: Fetch the previous dataset from the data branch
+        # Shallow-cloned ONCE here and reused by the publish step below. Two jobs:
+        #   1. Seeds web/public/data/results.json so get_universe()'s constituent
+        #      fallback has a last-known roster if Wikipedia is down or renames a
+        #      table (the file is gitignored on master, so without this seed the
+        #      fallback is a no-op and a Wikipedia outage kills the whole run).
+        #   2. Carries prior monthly snapshots forward past the force-push.
+        # Absent on the bootstrap run -- no data branch yet, so no fallback.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin data >/dev/null 2>&1; then
+            git clone -q --depth 1 --branch data --single-branch \
+              "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              "${RUNNER_TEMP}/data-branch-prev"
+            prev_results="${RUNNER_TEMP}/data-branch-prev/web/public/data/results.json"
+            if [ -s "${prev_results}" ]; then
+              mkdir -p web/public/data
+              cp "${prev_results}" web/public/data/results.json
+              echo "Seeded previous results.json for the constituent fallback."
+            fi
+          else
+            echo "No data branch yet (bootstrap run) -- constituent fallback unavailable."
+          fi
+
       - name: Run screener (writes web/public/data/results.json + stats.json)
         env:
           FRED_API_KEY:    ${{ secrets.FRED_API_KEY }}
@@ -84,17 +110,27 @@ jobs:
           # The data branch is force-pushed as a single flat commit each run (see
           # header comment: results.json must never accumulate history on a
           # tracked branch). Snapshots therefore can't rely on branch history --
-          # pull forward any snapshot files already on origin/data first (via a
-          # shallow clone; GitHub does not support `git archive --remote`), so a
-          # monthly snapshot taken on a prior run survives this run's force-push.
-          if git ls-remote --exit-code --heads origin data >/dev/null 2>&1; then
-            prev="${RUNNER_TEMP}/data-branch-prev"
-            git clone -q --depth 1 --branch data --single-branch \
-              "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${prev}"
-            if [ -d "${prev}/web/public/data/snapshots" ]; then
-              mkdir -p "${work}/web/public/data/snapshots"
-              cp -r "${prev}/web/public/data/snapshots/." "${work}/web/public/data/snapshots/"
-            fi
+          # pull forward any snapshot files already on origin/data, so a monthly
+          # snapshot taken on a prior run survives this run's force-push. The
+          # clone was already taken by the "Fetch the previous dataset" step.
+          prev="${RUNNER_TEMP}/data-branch-prev"
+          if [ -d "${prev}/web/public/data/snapshots" ]; then
+            mkdir -p "${work}/web/public/data/snapshots"
+            cp -r "${prev}/web/public/data/snapshots/." "${work}/web/public/data/snapshots/"
+          fi
+
+          # results.json was seeded from the previous run before the screener ran
+          # (constituent fallback). Prove we are publishing THIS run's output, not
+          # that seed -- generated_at is stamped fresh on every write.
+          if [ -s "${prev}/web/public/data/results.json" ]; then
+            python - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          prev = Path(os.environ["RUNNER_TEMP"]) / "data-branch-prev/web/public/data/results.json"
+          new  = Path("web/public/data/results.json")
+          if json.loads(prev.read_text())["generated_at"] == json.loads(new.read_text())["generated_at"]:
+              sys.exit("results.json is still the seeded copy from the previous run; refusing to publish.")
+          PY
           fi
 
           cp web/public/data/results.json "${work}/web/public/data/results.json"
