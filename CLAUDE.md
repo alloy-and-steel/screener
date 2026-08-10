@@ -21,15 +21,48 @@ this fork kept its own Vite/React `web/`, `azqato.py`, and decoupled
 non-gating** layer to preserve this fork's "three independent systems,
 disagreement is the signal" design — see the `Overall` bullet below.
 
-Synced with upstream through `a8cf842` (2026-07-16). Everything upstream has
-published since is `chore: update screener results` data commits (upstream
-commits its dataset to `master`; this fork keeps it on `data` by design).
-`a8cf842` itself and `d36a503` are vanilla-`docs/`-dashboard changes with no
-React analogue. Deliberately NOT ported: upstream's legacy discounted-earnings
-diagnostic (`_compute_discounted_earnings_*`) — upstream itself marks it "not
-an FCFF/FCFE DCF, does not feed the DCF value sub-score"; this fork already
-carries the real FCFF/WACC DCF and keeps a leaner output. To re-check for
-drift: `git fetch upstream && git log upstream/master --oneline -- . ':(exclude)docs/data'`.
+Synced with upstream through `e71db99` (2026-08-10). Everything upstream has
+published since `a8cf842` (2026-07-16) is `chore: update screener results` data
+commits (upstream commits its dataset to `master`; this fork keeps it on `data`
+by design). `a8cf842` itself and `d36a503` are vanilla-`docs/`-dashboard changes
+with no React analogue. To re-check for drift:
+`git fetch upstream && git log upstream/master --oneline -- . ':(exclude)docs/data'`.
+
+A full function-by-function comparison against `upstream/master:stock_screener.py`
+(2026-08-10) found the fork at parity or ahead everywhere. Deliberately NOT
+ported, and why:
+
+- `_compute_discounted_earnings_*` — upstream itself marks it "not an FCFF/FCFE
+  DCF, does not feed the DCF value sub-score"; this fork carries the real
+  FCFF/WACC DCF and keeps a leaner output.
+- `growth_pct = round(growth_pct * 100, 4)` in `get_combined_data` — upstream
+  still rescales Finnhub's already-whole-number `epsGrowth5Y` by 100.
+- `combined_score` averaging a missing framework as a real 0% discount — this
+  fork averages over the present legs only.
+- `datetime.utcnow()` (deprecated) in `write_json` / `_compute_stats`.
+- `row["Error"] = "No EPS"` early-return — this fork keeps unvaluable names
+  visible with valuation N/A (financial-integrity rules below).
+- `graham_metrics`' `min(VA, VB)` and the D/E defensive criterion — this fork
+  uses the canonical 1974 formula and Graham's own long-term-debt-vs-working-
+  capital / 3-year-average-EPS-growth checks.
+- `overall_score(coverage_fraction=...)` — vestigial upstream, unused there.
+
+Ported in the 2026-08-10 sync: `Valuation_Input_Warning` (every reason a row's
+Lynch/Graham valuation is N/A, surfaced in the Scorecard) and the separate
+`SCORE_DCF_DISCOUNT_*` band constants (same numbers as `SCORE_DISC_BANDS`, kept
+apart so a Lynch/Graham recalibration can't silently move the DCF sub-score).
+
+**azqato upstream** (`Azqato/stocks`, `screener.js` + `scripts/fetch_screener_
+data.py`): the STOCK scoring model is unchanged since v3.31.0 — `azqato.py` is
+still a faithful port (metrics, `CLAMP_Q`, tie handling, tier cuts, and the
+feed-generator field definitions all verified against the live file). Everything
+published since is inapplicable by design: ETFs (v3.33.0) and International
+(v3.34.x) universes, the MAG 10 toggle (v3.36.0), the ETF reweighting (v3.37.0),
+and the v4.0.0 vanilla-HTML redesign. Adopted from it: the v3.37.2 stale-data
+lesson — `Toolbar.tsx`'s freshness threshold is a week, not 3 days, since a
+weekday cron leaves Friday's data legitimately ~3 days old on Monday morning.
+To re-check: `git clone --filter=blob:none https://github.com/Azqato/stocks`
+then `git log --oneline -- screener.js scripts/fetch_screener_data.py`.
 
 The three screens (decoupled on purpose — disagreement is the signal):
 

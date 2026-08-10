@@ -159,6 +159,12 @@ export default function Scorecard({ row, onBack }: { row: Row; onBack: () => voi
           </div>
         ) : (
           <>
+            {row.Valuation_Input_Warning ? (
+              <p className="mb-3 rounded-lg border border-edge bg-surface-2 px-4 py-2 text-xs text-amber-300/80">
+                Lynch and Graham are N/A here: {row.Valuation_Input_Warning}. The name stays visible — Azqato ranks it relative to the
+                universe, and the Graham defensive checks still run.
+              </p>
+            ) : null}
             <div className="grid gap-3 md:grid-cols-3">
               {verdicts(row).map((v) => (
                 <Card key={v.system} v={v} row={row} />

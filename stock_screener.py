@@ -282,6 +282,23 @@ ALTMAN_EXCLUDED_SECTORS = {"Financial Services"}
 # helpers; keeps (1+g) positive. Never applied to the shared g used by Lynch/
 # Graham/OverallScore-growth -- only at the DCF call site.
 DCF_GROWTH_FLOOR = -50.0
+
+# ── Value pillar: DCF-discount bands ─────────────────────────────────────
+# Same numbers as SCORE_DISC_BANDS today, but a SEPARATE table on purpose: the
+# Lynch/Graham bands are rate-relativized (scaled by aaa_yield at runtime) and
+# are the ones to tune against stats.json, while the DCF discount is already
+# rate-aware through its WACC. Sharing one table would silently drag the DCF
+# sub-score along with any Lynch/Graham recalibration.
+SCORE_DCF_DISCOUNT_WIN_LO = -100.0  # [ASSUMED]
+SCORE_DCF_DISCOUNT_WIN_HI = 60.0  # [ASSUMED]
+SCORE_DCF_DISCOUNT_BANDS = [  # [ASSUMED] ascending; monitor stats.json before tuning
+    (-100.0, -30.0, 0, 10),  # deeply overpriced by DCF
+    (-30.0, 0.0, 10, 40),  # modestly overpriced
+    (0.0, 15.0, 40, 70),  # near fair value
+    (15.0, 30.0, 70, 90),  # meaningful DCF discount
+    (30.0, 60.0, 90, 100),  # deep DCF value
+]
+
 # yfinance GICS-like sector strings for the cyclical group. NOTE: yfinance
 # returns "Basic Materials", not "Materials".
 CYCLICAL_SECTORS = {"Energy", "Basic Materials"}
@@ -488,7 +505,10 @@ def overall_score(
             return None
         if d < 0:
             return 0.0
-        return _piecewise_score(_winsorize(d, SCORE_DISC_WIN_LO, SCORE_DISC_WIN_HI), SCORE_DISC_BANDS)
+        return _piecewise_score(
+            _winsorize(d, SCORE_DCF_DISCOUNT_WIN_LO, SCORE_DCF_DISCOUNT_WIN_HI),
+            SCORE_DCF_DISCOUNT_BANDS,
+        )
 
     dcf_sub = _score_dcf_discount(dcf_discount_pct)
     dcf_group = _avg_present([dcf_sub])
@@ -2097,6 +2117,18 @@ def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None =
     # fabricate an EPS or a growth rate.
     can_value = usable_eps and g is not None and g > 0
 
+    # Machine-readable reason a valuation is missing, so the UI can explain the
+    # N/A instead of leaving a bare dash. Every applicable cause is recorded,
+    # not just the first: a loss-maker can also have unknown growth.
+    valuation_warnings = []
+    if not usable_eps:
+        valuation_warnings.append("Non-positive EPS" if eps is not None else "EPS unavailable")
+    if g is None:
+        valuation_warnings.append("Growth unavailable")
+    elif g <= 0:
+        valuation_warnings.append(f"Non-positive growth ({g:.1f}%)")
+    row["Valuation_Input_Warning"] = "; ".join(valuation_warnings) or None
+
     # ── P/B ratio — Finnhub direct, or compute from BVPS ────────────
     pb = fund["pb_ratio"]
     if pb is None:
@@ -2120,13 +2152,7 @@ def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None =
         gm = graham_metrics(price, eps, g, aaa_yield)
         row.update({f"Graham_{k}": v for k, v in gm.items()})
     else:
-        if not usable_eps:
-            reason = "no usable (positive) EPS"
-        elif g is not None:
-            reason = f"non-positive growth ({g:.1f}%)"
-        else:
-            reason = "growth not computable"
-        log.info(f"{ticker}: {reason}, valuation N/A (kept visible)")
+        log.info(f"{ticker}: {row['Valuation_Input_Warning']} — valuation N/A (kept visible)")
         row["Lynch_Lynch_Status"] = "N/A"
         row["Graham_Graham_Status"] = "N/A"
         lm = {"Lynch_Discount_Pct": WORST_DISCOUNT}

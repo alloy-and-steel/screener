@@ -105,7 +105,13 @@ function freshness(generatedAt?: string): { label: string; stale: boolean } {
   if (Number.isNaN(dt.getTime())) return { label: 'Data date unknown', stale: false }
   const ageDays = (Date.now() - dt.getTime()) / 86_400_000
   const label = `as of ${dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-  return { label, stale: ageDays > 3 }
+  // A week, not 3 days (azqato upstream learned the same lesson at v3.37.2).
+  // The screen runs on a WEEKDAY cron, so Friday's data is legitimately ~3.1
+  // days old by the time Monday's run finishes — a 3-day threshold cried
+  // stale every Monday morning. Only a genuinely stuck pipeline (a week =
+  // 5 consecutive missed runs) is worth flagging; the exact date is always
+  // shown next to it either way.
+  return { label, stale: ageDays > 7 }
 }
 
 function sentence(minPass: number, shown: number): string {
