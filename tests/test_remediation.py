@@ -195,15 +195,9 @@ def test_nasdaq_fetch_uses_component_list_page():
     assert members == {"AAPL", "BRK-B"}
 
 
-def test_negative_eps_is_retained_as_worst_discount_not_a_fetch_error():
-    """
-    A ticker with usable price but non-positive EPS must stay visible: Error stays
-    None, Lynch/Graham are marked N/A (fork's existing N/A contract, unchanged),
-    but OverallScore is still computable because the WORST_DISCOUNT sentinel feeds
-    the Value pillar rather than the row being silently dropped.
-    """
-    original = screener.get_combined_data
-    synthetic = {
+# A fully-populated get_combined_data payload for a loss-making name. The
+# process_ticker tests below each copy it and override only what they exercise.
+_SYNTHETIC_LOSS_MAKER = {
         "price": 10.0,
         "finnhub_ok": True,
         "market_cap_b": 5.0,
@@ -261,7 +255,18 @@ def test_negative_eps_is_retained_as_worst_discount_not_a_fetch_error():
         "income_stmt_df": None,
         "balance_sheet_df": None,
         "cashflow_df": None,
-    }
+}
+
+
+def test_negative_eps_is_retained_as_worst_discount_not_a_fetch_error():
+    """
+    A ticker with usable price but non-positive EPS must stay visible: Error stays
+    None, Lynch/Graham are marked N/A (fork's existing N/A contract, unchanged),
+    but OverallScore is still computable because the WORST_DISCOUNT sentinel feeds
+    the Value pillar rather than the row being silently dropped.
+    """
+    original = screener.get_combined_data
+    synthetic = dict(_SYNTHETIC_LOSS_MAKER)
 
     try:
         screener.get_combined_data = lambda _ticker: synthetic
@@ -275,6 +280,37 @@ def test_negative_eps_is_retained_as_worst_discount_not_a_fetch_error():
     assert row["Graham_Graham_Status"] == "N/A"
     assert row["OverallScore"] is not None, "WORST_DISCOUNT routing must still let OverallScore be computed"
     assert row["score_value"] is not None
+    assert row["Valuation_Input_Warning"] == "Non-positive EPS", (
+        f"the N/A must carry its reason, got {row['Valuation_Input_Warning']!r}"
+    )
+
+
+def test_valuation_warning_lists_every_applicable_reason():
+    """
+    A row that is both loss-making AND missing growth records BOTH reasons --
+    not just the first one -- and a valuable row records none.
+    """
+    original = screener.get_combined_data
+    base = dict(_SYNTHETIC_LOSS_MAKER)
+    base["growth_pct"] = None
+    base["annual_eps"] = [-3.0, -2.0, -1.0]  # no positive base -> CAGR uncomputable too
+
+    healthy = dict(_SYNTHETIC_LOSS_MAKER)
+    healthy["ttm_eps"] = 1.0
+    healthy["annual_eps"] = [0.5, 0.7, 0.9]
+    healthy["growth_pct"] = 8.0
+
+    try:
+        screener.get_combined_data = lambda _ticker: base
+        both = screener.process_ticker("BOTH", aaa_yield=5.0, risk_free_rate=4.0)
+        screener.get_combined_data = lambda _ticker: healthy
+        ok = screener.process_ticker("OKAY", aaa_yield=5.0, risk_free_rate=4.0)
+    finally:
+        screener.get_combined_data = original
+
+    assert both["Valuation_Input_Warning"] == "Non-positive EPS; Growth unavailable"
+    assert ok["Valuation_Input_Warning"] is None, "a row that could be valued carries no warning"
+    assert ok["Lynch_Lynch_Status"] != "N/A"
 
 
 def test_trap_reasons_are_explicit_and_warning_only():
@@ -417,6 +453,7 @@ def run_all():
         test_output_guard_rejects_misordered_dcf_range,
         test_nasdaq_fetch_uses_component_list_page,
         test_negative_eps_is_retained_as_worst_discount_not_a_fetch_error,
+        test_valuation_warning_lists_every_applicable_reason,
         test_trap_reasons_are_explicit_and_warning_only,
         test_first_weekday_snapshot_logic_handles_weekends,
         test_reverse_fcff_is_pure_without_api_credentials,

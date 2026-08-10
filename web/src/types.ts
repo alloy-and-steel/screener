@@ -60,6 +60,10 @@ export interface Row {
   Graham_Graham_Discount_Pct?: number | null
   Graham_Graham_Status?: string | null
 
+  // Why Lynch/Graham are "N/A" for this row (non-positive EPS, unknown or
+  // non-positive growth). Null whenever the valuation actually ran.
+  Valuation_Input_Warning?: string | null
+
   DefensiveScore?: number | null
   DefensiveLabel?: string | null
   CombinedScore?: number | null
