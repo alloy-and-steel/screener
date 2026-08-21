@@ -53,12 +53,17 @@ Lynch/Graham valuation is N/A, surfaced in the Scorecard) and the separate
 apart so a Lynch/Graham recalibration can't silently move the DCF sub-score).
 
 **azqato upstream** (`Azqato/stocks`, `screener.js` + `scripts/fetch_screener_
-data.py`): the STOCK scoring model is unchanged since v3.31.0 — `azqato.py` is
-still a faithful port (metrics, `CLAMP_Q`, tie handling, tier cuts, and the
-feed-generator field definitions all verified against the live file). Everything
+data.py`): `azqato.py` is a faithful port of the live STOCK model, now at
+**scoring v3, "four even pillars"** — the metric weights were rebalanced
+upstream (see the Azqato bullet below) and re-ported 2026-08-21. `CLAMP_Q`, tie
+handling, tier cuts, the sentinel ranks, and the feed-generator field
+definitions are all still verified against the live file. Everything else
 published since is inapplicable by design: ETFs (v3.33.0) and International
 (v3.34.x) universes, the MAG 10 toggle (v3.36.0), the ETF reweighting (v3.37.0),
-and the v4.0.0 vanilla-HTML redesign. Adopted from it: the v3.37.2 stale-data
+and the v4.0.0 vanilla-HTML redesign. Also unported: the weight-0 `netCashMc`
+context column (net cash / market cap — colored by rank, contributes nothing to
+the score) and upstream's `grossMargin`/`netMargin` feed fields, which no
+current metric reads. Adopted from it: the v3.37.2 stale-data
 lesson — `Toolbar.tsx`'s freshness threshold is a week, not 3 days, since a
 weekday cron leaves Friday's data legitimately ~3 days old on Monday morning.
 To re-check: `git clone --filter=blob:none https://github.com/Azqato/stocks`
@@ -67,9 +72,11 @@ then `git log --oneline -- screener.js scripts/fetch_screener_data.py`.
 The three screens (decoupled on purpose — disagreement is the signal):
 
 - **Azqato** — pure, no-AI RELATIVE percentile model (`azqato.py`), a port of
-  the live azqato screener's scoring v2 (azqato.github.io/stocks/screener.js).
-  Six metrics in three pillars (Growth 60: rev TTM 10 / rev FWD 20 / EPS TTM 10 /
-  EPS FWD 20; Valuation 20: PEG FWD; Balance sheet 20: cash vs debt); points
+  the live azqato screener's scoring v3 (azqato.github.io/stocks/screener.js).
+  Six metrics in FOUR evenly weighted 25-point pillars (TTM 25: rev TTM 10 /
+  EPS TTM 15; FWD 25: rev FWD 10 / EPS FWD 15; Valuation 25: PEG FWD; Balance
+  sheet 25: cash vs debt) — trailing growth counts the same as forward
+  estimates, EPS outweighs revenue inside both growth pillars; points
   ramp with percentile rank vs the loaded universe (top/bottom 22% clamp);
   missing data = hard zero. Score 0-100 -> rank tiers (S = top 10%, A = next
   10%, B = 20-50%, C = 50-75%, F = rest; perfect 100 = S+). Tiers are computed

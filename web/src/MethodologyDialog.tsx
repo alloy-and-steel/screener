@@ -52,10 +52,12 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
           </p>
 
           <Block title="Azqato — growth rank vs the field" dot>
-            The live azqato screener&rsquo;s relative percentile model. Six metrics in three pillars &mdash;{' '}
-            <strong className="text-slate-100">Growth 60%</strong> (revenue growth TTM 10 / FWD 20, EPS growth TTM 10 / FWD 20; forward
-            growth counts double), <strong className="text-slate-100">Valuation 20%</strong> (PEG forward),{' '}
-            <strong className="text-slate-100">Balance sheet 20%</strong> (cash vs debt). Each metric earns points by percentile rank
+            The live azqato screener&rsquo;s relative percentile model. Six metrics in four evenly weighted pillars &mdash;{' '}
+            <strong className="text-slate-100">TTM 25%</strong> (revenue growth 10, EPS growth 15),{' '}
+            <strong className="text-slate-100">FWD 25%</strong> (revenue growth 10, EPS growth 15) &mdash; proven results count the same as
+            analyst forecasts, and EPS growth outweighs revenue growth in both &mdash;{' '}
+            <strong className="text-slate-100">Valuation 25%</strong> (PEG forward),{' '}
+            <strong className="text-slate-100">Balance sheet 25%</strong> (cash vs debt). Each metric earns points by percentile rank
             against every other screened name: only the top 22% earns full marks, the bottom 22% earns zero, and a missing metric scores a
             hard zero. Scores map to rank tiers &mdash; S = top 10%, A = next 10%, B = 20&ndash;50%, C = 50&ndash;75%, F = bottom 25%; a
             perfect 100 earns S+. A stock <strong className="text-slate-100">passes</strong> at tier A or better (the top ~20%). Forward
