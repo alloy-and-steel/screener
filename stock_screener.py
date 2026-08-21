@@ -652,9 +652,16 @@ def fetch_sp500() -> set:
 
 
 def fetch_dow30() -> set:
-    """Scrape current Dow 30 constituents from Wikipedia."""
+    """
+    Scrape current Dow 30 constituents from Wikipedia.
+
+    Uses the dedicated component-list page: the main "Dow Jones Industrial
+    Average" article no longer carries a components table (only a navbox), so
+    the old URL matched nothing and every run quietly fell back to the last
+    published roster -- the same move the Nasdaq-100 fetch already made.
+    """
     log.info("Fetching Dow 30 constituents from Wikipedia...")
-    tables = _wiki_tables("https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average")
+    tables = _wiki_tables("https://en.wikipedia.org/wiki/List_of_Dow_Jones_Industrial_Average_companies")
     for t in tables:
         if "Symbol" in t.columns:
             tickers = set(t["Symbol"].str.replace(".", "-", regex=False).tolist())
@@ -673,6 +680,81 @@ def fetch_nasdaq100() -> set:
             log.info(f"  → {len(tickers)} Nasdaq-100 tickers")
             return tickers
     raise ValueError("Could not find Nasdaq-100 constituents table on Wikipedia.")
+
+
+# ── Vanguard-ETF-derived pools (azqato's Growth/Value/Dividend 100) ──────────
+# Same source his update_etf_constituents.py uses: the fund profile API, ranked
+# by portfolio weight, top 100 after collapsing dual share classes. The raw
+# count band is a guard so a truncated response can never quietly shrink a pool.
+VANGUARD_HOLDINGS_API = "https://investor.vanguard.com/investment-products/etfs/profile/api/{fund}/portfolio-holding/stock"
+VANGUARD_HEADERS = {**WIKI_HEADERS, "Accept": "application/json"}
+VANGUARD_TOP_N = 100
+VANGUARD_RAW_MIN, VANGUARD_RAW_MAX = 110, 500
+# Drop the duplicate share class only when the kept sibling is also present.
+# Keys/values use this repo's dash convention (BRK-B), not Vanguard's dots.
+DUAL_CLASS_DROP = {
+    "GOOG": "GOOGL",
+    "FOX": "FOXA",
+    "NWS": "NWSA",
+    "BF-B": "BF-A",
+    "HEI-A": "HEI",
+    "BRK-A": "BRK-B",
+    "LEN-B": "LEN",
+}
+
+
+def _fetch_vanguard_top_holdings(fund: str) -> set:
+    """Top `VANGUARD_TOP_N` holdings of a Vanguard ETF, by portfolio weight."""
+    resp = requests.get(VANGUARD_HOLDINGS_API.format(fund=fund), headers=VANGUARD_HEADERS, timeout=30)
+    resp.raise_for_status()
+    entities = resp.json()["fund"]["entity"]
+    if not (VANGUARD_RAW_MIN <= len(entities) <= VANGUARD_RAW_MAX):
+        raise ValueError(f"{fund}: unexpected raw holdings count {len(entities)} (expected {VANGUARD_RAW_MIN}-{VANGUARD_RAW_MAX})")
+
+    weighted = []
+    for entity in entities:
+        symbol = str(entity.get("ticker") or "").strip().upper().replace(" ", "").replace(".", "-")
+        weight = _safe_float(entity.get("percentWeight"))
+        if symbol and weight is not None:
+            weighted.append((weight, symbol))
+    weighted.sort(key=lambda pair: -pair[0])
+
+    present = {symbol for _, symbol in weighted}
+    picked: list[str] = []
+    for _, symbol in weighted:
+        if DUAL_CLASS_DROP.get(symbol) in present:
+            continue
+        if symbol not in picked:
+            picked.append(symbol)
+        if len(picked) == VANGUARD_TOP_N:
+            break
+    if len(picked) < VANGUARD_TOP_N:
+        raise ValueError(f"{fund}: resolved only {len(picked)} of {VANGUARD_TOP_N} holdings")
+    return set(picked)
+
+
+def fetch_growth100() -> set:
+    """Top 100 VUG (Vanguard Growth ETF) holdings — azqato's "Growth 100"."""
+    log.info("Fetching Growth 100 (top VUG holdings) from Vanguard...")
+    tickers = _fetch_vanguard_top_holdings("VUG")
+    log.info(f"  → {len(tickers)} Growth 100 tickers")
+    return tickers
+
+
+def fetch_value100() -> set:
+    """Top 100 VTV (Vanguard Value ETF) holdings — azqato's "Value 100"."""
+    log.info("Fetching Value 100 (top VTV holdings) from Vanguard...")
+    tickers = _fetch_vanguard_top_holdings("VTV")
+    log.info(f"  → {len(tickers)} Value 100 tickers")
+    return tickers
+
+
+def fetch_dividend100() -> set:
+    """Top 100 VIG (Dividend Appreciation ETF) holdings — azqato's "Dividend 100"."""
+    log.info("Fetching Dividend 100 (top VIG holdings) from Vanguard...")
+    tickers = _fetch_vanguard_top_holdings("VIG")
+    log.info(f"  → {len(tickers)} Dividend 100 tickers")
+    return tickers
 
 
 def _cached_index_members(index_name: str) -> set:
@@ -718,26 +800,42 @@ def _fetch_index_with_fallback(index_name: str, fetcher) -> set:
         raise
 
 
+# Every pool the screener covers, in the order membership is listed. These are
+# also the cross-sections the Azqato model is re-scored over for the scorecard
+# (see run_screener) — each one is a universe azqato's own screener ranks
+# separately, so a name can be reconciled against whichever of his views it
+# appears in. NOT ported: his ETFs list (a different, technicals-only scoring
+# model with no EPS for Lynch/Graham to value) and his International list
+# (local-exchange listings that the Finnhub free tier does not cover, so two of
+# this screener's three systems would have nothing to score them with).
+INDEX_FETCHERS = (
+    ("S&P500", fetch_sp500),
+    ("Dow30", fetch_dow30),
+    ("Nasdaq100", fetch_nasdaq100),
+    ("Growth100", fetch_growth100),
+    ("Value100", fetch_value100),
+    ("Dividend100", fetch_dividend100),
+)
+INDEX_NAMES = tuple(name for name, _ in INDEX_FETCHERS)
+
+
+def _row_indexes(value) -> set:
+    """Parse a row's comma-joined `Indexes` string into a set of pool names."""
+    return {part.strip() for part in str(value or "").split(",") if part.strip()}
+
+
 def get_universe() -> pd.DataFrame:
     """Return a deduplicated DataFrame with columns: ticker, indexes."""
-    sp500 = _fetch_index_with_fallback("S&P500", fetch_sp500)
-    dow30 = _fetch_index_with_fallback("Dow30", fetch_dow30)
-    nasdaq = _fetch_index_with_fallback("Nasdaq100", fetch_nasdaq100)
-    all_tickers = sp500 | dow30 | nasdaq
+    members = {name: _fetch_index_with_fallback(name, fetcher) for name, fetcher in INDEX_FETCHERS}
+    all_tickers = set().union(*members.values())
 
-    rows = []
-    for t in sorted(all_tickers):
-        membership = []
-        if t in sp500:
-            membership.append("S&P500")
-        if t in dow30:
-            membership.append("Dow30")
-        if t in nasdaq:
-            membership.append("Nasdaq100")
-        rows.append({"ticker": t, "indexes": ", ".join(membership)})
+    rows = [
+        {"ticker": t, "indexes": ", ".join(name for name in INDEX_NAMES if t in members[name])}
+        for t in sorted(all_tickers)
+    ]
 
     df = pd.DataFrame(rows)
-    log.info(f"Total deduplicated universe: {len(df)} tickers")
+    log.info(f"Total deduplicated universe: {len(df)} tickers across {len(INDEX_NAMES)} pools")
     return df
 
 
@@ -2471,6 +2569,27 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float
             r["azqato"].update(scored[r["Ticker"]])
     tier_counts = pd.Series([s["tier"] for s in scored.values()]).value_counts().to_dict()
     log.info(f"Azqato tiers over {len(scorable)} names: {tier_counts}")
+
+    # ── Per-pool cross-sections — SCORECARD DISPLAY ONLY ────────────────
+    # The model is relative, so a stock's score depends on who it is ranked
+    # against: azqato's own screener loads ONE pool at a time, which is why the
+    # same name scores differently in his Nasdaq 100 view than in his S&P 500
+    # view. The grid, the tier, and the three-system pass gate all stay on the
+    # pooled cross-section above (this fork screens one merged universe by
+    # design); these per-pool scores exist so a name can be reconciled against
+    # whichever of his views it appears in. Deliberately lean — score and tier
+    # only, no parts/pctiles, so six extra cross-sections cost little JSON.
+    for name in INDEX_NAMES:
+        members = {r["Ticker"]: r["azqato"] for r in results if "azqato" in r and name in _row_indexes(r.get("Indexes"))}
+        if not members:
+            log.warning(f"Azqato per-pool scoring: no scorable members for {name}")
+            continue
+        pool_scored = azqato_score_all(members)
+        for r in results:
+            pool = pool_scored.get(r["Ticker"])
+            if pool is not None:
+                r["azqato"].setdefault("byIndex", {})[name] = {"score": pool["score"], "tier": pool["tier"]}
+        log.info(f"  → {name}: re-scored {len(members)} names as their own cross-section")
 
     df = pd.DataFrame(results)
     # Sort by OverallScore descending (best opportunities first); fall back to

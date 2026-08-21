@@ -45,8 +45,9 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
 
         <div className="px-6 py-5">
           <p className="mb-5 text-[13px] leading-relaxed text-slate-300">
-            Screener3000 runs <strong className="text-slate-100">three independent value/growth screens</strong> on every S&amp;P 500, Dow
-            30, and Nasdaq-100 stock, then shows where they agree and where they don&rsquo;t. The default list shows only names that clear{' '}
+            Screener3000 runs <strong className="text-slate-100">three independent value/growth screens</strong> on one merged universe
+            &mdash; the S&amp;P 500, Dow 30, Nasdaq-100, and the top 100 holdings of VUG, VTV and VIG (Growth / Value / Dividend 100)
+            &mdash; then shows where they agree and where they don&rsquo;t. The default list shows only names that clear{' '}
             <strong className="text-slate-100">all three</strong>. Each system answers a different question, and they often disagree &mdash;
             that disagreement is the signal.
           </p>
@@ -61,7 +62,10 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
             against every other screened name: only the top 22% earns full marks, the bottom 22% earns zero, and a missing metric scores a
             hard zero. Scores map to rank tiers &mdash; S = top 10%, A = next 10%, B = 20&ndash;50%, C = 50&ndash;75%, F = bottom 25%; a
             perfect 100 earns S+. A stock <strong className="text-slate-100">passes</strong> at tier A or better (the top ~20%). Forward
-            figures are current-fiscal-year analyst consensus; unprofitable names rank worst on valuation rather than dropping out.
+            figures are current-fiscal-year analyst consensus; unprofitable names rank worst on valuation rather than dropping out. Because
+            the model is relative, the peer set is part of the score: the tier here ranks a stock against <em>all</em> screened names, while
+            the scorecard also shows its rank inside each individual pool &mdash; the way azqato&rsquo;s own screener, which loads one
+            universe at a time, would rank it.
           </Block>
 
           <Block title="Lynch — growth at a reasonable price" dot>
