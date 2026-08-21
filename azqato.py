@@ -1,16 +1,20 @@
 """
 Azqato relative percentile scoring model (no AI)
 ================================================
-Port of the LIVE azqato screener's scoring model v2 (azqato.github.io/stocks/
-screener.js, v3.30.0-v3.31.0). Pure, deterministic, no I/O — the scorer takes
-already-fetched numbers for the WHOLE universe and returns scores/tiers, so the
-math is unit-testable in isolation from the data pipeline.
+Port of the LIVE azqato screener's scoring model v3 (azqato.github.io/stocks/
+screener.js, "relative percentile model v3 (four even pillars)"). Pure,
+deterministic, no I/O — the scorer takes already-fetched numbers for the WHOLE
+universe and returns scores/tiers, so the math is unit-testable in isolation
+from the data pipeline.
 
-The model is RELATIVE, not absolute: six metrics in three pillars — Growth 60
-(Rev TTM 10, Rev FWD 20, EPS TTM 10, EPS FWD 20; forward growth counts double),
-Valuation 20 (PEG FWD), Balance sheet 20 (cash vs debt). Each metric's points
-ramp with the stock's percentile rank among its loaded peers, clamped at the
-top/bottom 22%: only the top 22% of a metric earns full marks. Tiers are ranks
+The model is RELATIVE, not absolute: six metrics in FOUR equally-weighted 25pt
+pillars — TTM 25 (Rev TTM 10, EPS TTM 15), FWD 25 (Rev FWD 10, EPS FWD 15),
+Valuation 25 (PEG FWD), Balance sheet 25 (cash vs debt). Trailing, proven
+growth is weighted the same as forward analyst estimates (v2 double-weighted
+FWD inside a 60pt Growth pillar), and within each growth pillar EPS outweighs
+revenue 15-to-10. Each metric's points ramp with the stock's percentile rank
+among its loaded peers, clamped at the top/bottom 22%: only the top 22% of a
+metric earns full marks. Tiers are ranks
 (S = top 10% of scored names, A = next 10%, B = 20-50%, C = 50-75%, F = bottom
 25%; a perfect 100 earns S+), not buy/sell ratings.
 
@@ -19,8 +23,8 @@ an incomplete stock can never outscore a complete one. This is the model's own
 documented semantic (the missing cell renders dark red in the UI); the input
 itself stays None end-to-end, never a fabricated value.
 
-Also here (unchanged, scorecard display only — the v2 model dropped RSI and the
-52-week position from scoring):
+Also here (unchanged, scorecard display only — the stock model does not score
+RSI or the 52-week position; those time index/ETF buys, not single names):
   - wilder_rsi()        : 14-day Wilder RSI from a close series
   - pct_of_52w_range()  : where price sits in the trailing 52-week range
 """
@@ -40,12 +44,12 @@ PASS_POINTS = 15.0  # points >= this = "upper part of the pack" on that metric
 # ranked only so its cell can be colored by percentile in the UI.
 METRICS = (
     ("revTTM", 10, True),
-    ("revFwd", 20, True),
-    ("epsTTM", 10, True),
-    ("epsFwd", 20, True),
+    ("revFwd", 10, True),
+    ("epsTTM", 15, True),
+    ("epsFwd", 15, True),
     ("peVsG", 0, False),
-    ("pegFwd", 20, False),
-    ("cashDebt", 20, True),
+    ("pegFwd", 25, False),
+    ("cashDebt", 25, True),
 )
 TOTAL_WEIGHT = sum(w for _, w, _ in METRICS)  # 100
 SCORED_COUNT = sum(1 for _, w, _ in METRICS if w > 0)  # 6
