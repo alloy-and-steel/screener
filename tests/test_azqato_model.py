@@ -11,7 +11,8 @@ percentile curve, NOT recorded from a run of our code. If a future edit drifts
 the weights or the curve, these asserts are what catches it.
 
 UPSTREAM METRICS (screener.js):
-  revTTM 10 | revFwd 10 | epsTTM 15 | epsFwd 15 | peVsG 0 | pegFwd 25 | cashDebt 25
+  revTTM 10 | revFwd 10 | epsTTM 15 | epsFwd 15 | peVsG 0 | pegFwd 25 |
+  cashDebt 25 | netCashMc 0
 
 CURVE: points = clamp(20 * (percentile - 0.22) / (1 - 2*0.22), 0, 20)
 SCORE: round(sum(points * weight/20) / 100 * 100)
@@ -47,6 +48,7 @@ UPSTREAM_METRICS = (
     ("peVsG", 0, False),
     ("pegFwd", 25, False),
     ("cashDebt", 25, True),
+    ("netCashMc", 0, True),
 )
 
 
@@ -79,7 +81,7 @@ def test_points_curve():
     assert _points_from_pct(1.00) == 20.0  # above the clamp caps at full marks
 
 
-def _stock(rev_ttm, rev_fwd, eps_ttm, eps_fwd, pe_fwd, peg, cash, debt):
+def _stock(rev_ttm, rev_fwd, eps_ttm, eps_fwd, pe_fwd, peg, cash, debt, mcap=1000.0):
     return {
         "revTTM": rev_ttm,
         "revFwd": rev_fwd,
@@ -89,6 +91,7 @@ def _stock(rev_ttm, rev_fwd, eps_ttm, eps_fwd, pe_fwd, peg, cash, debt):
         "pegFwd": peg,
         "cash": cash,
         "debt": debt,
+        "marketCap": mcap,
     }
 
 
@@ -177,10 +180,34 @@ def test_no_debt_with_cash_ranks_best_on_balance_sheet():
 
 def test_unscorable_stock_gets_no_score_and_no_tier():
     universe = dict(THREE)
-    universe["BLANK"] = _stock(None, None, None, None, None, None, None, None)
+    universe["BLANK"] = _stock(None, None, None, None, None, None, None, None, mcap=None)
     out = azqato_score_all(universe)
     assert out["BLANK"]["score"] is None
     assert out["BLANK"]["tier"] is None
+    # screener.js reports total 0 (not 6) when nothing was evaluable, so the
+    # Factors cell reads "—" rather than a misleading "0/6".
+    assert out["BLANK"]["total"] == 0, out["BLANK"]["total"]
+
+
+def test_net_cash_over_market_cap_is_ranked_but_never_scored():
+    """netCashMc is upstream's weight-0 context column: it gets a percentile
+    (so the cell can be colored) but must not move the score."""
+    rich = _stock(20.0, 20.0, 25.0, 25.0, 25.0, 2.0, 900.0, 100.0, mcap=1000.0)
+    poor = _stock(20.0, 20.0, 25.0, 25.0, 25.0, 2.0, 900.0, 100.0, mcap=100_000.0)
+    out = azqato_score_all({"RICH": rich, "POOR": poor, **THREE})
+
+    # (900 - 100) / 1000 * 100 = 80% net cash, vs 0.8% for POOR.
+    assert out["RICH"]["parts"]["netCashMc"] > out["POOR"]["parts"]["netCashMc"]
+    # Identical on all six scored metrics -> identical score, despite the gap.
+    assert out["RICH"]["score"] == out["POOR"]["score"], (out["RICH"], out["POOR"])
+    assert out["RICH"]["passes"] == out["POOR"]["passes"]
+    assert out["RICH"]["total"] == 6  # the weight-0 column is not a 7th factor
+
+    # A missing or non-positive market cap leaves it unevaluable, not zero.
+    out = azqato_score_all({"NOMC": _stock(20.0, 20.0, 25.0, 25.0, 25.0, 2.0, 900.0, 100.0, mcap=None), **THREE})
+    assert "netCashMc" not in out["NOMC"]["parts"]
+    out = azqato_score_all({"ZEROMC": _stock(20.0, 20.0, 25.0, 25.0, 25.0, 2.0, 900.0, 100.0, mcap=0.0), **THREE})
+    assert "netCashMc" not in out["ZEROMC"]["parts"]
 
 
 def run_fixture():

@@ -8,15 +8,24 @@
 // perfect 100. Ranks, not buy/sell ratings.
 export type AzqatoTier = 'sp' | 's' | 'a' | 'b' | 'c' | 'f'
 
-// The seven ranked metrics; peVsG (forward P/E vs growth) is a weight-0
-// context ratio — ranked for cell coloring only, never scored.
-export type AzqatoMetricKey = 'revTTM' | 'revFwd' | 'epsTTM' | 'epsFwd' | 'peVsG' | 'pegFwd' | 'cashDebt'
+// The eight ranked metrics; peVsG (forward P/E vs growth) and netCashMc (net
+// cash as a percent of market cap) are weight-0 context ratios — ranked for
+// cell coloring only, never scored.
+export type AzqatoMetricKey =
+  | 'revTTM'
+  | 'revFwd'
+  | 'epsTTM'
+  | 'epsFwd'
+  | 'peVsG'
+  | 'pegFwd'
+  | 'cashDebt'
+  | 'netCashMc'
 
 export interface Azqato {
   score: number | null // 0-100; null when no metric was evaluable
   tier: AzqatoTier | null
   passes: number // metrics in the upper part of the pack (points >= 15)
-  total: number // fixed 6 — a missing metric is a miss, not a pass
+  total: number // 6 — a missing metric is a miss, not a pass; 0 if nothing was evaluable
   parts: Partial<Record<AzqatoMetricKey, number>> // points 0-20; missing key = hard zero
   pctiles: Partial<Record<AzqatoMetricKey, number>> // raw percentile 0..1
   revTTM: number | null
@@ -27,6 +36,7 @@ export interface Azqato {
   pegFwd: number | null
   cash: number | null
   debt: number | null
+  marketCap: number | null // Yahoo marketCap, same snapshot as cash/debt (netCashMc)
   rsi: number | null // scorecard display only — not scored
   pos_52w_pct: number | null // scorecard display only — not scored
 }

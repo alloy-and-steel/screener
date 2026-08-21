@@ -1,7 +1,16 @@
 import type { ColumnDef, VisibilityState } from '@tanstack/react-table'
 import type { Azqato, AzqatoMetricKey, Row } from './types'
 import { DASH, TONE, VerdictPill, compactUsd, num, pct, ptsTone, ratio, signalTone } from './format'
-import { azCashDebt, azPegDisplay, azqatoVerdict, combinedVerdict, grahamVerdict, lynchVerdict, type Verdict } from './score'
+import {
+  azCashDebt,
+  azNetCashMc,
+  azPegDisplay,
+  azqatoVerdict,
+  combinedVerdict,
+  grahamVerdict,
+  lynchVerdict,
+  type Verdict,
+} from './score'
 
 export interface ColMeta {
   summary?: boolean
@@ -184,6 +193,9 @@ export const columns: ColumnDef<Row>[] = [
         meta: { align: 'right' } satisfies ColMeta,
       },
       azMetricLeaf('cashDebt', 'Cash/Debt', (az) => ratio(azCashDebt(az)), { sortOn: azCashDebt }),
+      // Context only (weight 0): colored by its own rank, contributes nothing
+      // to the score, so a missing value is a plain dash rather than red.
+      azMetricLeaf('netCashMc', 'Net cash/Cap', (az) => pct(azNetCashMc(az)), { scored: false, sortOn: azNetCashMc }),
       {
         id: 'azqato_rsi',
         header: 'RSI(14)',

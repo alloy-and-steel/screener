@@ -1396,6 +1396,7 @@ def get_yf_price_and_history(ticker: str) -> dict:
         "az_peg_fwd": None,
         "az_cash": None,
         "az_debt": None,
+        "az_market_cap": None,
         # Phase 6 additions
         "sector": None,
         "beta": None,
@@ -1561,6 +1562,11 @@ def get_yf_price_and_history(ticker: str) -> dict:
         result["az_eps_ttm"] = eg * 100.0 if eg is not None else None
         result["az_cash"] = _safe_float(info.get("totalCash"))
         result["az_debt"] = _safe_float(info.get("totalDebt"))
+        # Yahoo's own marketCap, NOT the Finnhub figure used elsewhere in this
+        # file: net cash / market cap only means anything if the numerator and
+        # denominator come from the same snapshot, and upstream's feed reads
+        # info.marketCap right beside totalCash/totalDebt.
+        result["az_market_cap"] = _safe_float(info.get("marketCap"))
     except Exception as e:
         log.warning(f"yfinance info error for {ticker}: {e}")
         info = {}
@@ -1621,7 +1627,7 @@ def get_combined_data(ticker: str) -> dict:
         closes, high_52w, low_52w,
         long_term_debt, current_assets, current_liabilities,
         az_rev_ttm, az_rev_fwd, az_eps_ttm, az_eps_fwd,
-        az_pe_fwd, az_peg_fwd, az_cash, az_debt,
+        az_pe_fwd, az_peg_fwd, az_cash, az_debt, az_market_cap,
         sector, beta, price_currency, financial_currency,
         dist_52w_high, dist_52w_low, dist_5y_low,
         weeks_since_52w_low, weeks_since_5y_low, short_history,
@@ -1733,6 +1739,7 @@ def get_combined_data(ticker: str) -> dict:
         "az_peg_fwd": yf_data["az_peg_fwd"],
         "az_cash": yf_data["az_cash"],
         "az_debt": yf_data["az_debt"],
+        "az_market_cap": yf_data["az_market_cap"],
         # ── Phase 6/7 additions — sector/beta/currency, price signals, factors ──
         "sector": yf_data["sector"],
         "beta": yf_data["beta"],
@@ -2200,6 +2207,7 @@ def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None =
         "pegFwd": fund["az_peg_fwd"],
         "cash": fund["az_cash"],
         "debt": fund["az_debt"],
+        "marketCap": fund["az_market_cap"],
         "rsi": wilder_rsi(closes),
         "pos_52w_pct": pct_of_52w_range(price, fund.get("low_52w"), fund.get("high_52w")),
     }

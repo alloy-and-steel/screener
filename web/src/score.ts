@@ -55,6 +55,13 @@ export function azCashDebt(az: Azqato): number | null {
   return az.cash > 0 ? Infinity : null
 }
 
+// Net cash (cash minus debt) as a percent of market cap. Positive = net cash,
+// negative = net debt. Context only — ranked for cell color, never scored.
+export function azNetCashMc(az: Azqato): number | null {
+  if (az.cash === null || az.debt === null || az.marketCap === null || az.marketCap <= 0) return null
+  return ((az.cash - az.debt) / az.marketCap) * 100
+}
+
 // Canonical "not valued / no data" marker. A not-valued name (declining or
 // growth-unknown) is shown with this slate label — a distinct signal from a
 // numeric dash, never a real grade. Matches the 'N/A' sentinel the backend
