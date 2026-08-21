@@ -40,8 +40,9 @@ METRIC_MAX_POINTS = 20.0  # every metric's points live on a 0-20 scale
 PASS_POINTS = 15.0  # points >= this = "upper part of the pack" on that metric
 
 # ── Metrics: (key, weight, higher_is_better) ─────────────────────────────────
-# weight > 0 metrics feed the Score; the weight-0 P/E-vs-growth context ratio is
-# ranked only so its cell can be colored by percentile in the UI.
+# weight > 0 metrics feed the Score; the weight-0 context metrics (P/E vs
+# growth, net cash / market cap) are ranked only so their cells can be colored
+# by percentile in the UI. Order matches screener.js METRICS.
 METRICS = (
     ("revTTM", 10, True),
     ("revFwd", 10, True),
@@ -50,6 +51,7 @@ METRICS = (
     ("peVsG", 0, False),
     ("pegFwd", 25, False),
     ("cashDebt", 25, True),
+    ("netCashMc", 0, True),
 )
 TOTAL_WEIGHT = sum(w for _, w, _ in METRICS)  # 100
 SCORED_COUNT = sum(1 for _, w, _ in METRICS if w > 0)  # 6
@@ -116,6 +118,8 @@ def _metric_value(key: str, d: dict) -> float | None:
       - peVsG / pegFwd: unprofitable (fwd P/E <= 0) or shrinking earnings ranks
         WORST (+inf), not best or dropped — Yahoo's PEG is unreliable there.
       - cashDebt: no debt with positive cash is effectively unbounded (+inf).
+      - netCashMc: net cash as a percent of market cap; context only (weight 0),
+        ranked so the column can be percentile-colored.
     """
     if key == "peVsG":
         pe, eg = d.get("peFwd"), d.get("epsFwd")
@@ -134,6 +138,11 @@ def _metric_value(key: str, d: dict) -> float | None:
         if debt == 0:
             return math.inf if cash > 0 else None
         return cash / debt
+    if key == "netCashMc":
+        cash, debt, mcap = d.get("cash"), d.get("debt"), d.get("marketCap")
+        if cash is None or debt is None or mcap is None or mcap <= 0:
+            return None
+        return (cash - debt) / mcap * 100.0
     return d.get(key)
 
 
@@ -146,12 +155,13 @@ def _points_from_pct(p: float) -> float:
 def azqato_score_all(stocks: dict[str, dict]) -> dict[str, dict]:
     """
     Score every stock relative to its loaded peers. `stocks` maps ticker ->
-    metric inputs {revTTM, revFwd, epsTTM, epsFwd, peFwd, pegFwd, cash, debt}
-    (None for any missing input). Returns ticker ->
+    metric inputs {revTTM, revFwd, epsTTM, epsFwd, peFwd, pegFwd, cash, debt,
+    marketCap} (None for any missing input). Returns ticker ->
         score   : 0-100 int, or None if no metric was evaluable
         tier    : 'sp'/'s'/'a'/'b'/'c'/'f', or None when score is None
         passes  : metrics in the upper part of the pack (points >= 15)
-        total   : fixed 6 — a missing metric is a miss, not a pass
+        total   : fixed 6 — a missing metric is a miss, not a pass — or 0 for a
+                  stock with no evaluable metric at all (screener.js parity)
         parts   : per-metric points on the 0-20 scale (missing key = hard zero)
         pctiles : per-metric raw percentile 0..1 (for the breakdown UI)
 
@@ -200,7 +210,7 @@ def azqato_score_all(stocks: dict[str, dict]) -> dict[str, dict]:
         out[t] = {
             "score": _js_round(total_pts / TOTAL_WEIGHT * 100) if have else None,
             "passes": passes,
-            "total": SCORED_COUNT,
+            "total": SCORED_COUNT if have else 0,
             "parts": {k: round(v, 2) for k, v in pts[t].items()},
             "pctiles": {k: round(v, 4) for k, v in pcts[t].items()},
         }

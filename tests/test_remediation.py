@@ -223,6 +223,7 @@ _SYNTHETIC_LOSS_MAKER = {
         "az_peg_fwd": None,
         "az_cash": 50.0,
         "az_debt": 100.0,
+        "az_market_cap": 1000.0,
         "sector": "Industrials",
         "beta": 1.0,
         "price_currency": "USD",
