@@ -2,8 +2,10 @@
 
 ## What this is
 
-A three-system stock screener over the S&P 500, Dow 30, and Nasdaq-100, plus a
-4th **informational** composite score. A Python job fetches fundamentals and
+A three-system stock screener over six pools — the S&P 500, Dow 30, Nasdaq-100,
+and (from azqato) Growth 100 / Value 100 / Dividend 100, the top-100 holdings by
+weight of VUG / VTV / VIG — merged into ONE deduplicated universe (~523 names),
+plus a 4th **informational** composite score. A Python job fetches fundamentals and
 scores every name through **three independent screens** (the pass/fail gate);
 a static React SPA renders the results. Deployed to GitHub Pages on a weekday
 schedule — a public, shareable URL, no account required.
@@ -58,12 +60,16 @@ data.py`): `azqato.py` is a faithful port of the live STOCK model, now at
 upstream (see the Azqato bullet below) and re-ported 2026-08-21. `CLAMP_Q`, tie
 handling, tier cuts, the sentinel ranks, and the feed-generator field
 definitions are all still verified against the live file. Everything else
-published since is inapplicable by design: ETFs (v3.33.0) and International
-(v3.34.x) universes, the MAG 10 toggle (v3.36.0), the ETF reweighting (v3.37.0),
-and the v4.0.0 vanilla-HTML redesign. Also unported: the weight-0 `netCashMc`
-context column (net cash / market cap — colored by rank, contributes nothing to
-the score) and upstream's `grossMargin`/`netMargin` feed fields, which no
-current metric reads. Adopted from it: the v3.37.2 stale-data
+published since is inapplicable by design: the MAG 10 toggle (v3.36.0), the ETF
+reweighting (v3.37.0), and the v4.0.0 vanilla-HTML redesign. His **ETFs**
+(v3.33.0) and **International** (v3.34.x) universes are deliberately NOT
+screened here: ETFs are scored by a wholly different technicals-only model with
+no EPS for Lynch/Graham to value, and International is local-exchange listings
+(`005930.KS`, `7203.T`) that the Finnhub free tier doesn't cover — two of this
+fork's three systems would have nothing to score them with, so they could never
+clear the gate. His **Growth/Value/Dividend 100** pools ARE screened (see
+`INDEX_FETCHERS`). Still unported: upstream's `grossMargin`/`netMargin` feed
+fields, which no current metric reads. Adopted from it: the v3.37.2 stale-data
 lesson — `Toolbar.tsx`'s freshness threshold is a week, not 3 days, since a
 weekday cron leaves Friday's data legitimately ~3 days old on Monday morning.
 To re-check: `git clone --filter=blob:none https://github.com/Azqato/stocks`
@@ -83,7 +89,14 @@ The three screens (decoupled on purpose — disagreement is the signal):
   in ONE cross-sectional pass in `run_screener` after all tickers fetch — they
   are relative, so per-ticker code can't produce them. Pass (for the 3-system
   gate) = tier A or better. RSI(14) + 52-week position are scorecard display
-  only, not scored.
+  only, not scored. **Because the model is relative, the peer set IS part of
+  the score**: azqato's own site loads one pool at a time, so the same name can
+  sit two tiers apart there. `run_screener` therefore also re-scores each pool
+  as its own cross-section into `azqato.byIndex` (score + tier only) — for the
+  Scorecard's "rank inside each pool" panel and nothing else. The grid, the
+  tier, and the gate all read the merged cross-section; measured on the
+  2026-08-20 dataset, Nasdaq-100 names move a mean 12.8 points (65% change
+  tier) between the two, so never conflate them.
 - **Lynch** — growth at a reasonable price (PEG / fair-value bands).
 - **Graham** — rate-adjusted intrinsic value + 8 defensive balance-sheet checks.
 
@@ -186,11 +199,17 @@ already-prefixed dict. The frontend reads those exact keys (`web/src/score.ts`,
 ## Layout
 
 - `stock_screener.py` — universe -> fetch -> score -> `write_json`. Entry
-  point. `get_universe` wraps each Wikipedia fetch in
-  `_fetch_index_with_fallback`, which on failure falls back to that index's
-  membership in the last published `results.json` (`_cached_index_members`) and
-  logs a warning; with no cached members it re-raises rather than screening a
-  partial universe. Also holds the `overall_score()` engine + its `SCORE_*`/`PILLAR_
+  point. `get_universe` walks `INDEX_FETCHERS` (the six pools, in membership
+  order) and wraps each fetch in `_fetch_index_with_fallback`, which on failure
+  falls back to that pool's membership in the last published `results.json`
+  (`_cached_index_members`) and logs a warning; with no cached members it
+  re-raises rather than screening a partial universe. S&P/Dow/Nasdaq come from
+  Wikipedia component-list pages (the parent index articles no longer carry a
+  symbols table — both fetches are pinned by regression tests); Growth/Value/
+  Dividend come from Vanguard's fund-profile holdings API via
+  `_fetch_vanguard_top_holdings`, top 100 by weight, dual share classes
+  collapsed, with a raw-count band so a truncated response aborts instead of
+  quietly shrinking a pool. Also holds the `overall_score()` engine + its `SCORE_*`/`PILLAR_
   WEIGHTS`/`DCF_*` constants, the Phase 6 factor helpers (`_compute_fcf_
   yield`, `_compute_ev_ebit`, `_compute_roic`, `_compute_shareholder_yield`,
   `_compute_price_signals`), the Phase 7 distress/DCF helpers (`_compute_

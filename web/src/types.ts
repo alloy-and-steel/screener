@@ -21,6 +21,20 @@ export type AzqatoMetricKey =
   | 'cashDebt'
   | 'netCashMc'
 
+// The pools the screener covers, in the order stock_screener.INDEX_FETCHERS
+// lists them — each is a universe azqato's own screener ranks separately.
+export const INDEX_NAMES = ['S&P500', 'Dow30', 'Nasdaq100', 'Growth100', 'Value100', 'Dividend100'] as const
+export type IndexName = (typeof INDEX_NAMES)[number]
+
+export const INDEX_LABEL: Record<IndexName, string> = {
+  'S&P500': 'S&P 500',
+  Dow30: 'Dow 30',
+  Nasdaq100: 'Nasdaq 100',
+  Growth100: 'Growth 100',
+  Value100: 'Value 100',
+  Dividend100: 'Dividend 100',
+}
+
 export interface Azqato {
   score: number | null // 0-100; null when no metric was evaluable
   tier: AzqatoTier | null
@@ -28,6 +42,10 @@ export interface Azqato {
   total: number // 6 — a missing metric is a miss, not a pass; 0 if nothing was evaluable
   parts: Partial<Record<AzqatoMetricKey, number>> // points 0-20; missing key = hard zero
   pctiles: Partial<Record<AzqatoMetricKey, number>> // raw percentile 0..1
+  // The same stock re-scored inside each pool it belongs to, the way azqato's
+  // own screener loads one universe at a time. Display only — the score/tier
+  // above (the pooled cross-section) is what the pass gate reads.
+  byIndex?: Partial<Record<IndexName, { score: number | null; tier: AzqatoTier | null }>>
   revTTM: number | null
   revFwd: number | null
   epsTTM: number | null

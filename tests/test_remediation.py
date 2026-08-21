@@ -195,6 +195,93 @@ def test_nasdaq_fetch_uses_component_list_page():
     assert members == {"AAPL", "BRK-B"}
 
 
+def test_dow_fetch_uses_component_list_page():
+    """
+    The main "Dow Jones Industrial Average" article dropped its components
+    table (only a navbox survives), so the old URL matched nothing and every
+    run silently fell back to the last published roster. Pin the page that
+    actually carries the 30 symbols.
+    """
+    original = screener._wiki_tables
+    seen = []
+
+    def fake_tables(url):
+        seen.append(url)
+        return [pd.DataFrame({"Year": [1896]}), pd.DataFrame({"Symbol": ["MSFT", "BRK.B"]})]
+
+    try:
+        screener._wiki_tables = fake_tables
+        members = screener.fetch_dow30()
+    finally:
+        screener._wiki_tables = original
+
+    assert seen == ["https://en.wikipedia.org/wiki/List_of_Dow_Jones_Industrial_Average_companies"]
+    assert members == {"MSFT", "BRK-B"}
+
+
+def _vanguard_payload(entities):
+    return type("R", (), {"raise_for_status": lambda self: None, "json": lambda self: {"fund": {"entity": entities}}})()
+
+
+def _holding(ticker, weight):
+    return {"ticker": ticker, "longName": f"{ticker} Inc.", "percentWeight": weight}
+
+
+def test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes():
+    """
+    azqato's Growth/Value/Dividend pools are the top 100 holdings of VUG/VTV/VIG
+    by portfolio weight, with a duplicate share class dropped only when its kept
+    sibling is present. Mirrors his update_etf_constituents.py.
+    """
+    # 130 synthetic holdings in descending weight, plus GOOG right behind GOOGL.
+    entities = [_holding(f"T{i:03d}", 500.0 - i) for i in range(130)]
+    entities.insert(3, _holding("GOOGL", 497.5))
+    entities.insert(4, _holding("GOOG", 497.4))
+    # A dual class whose sibling is NOT in the fund must be kept, not dropped.
+    entities.insert(5, _holding("HEI.A", 497.3))
+
+    original = screener.requests.get
+    try:
+        screener.requests.get = lambda url, **kw: _vanguard_payload(entities)
+        members = screener.fetch_growth100()
+    finally:
+        screener.requests.get = original
+
+    assert len(members) == 100
+    assert "GOOGL" in members and "GOOG" not in members, "dual class should collapse to the kept sibling"
+    assert "HEI-A" in members, "a dual class with no sibling in the fund stays"
+    assert "T000" in members and "T099" not in members, "the cut must follow weight order, not ticker order"
+
+
+def test_vanguard_pool_rejects_a_truncated_holdings_response():
+    """A short response must abort the pool, never quietly publish a small one."""
+    original = screener.requests.get
+    try:
+        screener.requests.get = lambda url, **kw: _vanguard_payload([_holding(f"T{i:03d}", 100.0 - i) for i in range(40)])
+        try:
+            screener.fetch_value100()
+        except ValueError as exc:
+            assert "unexpected raw holdings count" in str(exc), exc
+        else:
+            raise AssertionError("a 40-entity response should have aborted the pool")
+    finally:
+        screener.requests.get = original
+
+
+def test_every_pool_is_scored_as_its_own_cross_section():
+    """
+    The Azqato model is relative, so each pool has to be re-scored on its own —
+    that is what makes a name comparable to azqato's per-universe views. Pin the
+    pool list and the membership parser that drives it.
+    """
+    assert screener.INDEX_NAMES == ("S&P500", "Dow30", "Nasdaq100", "Growth100", "Value100", "Dividend100")
+    assert len(screener.INDEX_FETCHERS) == len(screener.INDEX_NAMES)
+    assert screener._row_indexes("S&P500, Nasdaq100") == {"S&P500", "Nasdaq100"}
+    assert screener._row_indexes("S&P500,Dow30 ,  Nasdaq100") == {"S&P500", "Dow30", "Nasdaq100"}
+    assert screener._row_indexes("") == set()
+    assert screener._row_indexes(None) == set()
+
+
 # A fully-populated get_combined_data payload for a loss-making name. The
 # process_ticker tests below each copy it and override only what they exercise.
 _SYNTHETIC_LOSS_MAKER = {
@@ -453,6 +540,10 @@ def run_all():
         test_output_guard_rejects_provider_wide_degradation,
         test_output_guard_rejects_misordered_dcf_range,
         test_nasdaq_fetch_uses_component_list_page,
+        test_dow_fetch_uses_component_list_page,
+        test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes,
+        test_vanguard_pool_rejects_a_truncated_holdings_response,
+        test_every_pool_is_scored_as_its_own_cross_section,
         test_negative_eps_is_retained_as_worst_discount_not_a_fetch_error,
         test_valuation_warning_lists_every_applicable_reason,
         test_trap_reasons_are_explicit_and_warning_only,

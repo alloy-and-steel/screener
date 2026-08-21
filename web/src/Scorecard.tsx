@@ -1,6 +1,7 @@
 import type { Row, Azqato } from './types'
+import { INDEX_LABEL, INDEX_NAMES } from './types'
 import { DASH, Dot, Meter, RangeBar, RsiGauge, TONE, num, pct, VerdictPill } from './format'
-import { combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
+import { TIER_LABEL, TIER_TONE, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
   return (
@@ -14,9 +15,41 @@ function DriverRow({ d }: { d: Driver }) {
   )
 }
 
+// The Azqato model is RELATIVE, so a stock's score depends on who it is ranked
+// against. This fork screens one merged universe; azqato's own screener loads
+// one pool at a time, which is why the same name can sit two tiers apart on his
+// site. These are the per-pool re-scores, for reconciliation only — the tier
+// driving the pass gate is the pooled one shown above.
+function AzqatoByIndex({ az }: { az: Azqato }) {
+  const pools = INDEX_NAMES.filter((name) => az.byIndex?.[name]?.score != null)
+  if (!pools.length) return null
+  return (
+    <div>
+      <div className="mb-1 text-[11px] text-slate-500">Rank inside each pool it belongs to</div>
+      <div className="space-y-1">
+        {pools.map((name) => {
+          const p = az.byIndex![name]!
+          return (
+            <div key={name} className="flex items-baseline justify-between gap-3 text-xs">
+              <span className="text-slate-400">{INDEX_LABEL[name]}</span>
+              <span className="tnum text-slate-200">
+                {p.score}/100
+                <span className={`ml-2 ${p.tier ? TONE[TIER_TONE[p.tier]].text : 'text-slate-500'}`}>
+                  {p.tier ? TIER_LABEL[p.tier] : DASH}
+                </span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function AzqatoViz({ az }: { az: Azqato }) {
   return (
     <div className="space-y-2.5">
+      <AzqatoByIndex az={az} />
       <div>
         <div className="mb-1 text-[11px] text-slate-500">RSI(14) — entry timing</div>
         <RsiGauge rsi={az.rsi} />
@@ -26,8 +59,9 @@ function AzqatoViz({ az }: { az: Azqato }) {
         <RangeBar pct={az.pos_52w_pct} />
       </div>
       <div className="text-[10px] leading-tight text-slate-500">
-        Each metric is ranked against every screened name (green = top of the pack, red = bottom; a missing metric scores zero). RSI and
-        52-week position are entry-timing context, not scored.
+        Each metric is ranked against every screened name (green = top of the pack, red = bottom; a missing metric scores zero). The
+        per-pool ranks above re-score the same stock against just that pool, the way azqato&rsquo;s own screener does — the tier driving the
+        pass gate is the all-names one. RSI and 52-week position are entry-timing context, not scored.
       </div>
     </div>
   )
