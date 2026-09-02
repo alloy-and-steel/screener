@@ -220,7 +220,7 @@ def test_dow_fetch_uses_component_list_page():
 
 
 def _vanguard_payload(entities):
-    return type("R", (), {"raise_for_status": lambda self: None, "json": lambda self: {"fund": {"entity": entities}}})()
+    return type("R", (), {"status_code": 200, "headers": {"content-type": "application/json"}, "raise_for_status": lambda self: None, "json": lambda self: {"fund": {"entity": entities}}})()
 
 
 def _holding(ticker, weight):
@@ -240,12 +240,12 @@ def test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes():
     # A dual class whose sibling is NOT in the fund must be kept, not dropped.
     entities.insert(5, _holding("HEI.A", 497.3))
 
-    original = screener.requests.get
+    original = screener._HTTP_GET
     try:
-        screener.requests.get = lambda url, **kw: _vanguard_payload(entities)
+        screener._HTTP_GET = lambda url, **kw: _vanguard_payload(entities)
         members = screener.fetch_growth100()
     finally:
-        screener.requests.get = original
+        screener._HTTP_GET = original
 
     assert len(members) == 100
     assert "GOOGL" in members and "GOOG" not in members, "dual class should collapse to the kept sibling"
@@ -255,9 +255,9 @@ def test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes():
 
 def test_vanguard_pool_rejects_a_truncated_holdings_response():
     """A short response must abort the pool, never quietly publish a small one."""
-    original = screener.requests.get
+    original = screener._HTTP_GET
     try:
-        screener.requests.get = lambda url, **kw: _vanguard_payload([_holding(f"T{i:03d}", 100.0 - i) for i in range(40)])
+        screener._HTTP_GET = lambda url, **kw: _vanguard_payload([_holding(f"T{i:03d}", 100.0 - i) for i in range(40)])
         try:
             screener.fetch_value100()
         except ValueError as exc:
@@ -265,7 +265,7 @@ def test_vanguard_pool_rejects_a_truncated_holdings_response():
         else:
             raise AssertionError("a 40-entity response should have aborted the pool")
     finally:
-        screener.requests.get = original
+        screener._HTTP_GET = original
 
 
 def test_every_pool_is_scored_as_its_own_cross_section():

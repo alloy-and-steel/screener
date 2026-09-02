@@ -24,6 +24,7 @@ import os
 import sys
 import json
 import math
+import time
 import logging
 import requests
 import pandas as pd
@@ -626,6 +627,69 @@ def overall_score(
 # STEP 1 — FETCH UNIVERSE
 # ═════════════════════════════════════════════
 
+# ── Transient-failure policy for every network fetch in this file ────────────
+# One flaky TCP reset or a single 429 must never cost a data point (or, for the
+# universe/FRED anchors, the whole run). Seams are module-level so the offline
+# tests can script responses and capture backoff without touching the network.
+RETRY_ATTEMPTS = 3
+YF_RETRY_ATTEMPTS = 2  # per-ticker yfinance fields: one retry each, so a systemic outage can't multiply ~10 fetches × 515 names into hours of backoff
+RETRY_BASE_DELAY = 2.0  # seconds; doubled each retry
+RETRY_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+RETRY_AFTER_CAP = 90.0  # ceiling on a server-supplied Retry-After
+_HTTP_GET = requests.get
+_RETRY_SLEEP = time.sleep
+
+
+def _http_get_with_retries(url: str, *, what: str, params=None, headers=None, timeout=15, attempts: int = RETRY_ATTEMPTS):
+    """
+    GET with exponential backoff on connection errors, timeouts, 5xx, and 429
+    (honouring Retry-After, capped). Returns the first response with any other
+    status — the caller still owns raise_for_status/status handling, so a 404
+    stays an immediate, loud failure. When every attempt is retryable, returns
+    the last response (if any) or re-raises the last network error.
+    """
+    last_exc = None
+    resp = None
+    for attempt in range(attempts):
+        try:
+            resp = _HTTP_GET(url, params=params, headers=headers, timeout=timeout)
+        except requests.RequestException as exc:
+            last_exc = exc
+            resp = None
+            if attempt < attempts - 1:
+                delay = RETRY_BASE_DELAY * (2**attempt)
+                log.warning(f"{what}: {exc!r}; retrying in {delay:.0f}s ({attempt + 1}/{attempts})")
+                _RETRY_SLEEP(delay)
+            continue
+        if resp.status_code not in RETRY_STATUS_CODES:
+            return resp
+        if attempt < attempts - 1:
+            delay = _safe_float(resp.headers.get("Retry-After")) or RETRY_BASE_DELAY * (2**attempt)
+            delay = min(max(delay, 0.0), RETRY_AFTER_CAP)  # a buggy negative Retry-After must not reach time.sleep
+            log.warning(f"{what}: HTTP {resp.status_code}; retrying in {delay:.0f}s ({attempt + 1}/{attempts})")
+            _RETRY_SLEEP(delay)
+    if resp is not None:
+        return resp
+    raise last_exc
+
+
+def _call_with_retries(fn, *, what: str, attempts: int = RETRY_ATTEMPTS):
+    """
+    Call `fn()` with exponential backoff on ANY exception; re-raises the last.
+    For non-requests clients (fredapi, yfinance) where there is no response
+    object to inspect — the failure mode is a raised exception either way.
+    """
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except Exception as exc:
+            if attempt == attempts - 1:
+                raise
+            delay = RETRY_BASE_DELAY * (2**attempt)
+            log.warning(f"{what}: {exc!r}; retrying in {delay:.0f}s ({attempt + 1}/{attempts})")
+            _RETRY_SLEEP(delay)
+
+
 # Wikipedia blocks requests that don't include a browser-like User-Agent.
 # We fetch the HTML ourselves with requests, then pass it to pd.read_html().
 WIKI_HEADERS = {
@@ -637,7 +701,7 @@ def _wiki_tables(url: str) -> list:
     """Fetch a Wikipedia page and return all HTML tables as a list of DataFrames."""
     from io import StringIO
 
-    resp = requests.get(url, headers=WIKI_HEADERS, timeout=15)
+    resp = _http_get_with_retries(url, what=f"Wikipedia {url}", headers=WIKI_HEADERS, timeout=15)
     resp.raise_for_status()
     return pd.read_html(StringIO(resp.text))
 
@@ -705,8 +769,13 @@ DUAL_CLASS_DROP = {
 
 def _fetch_vanguard_top_holdings(fund: str) -> set:
     """Top `VANGUARD_TOP_N` holdings of a Vanguard ETF, by portfolio weight."""
-    resp = requests.get(VANGUARD_HOLDINGS_API.format(fund=fund), headers=VANGUARD_HEADERS, timeout=30)
+    resp = _http_get_with_retries(VANGUARD_HOLDINGS_API.format(fund=fund), what=f"Vanguard {fund} holdings", headers=VANGUARD_HEADERS, timeout=30)
     resp.raise_for_status()
+    # Vanguard's edge answers bot checks with a 200 text/html app shell; name
+    # that plainly instead of letting .json() die on "Expecting value: line 1".
+    content_type = str(resp.headers.get("content-type") or "")
+    if "json" not in content_type.lower():
+        raise ValueError(f"{fund}: Vanguard returned non-JSON (HTTP {resp.status_code}, content-type {content_type or 'unknown'}) — likely a bot challenge")
     entities = resp.json()["fund"]["entity"]
     if not (VANGUARD_RAW_MIN <= len(entities) <= VANGUARD_RAW_MAX):
         raise ValueError(f"{fund}: unexpected raw holdings count {len(entities)} (expected {VANGUARD_RAW_MIN}-{VANGUARD_RAW_MAX})")
@@ -848,7 +917,7 @@ def fetch_aaa_yield() -> float:
     """Fetch the latest Moody's AAA corporate bond yield from FRED."""
     log.info("Fetching AAA yield from FRED...")
     fred = Fred(api_key=FRED_API_KEY)
-    series = fred.get_series(FRED_AAA_SERIES)
+    series = _call_with_retries(lambda: fred.get_series(FRED_AAA_SERIES), what="FRED AAA yield")
     yield_val = float(series.dropna().iloc[-1])
     log.info(f"  → AAA yield: {yield_val:.2f}%")
     return yield_val
@@ -858,7 +927,7 @@ def fetch_risk_free_rate() -> float:
     """Fetch the latest 10-year Treasury constant-maturity rate from FRED (FCFF DCF cost of equity)."""
     log.info("Fetching 10-year Treasury rate from FRED...")
     fred = Fred(api_key=FRED_API_KEY)
-    series = fred.get_series(FRED_RISK_FREE_SERIES)
+    series = _call_with_retries(lambda: fred.get_series(FRED_RISK_FREE_SERIES), what="FRED 10Y Treasury")
     rate = float(series.dropna().iloc[-1])
     log.info(f"  → 10-year Treasury rate: {rate:.2f}%")
     return rate
@@ -888,8 +957,9 @@ def get_finnhub_metrics(ticker: str) -> dict:
     Returns the raw metric dict, or empty dict on failure.
     """
     try:
-        r = requests.get(
+        r = _http_get_with_retries(
             f"{FINNHUB_BASE}/stock/metric",
+            what=f"Finnhub {ticker}",
             params={"symbol": ticker, "metric": "all", "token": FINNHUB_API_KEY},
             timeout=15,
         )
@@ -1524,111 +1594,117 @@ def get_yf_price_and_history(ticker: str) -> dict:
         "cashflow_df": None,
     }
     t = yf.Ticker(ticker)
-    # Raw (newest-first) statement frames, captured once below and reused for
-    # both the Phase 6 factor lookups and the Phase 7 Piotroski/Altman inputs
-    # (yfinance caches these per-Ticker-instance, but there's no reason to
-    # re-trigger the property getter a second time for the same object).
-    inc = bs = cf = None
 
-    try:
-        # ── Price ───────────────────────────────────────────────────────
-        fi = t.fast_info
-        result["price"] = getattr(fi, "last_price", None)
-
-        # ── Sector/beta/currency — guarded separately; .info can raise on
-        #    delisted tickers independently of the price fetch ───────────
+    def _yf_fetch(what: str, fn, attempts: int = YF_RETRY_ATTEMPTS):
+        """
+        One retried yfinance access. A still-failing fetch logs and yields None
+        so every other field survives — the fields really are independent now
+        (the old umbrella try chained four fetches, so one transient failure
+        lost everything after it). A crash while PARSING a fetched frame is not
+        caught here: that means our shape assumptions broke, and the loud
+        per-ticker crash guard in run_screener is the honest place for it.
+        """
         try:
-            info = t.info or {}
-            result["sector"] = info.get("sector")
-            result["beta"] = _safe_float(info.get("beta"))
-            result["price_currency"] = info.get("currency")
-            result["financial_currency"] = info.get("financialCurrency")
-        except Exception:
-            result["sector"] = None
+            return _call_with_retries(fn, what=f"yfinance {what} {ticker}", attempts=attempts)
+        except Exception as e:
+            log.warning(f"yfinance {what} error for {ticker}: {e}")
+            return None
 
-        # ── Historical EPS (for 10yr defensive checks) + EBIT/interest/tax ──
-        inc = t.income_stmt
-        if inc is not None and not inc.empty:
-            inc_sorted = inc.sort_index(axis=1)  # oldest→newest
-            for label in ["Basic EPS", "Diluted EPS", "Basic Eps", "Diluted Eps"]:
-                if label in inc_sorted.index:
-                    result["annual_eps"] = [_safe_float(v) for v in inc_sorted.loc[label].values]
-                    break
-            # EBIT/interest/tax/diluted-shares from the RAW (newest-first) frame.
-            result["ebit"] = _yf_row(inc, EBIT_LABELS)
-            result["interest_expense"] = _yf_row(inc, INTEREST_EXPENSE_LABELS)
-            result["tax_rate"] = _effective_tax_rate(inc)
-            result["diluted_shares"] = _yf_row(inc, DILUTED_SHARES_LABELS)
+    # ── Price — retried hardest: no price turns the whole row into an error
+    #    row, so this is the one field a transient failure must not lose.
+    #    Fresh Ticker per attempt: yfinance caches a failed fast_info on the
+    #    instance, so re-reading the same property can't recover. Cost: a
+    #    genuinely delisted name burns the full backoff once per run.
+    def _fetch_price():
+        nonlocal t
+        t = yf.Ticker(ticker)
+        price = _safe_float(getattr(t.fast_info, "last_price", None))
+        if price is None:
+            raise ValueError("no last_price in fast_info")
+        return price
 
-        # ── Dividend history ────────────────────────────────────────────
-        # Keep up to 25 years so the Graham defensive check can test the full
-        # 20-year uninterrupted record. resample("YE") fills a gap year inside the
-        # span with 0, so an interruption surfaces as a zero bin (not dropped).
-        divs = t.dividends
-        if divs is not None and not divs.empty:
-            divs.index = divs.index.tz_localize(None) if divs.index.tz else divs.index
-            annual_divs = divs.resample("YE").sum()
-            result["annual_dividends"] = [float(v) for v in annual_divs.values[-25:]]
+    result["price"] = _yf_fetch("price", _fetch_price, attempts=RETRY_ATTEMPTS)
 
-        # ── 5-year weekly history → Phase 6 price distance/recency signals ──
-        try:
-            hist_5y = t.history(period="5y", interval="1wk")
-        except Exception:
-            hist_5y = pd.DataFrame()
-        if hist_5y is not None and not hist_5y.empty and "Close" in hist_5y.columns and result["price"]:
-            signals = _compute_price_signals(hist_5y["Close"], result["price"])
-            result["dist_52w_high"] = signals["dist_52w_high"]
-            result["dist_52w_low"] = signals["dist_52w_low"]
-            result["dist_5y_low"] = signals["dist_5y_low"]
-            result["weeks_since_52w_low"] = signals["weeks_since_52w_low"]
-            result["weeks_since_5y_low"] = signals["weeks_since_5y_low"]
-            result["short_history"] = signals["short_history"]
+    # ── .info — fetched ONCE for both the sector/beta/currency fields and the
+    #    azqato inputs below (it used to be pulled twice; a transient failure
+    #    on this single call would zero every azqato metric, i.e. tier F) ────
+    info = _yf_fetch("info", lambda: t.info) or {}
+    result["sector"] = info.get("sector")
+    result["beta"] = _safe_float(info.get("beta"))
+    result["price_currency"] = info.get("currency")
+    result["financial_currency"] = info.get("financialCurrency")
 
-        # ── Cashflow statement — OCF and capex (Phase 6/7) ───────────────
-        cf = t.cashflow
-        if cf is not None and not cf.empty:
-            result["ocf"] = _yf_row(cf, OCF_LABELS)
-            result["capex"] = _yf_row(cf, CAPEX_LABELS)
+    # ── Historical EPS (for 10yr defensive checks) + EBIT/interest/tax ──
+    inc = _yf_fetch("income statement", lambda: t.income_stmt)
+    if inc is not None and not inc.empty:
+        inc_sorted = inc.sort_index(axis=1)  # oldest→newest
+        for label in ["Basic EPS", "Diluted EPS", "Basic Eps", "Diluted Eps"]:
+            if label in inc_sorted.index:
+                result["annual_eps"] = [_safe_float(v) for v in inc_sorted.loc[label].values]
+                break
+        # EBIT/interest/tax/diluted-shares from the RAW (newest-first) frame.
+        result["ebit"] = _yf_row(inc, EBIT_LABELS)
+        result["interest_expense"] = _yf_row(inc, INTEREST_EXPENSE_LABELS)
+        result["tax_rate"] = _effective_tax_rate(inc)
+        result["diluted_shares"] = _yf_row(inc, DILUTED_SHARES_LABELS)
 
-    except Exception as e:
-        log.warning(f"yfinance error for {ticker}: {e}")
+    # ── Dividend history ────────────────────────────────────────────
+    # Keep up to 25 years so the Graham defensive check can test the full
+    # 20-year uninterrupted record. resample("YE") fills a gap year inside the
+    # span with 0, so an interruption surfaces as a zero bin (not dropped).
+    divs = _yf_fetch("dividends", lambda: t.dividends)
+    if divs is not None and not divs.empty:
+        divs.index = divs.index.tz_localize(None) if divs.index.tz else divs.index
+        annual_divs = divs.resample("YE").sum()
+        result["annual_dividends"] = [float(v) for v in annual_divs.values[-25:]]
+
+    # ── 5-year weekly history → Phase 6 price distance/recency signals ──
+    hist_5y = _yf_fetch("5y history", lambda: t.history(period="5y", interval="1wk"))
+    if hist_5y is not None and not hist_5y.empty and "Close" in hist_5y.columns and result["price"]:
+        signals = _compute_price_signals(hist_5y["Close"], result["price"])
+        result["dist_52w_high"] = signals["dist_52w_high"]
+        result["dist_52w_low"] = signals["dist_52w_low"]
+        result["dist_5y_low"] = signals["dist_5y_low"]
+        result["weeks_since_52w_low"] = signals["weeks_since_52w_low"]
+        result["weeks_since_5y_low"] = signals["weeks_since_5y_low"]
+        result["short_history"] = signals["short_history"]
+
+    # ── Cashflow statement — OCF and capex (Phase 6/7) ───────────────
+    cf = _yf_fetch("cashflow", lambda: t.cashflow)
+    if cf is not None and not cf.empty:
+        result["ocf"] = _yf_row(cf, OCF_LABELS)
+        result["capex"] = _yf_row(cf, CAPEX_LABELS)
 
     # ── 1y daily bars → RSI(14) from closes + 52-week range from intraday
     #    High/Low. auto_adjust=False keeps NOMINAL prices, matching the raw
     #    fast_info last price and the Finviz/azqato nominal 52-week convention ──
-    try:
-        hist = t.history(period="1y", auto_adjust=False)
-        if hist is not None and not hist.empty and "Close" in hist.columns:
-            result["closes"] = [float(c) for c in hist["Close"].dropna().tolist()]
-            if "High" in hist.columns and not hist["High"].dropna().empty:
-                result["high_52w"] = float(hist["High"].dropna().max())
-            if "Low" in hist.columns and not hist["Low"].dropna().empty:
-                result["low_52w"] = float(hist["Low"].dropna().min())
-    except Exception as e:
-        log.warning(f"yfinance history error for {ticker}: {e}")
+    hist = _yf_fetch("1y history", lambda: t.history(period="1y", auto_adjust=False))
+    if hist is not None and not hist.empty and "Close" in hist.columns:
+        result["closes"] = [float(c) for c in hist["Close"].dropna().tolist()]
+        if "High" in hist.columns and not hist["High"].dropna().empty:
+            result["high_52w"] = float(hist["High"].dropna().max())
+        if "Low" in hist.columns and not hist["Low"].dropna().empty:
+            result["low_52w"] = float(hist["Low"].dropna().min())
 
     # ── Graham working-capital rows + Phase 6/7 balance-sheet fields ────
     # Best-effort: any gap leaves None so the check is unevaluable rather than
     # fabricated (financial-integrity rule).
-    try:
-        bs = t.balance_sheet
-        if bs is not None and not bs.empty:
-            recent = bs.columns[0]  # most recent period
-            result["long_term_debt"] = _bs_lookup(bs, recent, LONG_TERM_DEBT_BS_ROWS)
-            result["current_assets"] = _bs_lookup(bs, recent, CURRENT_ASSETS_BS_ROWS)
-            result["current_liabilities"] = _bs_lookup(bs, recent, CURRENT_LIABILITIES_BS_ROWS)
-            result["total_debt"] = _extract_total_debt(bs)
-            result["prior_total_debt"] = _extract_total_debt_prev(bs)
-            result["cash"] = _yf_row(bs, CASH_LABELS)
-            result["equity"] = _yf_row(bs, EQUITY_LABELS)
-            for label in SHARES_LABELS:
-                if label in bs.index:
-                    shares_row = bs.loc[label]
-                    result["shares_now"] = _safe_float(shares_row.iloc[0]) if len(shares_row) >= 1 else None
-                    result["shares_prev"] = _safe_float(shares_row.iloc[1]) if len(shares_row) >= 2 else None
-                    break
-    except Exception as e:
-        log.warning(f"yfinance balance sheet error for {ticker}: {e}")
+    bs = _yf_fetch("balance sheet", lambda: t.balance_sheet)
+    if bs is not None and not bs.empty:
+        recent = bs.columns[0]  # most recent period
+        result["long_term_debt"] = _bs_lookup(bs, recent, LONG_TERM_DEBT_BS_ROWS)
+        result["current_assets"] = _bs_lookup(bs, recent, CURRENT_ASSETS_BS_ROWS)
+        result["current_liabilities"] = _bs_lookup(bs, recent, CURRENT_LIABILITIES_BS_ROWS)
+        result["total_debt"] = _extract_total_debt(bs)
+        result["prior_total_debt"] = _extract_total_debt_prev(bs)
+        result["cash"] = _yf_row(bs, CASH_LABELS)
+        result["equity"] = _yf_row(bs, EQUITY_LABELS)
+        for label in SHARES_LABELS:
+            if label in bs.index:
+                shares_row = bs.loc[label]
+                result["shares_now"] = _safe_float(shares_row.iloc[0]) if len(shares_row) >= 1 else None
+                result["shares_prev"] = _safe_float(shares_row.iloc[1]) if len(shares_row) >= 2 else None
+                break
 
     # ── Phase 7: store the raw (newest-first) frames for Piotroski / Altman ──
     # Reuses the `inc`/`bs`/`cf` frames already fetched above (NOT the
@@ -1652,33 +1728,21 @@ def get_yf_price_and_history(ticker: str) -> dict:
     #   pegFwd         = Yahoo pegRatio (tracks SA's long-term-growth PEG),
     #                    falling back to trailingPegRatio, then peFwd / epsFwd
     # Any gap leaves None so the metric is unevaluable rather than fabricated.
-    try:
-        info = t.info
-        rg = _safe_float(info.get("revenueGrowth"))
-        result["az_rev_ttm"] = rg * 100.0 if rg is not None else None
-        eg = _safe_float(info.get("earningsGrowth"))
-        result["az_eps_ttm"] = eg * 100.0 if eg is not None else None
-        result["az_cash"] = _safe_float(info.get("totalCash"))
-        result["az_debt"] = _safe_float(info.get("totalDebt"))
-        # Yahoo's own marketCap, NOT the Finnhub figure used elsewhere in this
-        # file: net cash / market cap only means anything if the numerator and
-        # denominator come from the same snapshot, and upstream's feed reads
-        # info.marketCap right beside totalCash/totalDebt.
-        result["az_market_cap"] = _safe_float(info.get("marketCap"))
-    except Exception as e:
-        log.warning(f"yfinance info error for {ticker}: {e}")
-        info = {}
+    # Reads the retried `info` dict fetched once above.
+    rg = _safe_float(info.get("revenueGrowth"))
+    result["az_rev_ttm"] = rg * 100.0 if rg is not None else None
+    eg = _safe_float(info.get("earningsGrowth"))
+    result["az_eps_ttm"] = eg * 100.0 if eg is not None else None
+    result["az_cash"] = _safe_float(info.get("totalCash"))
+    result["az_debt"] = _safe_float(info.get("totalDebt"))
+    # Yahoo's own marketCap, NOT the Finnhub figure used elsewhere in this
+    # file: net cash / market cap only means anything if the numerator and
+    # denominator come from the same snapshot, and upstream's feed reads
+    # info.marketCap right beside totalCash/totalDebt.
+    result["az_market_cap"] = _safe_float(info.get("marketCap"))
 
-    earn_est = None
-    rev_est = None
-    try:
-        earn_est = t.earnings_estimate
-    except Exception as e:
-        log.warning(f"yfinance earnings estimate error for {ticker}: {e}")
-    try:
-        rev_est = t.revenue_estimate
-    except Exception as e:
-        log.warning(f"yfinance revenue estimate error for {ticker}: {e}")
+    earn_est = _yf_fetch("earnings estimate", lambda: t.earnings_estimate)
+    rev_est = _yf_fetch("revenue estimate", lambda: t.revenue_estimate)
 
     def _estimate(df, col) -> float | None:
         try:
@@ -2554,7 +2618,20 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float
     for i, row in universe.iterrows():
         ticker = row["ticker"]
         log.info(f"[{i + 1}/{total}] Processing {ticker}...")
-        result = process_ticker(ticker, aaa_yield, risk_free_rate)
+        # One name with a surprise data shape must not abort the other ~520:
+        # it becomes a visible error row, and the write_json publish guards
+        # still abort the run if such rows are widespread.
+        try:
+            result = process_ticker(ticker, aaa_yield, risk_free_rate)
+        except Exception as exc:
+            log.exception(f"{ticker}: processing failed")
+            result = {
+                "Ticker": ticker,
+                "Error": f"Processing failed: {type(exc).__name__}: {exc}",
+                # Asserted, not observed — conservative: the crash row counts
+                # AGAINST the Finnhub-coverage publish guard, never for it.
+                "Provider_Finnhub_OK": False,
+            }
         result["Indexes"] = row["indexes"]
         results.append(result)
 

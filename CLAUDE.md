@@ -300,5 +300,13 @@ After that: the weekday cron (`0 11 * * 1-5`) refreshes data and auto-deploys (v
 - Names with no usable (positive) EPS or non-positive/uncomputable growth are
   kept **visible** with valuation N/A (Graham-defensive + Azqato still
   computed — the azqato model ranks loss-makers worst on valuation instead of
-  dropping them, matching the upstream screener). Only no-price names are
-  hard-excluded as error rows.
+  dropping them, matching the upstream screener). Error rows are only no-price
+  names and per-ticker crashes (`run_screener` catches a `process_ticker`
+  exception into a visible `Processing failed:` row; the publish guards catch
+  it going wide).
+- **Every network fetch retries with exponential backoff** —
+  `_http_get_with_retries` (Wikipedia/Vanguard/Finnhub; retries 5xx/429
+  honoring Retry-After) and `_call_with_retries` (FRED, and each yfinance
+  field via `_yf_fetch`, one retry each). Offline tests fake HTTP by patching
+  the seams `screener._HTTP_GET` and `screener._RETRY_SLEEP` — patching
+  `requests.get` no longer intercepts anything and hits the real network.
