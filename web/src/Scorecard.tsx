@@ -3,6 +3,7 @@ import type { Row, Azqato } from './types'
 import { INDEX_LABEL, INDEX_NAMES } from './types'
 import { DASH, Dot, RangeBar, RsiGauge, TONE, capB, compactUsd, num, pct, usd } from './format'
 import { inPool } from './filters'
+import { selectionView, type EntryView } from './selection'
 import { TIER_LABEL, TIER_TONE, azNetCashMc, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
@@ -139,6 +140,49 @@ function OverallPanel({ row }: { row: Row }) {
 
 // Full detail for one name, shown in a sheet over the card grid: bottom sheet
 // on phones, right-hand panel on wide screens. Escape / backdrop / ✕ close it.
+function signed(v: number | null): string {
+  return v === null ? DASH : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`
+}
+
+// When the screen picked this stock (2+ screens) and what it has done since.
+// "Latest entry" appears only after a drop-out and return; the first entry is
+// never overwritten.
+function SelectionPanel({ row }: { row: Row }) {
+  const v = selectionView(row, new Date())
+  if (!v) return null
+  const entries: [string, EntryView][] = [
+    ['First picked', v.first],
+    ...(v.reentry ? [['Back on the list', v.reentry] as [string, EntryView]] : []),
+  ]
+  return (
+    <div className="mt-3 rounded-2xl bg-surface-1 p-4 ring-1 ring-inset ring-white/[0.07]">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Since selected</div>
+        <div className={`text-xs ${v.selected ? 'text-emerald-300' : 'text-slate-500'}`}>
+          {v.selected ? 'On the 2+ list now' : 'Not on the 2+ list now'}
+        </div>
+      </div>
+      <dl className="space-y-1.5">
+        {entries.map(([label, e]) => (
+          <div key={label} className="flex items-baseline justify-between gap-3 text-sm">
+            <dt className="text-slate-400">
+              {label} <span className="text-slate-500">{e.date}</span>
+            </dt>
+            <dd className="tnum text-right text-slate-100">
+              {usd(e.price)}
+              <span
+                className={`ml-2 font-medium ${e.change === null ? 'text-slate-500' : e.change >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}
+              >
+                {signed(e.change)}
+              </span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
 // The raw inputs behind the verdicts — what the old full-width grid showed —
 // so a fair value can be traced back to the growth and earnings it came from.
 function FundamentalsPanel({ row }: { row: Row }) {
@@ -249,6 +293,7 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
                   <Card key={v.system} v={v} row={row} />
                 ))}
               </div>
+              <SelectionPanel row={row} />
               <OverallPanel row={row} />
               <FundamentalsPanel row={row} />
             </>

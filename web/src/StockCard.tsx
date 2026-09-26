@@ -2,6 +2,7 @@ import { memo } from 'react'
 import type { Row } from './types'
 import { DASH, TONE, capB, num, pct, usd, type Tone } from './format'
 import { azPegDisplay, combinedVerdict, verdicts } from './score'
+import { selectionView, type EntryView } from './selection'
 
 function signedPct(v: number | null | undefined): string {
   if (typeof v !== 'number' || !Number.isFinite(v)) return DASH
@@ -43,6 +44,15 @@ function RangeStrip({ p }: { p: number | null | undefined }) {
   )
 }
 
+function EntryLine({ label, e }: { label: string; e: EntryView }) {
+  return (
+    <div className="tnum truncate">
+      {label} {e.date} at <span className="text-slate-300">{usd(e.price)}</span>
+      {e.change !== null ? <span className={`ml-1.5 font-medium ${signTone(e.change)}`}>{signedPct(e.change)}</span> : null}
+    </div>
+  )
+}
+
 // Overall is informational (not part of the pass gate), so it is drawn as a
 // quiet ring rather than a verdict chip.
 function OverallRing({ score }: { score: number | null | undefined }) {
@@ -77,6 +87,7 @@ function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void
   const c = combinedVerdict(row)
   const az = row.azqato
   const aligned = c.passCount === 3
+  const sel = selectionView(row, new Date())
 
   return (
     <button
@@ -134,6 +145,14 @@ function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void
         <Stat label="Lynch disc" value={signedPct(row.Lynch_Lynch_Discount_Pct)} className={signTone(row.Lynch_Lynch_Discount_Pct)} />
         <Stat label="Div yield" value={pct(row.DivYield_Pct)} />
       </div>
+
+      {sel ? (
+        <div className="-mt-1 space-y-0.5 text-[12px] text-slate-500">
+          <EntryLine label="Picked" e={sel.first} />
+          {sel.reentry ? <EntryLine label="Back on" e={sel.reentry} /> : null}
+          {!sel.selected ? <div>Not on the 2+ list now</div> : null}
+        </div>
+      ) : null}
 
       <div className="mt-auto flex items-center gap-4 border-t border-white/[0.05] pt-3">
         <div className="min-w-0 flex-1">

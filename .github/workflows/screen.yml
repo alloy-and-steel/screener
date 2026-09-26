@@ -66,7 +66,11 @@ jobs:
         #      fallback has a last-known roster if Wikipedia is down or renames a
         #      table (the file is gitignored on master, so without this seed the
         #      fallback is a no-op and a Wikipedia outage kills the whole run).
-        #   2. Carries prior monthly snapshots forward past the force-push.
+        #   2. Seeds web/public/data/selections.json, the selection ledger
+        #      (selections.py): the first/latest entry price of every stock the
+        #      screen has picked. It lives ONLY here, so a run without the seed
+        #      would restart everyone's history from today.
+        #   3. Carries prior monthly snapshots forward past the force-push.
         # Absent on the bootstrap run -- no data branch yet, so no fallback.
         env:
           GH_TOKEN: ${{ github.token }}
@@ -82,6 +86,14 @@ jobs:
               cp "${prev_results}" web/public/data/results.json
               echo "Seeded previous results.json for the constituent fallback."
             fi
+            prev_ledger="${RUNNER_TEMP}/data-branch-prev/web/public/data/selections.json"
+            if [ -s "${prev_ledger}" ]; then
+              mkdir -p web/public/data
+              cp "${prev_ledger}" web/public/data/selections.json
+              echo "Seeded the selection ledger."
+            else
+              echo "::warning::No selections.json on the data branch -- the ledger restarts with this run."
+            fi
           else
             echo "No data branch yet (bootstrap run) -- constituent fallback unavailable."
           fi
@@ -92,7 +104,7 @@ jobs:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: python stock_screener.py
 
-      - name: Publish results.json + stats.json (+ monthly snapshot) to the data branch
+      - name: Publish results.json + stats.json + selections.json (+ monthly snapshot) to the data branch
         env:
           GH_TOKEN: ${{ github.token }}
           IS_FIRST_WEEKDAY: ${{ steps.check-date.outputs.is_first_weekday }}
@@ -102,6 +114,7 @@ jobs:
           # this is a last non-empty check before the data leaves the runner.
           test -s web/public/data/results.json
           test -s web/public/data/stats.json
+          test -s web/public/data/selections.json
           ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           today="$(date -u +%Y-%m-%d)"
           work="${RUNNER_TEMP}/data-branch"
@@ -135,6 +148,7 @@ jobs:
 
           cp web/public/data/results.json "${work}/web/public/data/results.json"
           cp web/public/data/stats.json "${work}/web/public/data/stats.json"
+          cp web/public/data/selections.json "${work}/web/public/data/selections.json"
 
           if [ "${IS_FIRST_WEEKDAY}" = "true" ]; then
             mkdir -p "${work}/web/public/data/snapshots"
@@ -158,4 +172,4 @@ jobs:
           # Force-push a fresh single commit: the data branch is latest-only
           # (except for snapshot files, restored above before this commit).
           git push -fq "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
-          echo "Pushed results.json + stats.json to the data branch (${ts})."
+          echo "Pushed results.json + stats.json + selections.json to the data branch (${ts})."

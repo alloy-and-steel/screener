@@ -35,6 +35,7 @@ from dotenv import load_dotenv
 from scipy.optimize import brentq
 
 from azqato import azqato_score_all, pct_of_52w_range, wilder_rsi
+import selections
 
 # Load .env when running locally; no-op in GitHub Actions (env vars already set)
 load_dotenv()
@@ -2684,6 +2685,7 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float
 
 OUTPUT_PATH = Path("web/public/data/results.json")
 STATS_PATH = Path("web/public/data/stats.json")
+SELECTIONS_PATH = Path("web/public/data/selections.json")
 SNAPSHOTS_DIR = Path("web/public/data/snapshots")
 SNAPSHOTS_INDEX = SNAPSHOTS_DIR / "index.json"
 
@@ -2877,8 +2879,24 @@ def write_json(df: pd.DataFrame) -> None:
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     rows = json.loads(df.to_json(orient="records"))
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Selection ledger: record the price of every newly selected (>= 2 screens)
+    # name, then attach each name's history to its row. screen.yml seeds the
+    # previous ledger from the data branch; with none there, this run starts it.
+    try:
+        ledger = selections.load_ledger(SELECTIONS_PATH)
+        if ledger is None:
+            log.warning(f"No selection ledger at {SELECTIONS_PATH} -- starting a new one with this run")
+            ledger = selections.empty_ledger()
+        ledger = selections.update_ledger(ledger, rows, generated_at)
+    except ValueError as exc:
+        log.error(f"Aborting JSON write: selection ledger: {exc}")
+        sys.exit(1)
+    selections.annotate_rows(rows, ledger)
+
     payload = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": generated_at,
         "rows": rows,
     }
     OUTPUT_PATH.write_text(
@@ -2886,6 +2904,9 @@ def write_json(df: pd.DataFrame) -> None:
         encoding="utf-8",
     )
     log.info(f"Results written to {OUTPUT_PATH} ({len(rows)} rows)")
+    selections.save_ledger(SELECTIONS_PATH, ledger)
+    n_sel = sum(1 for e in ledger["tickers"].values() if e["selected"])
+    log.info(f"Selection ledger written to {SELECTIONS_PATH} ({n_sel} selected now, {len(ledger['tickers'])} ever)")
 
     stats = _compute_stats(df)
     STATS_PATH.parent.mkdir(parents=True, exist_ok=True)

@@ -169,7 +169,7 @@ function lynchTagline(t: Tone): string {
 
 function grahamTagline(t: Tone): string {
   if (t === 'slate') return 'Not valued — needs positive growth'
-  return t === 'green' ? 'Below intrinsic value, defensive' : t === 'yellow' ? 'Near fair value' : 'Above intrinsic value'
+  return t === 'green' ? 'Below intrinsic value' : t === 'yellow' ? 'Near fair value' : 'Above intrinsic value'
 }
 
 export interface VerdictLine {

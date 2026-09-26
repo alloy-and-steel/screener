@@ -125,8 +125,24 @@ export interface Row {
   Shareholder_Yield_Pct?: number | null
   scores?: Scores
 
+  // Selection ledger (selections.py): when this stock first passed 2+ screens
+  // and at what price, plus its latest entry after any drop-out. Null/absent
+  // for a stock never selected.
+  selection?: Selection | null
+
   // Tolerate the full set of emitted columns without enumerating every one.
   [key: string]: unknown
+}
+
+export interface EntryMark {
+  at: string // generated_at of the run
+  price: number | null
+}
+
+export interface Selection {
+  first: EntryMark
+  latest: EntryMark
+  selected: boolean
 }
 
 export interface Scores {

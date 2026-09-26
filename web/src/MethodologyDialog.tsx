@@ -103,7 +103,9 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
             verdict, its drivers, an RSI gauge, the per-pool Azqato ranks and the raw fundamentals behind them. Relax the <em>All 3</em>{' '}
             filter to see names that clear 2, 1, or any; narrow to one pool with the
             <em>Pool</em> picker. The dot at the top shows how old the data is; the app checks for a new screen in the background and offers
-            it when one lands, and keeps working offline once installed.
+            it when one lands, and keeps working offline once installed. A stock that clears two or more screens is <em>picked</em>: its
+            card shows the date and price it was first picked and the move since, and &mdash; if it dropped off and came back &mdash; the
+            date and price it came <em>back on</em>. That history starts at 20 Aug 2026, the earliest screen run that could be recovered.
           </Block>
 
           <p className="mt-5 border-t border-white/[0.06] pt-4 text-[12px] leading-relaxed text-slate-500">
