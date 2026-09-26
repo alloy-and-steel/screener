@@ -195,7 +195,7 @@ directly -- Screen completion is the link.
 **double-prefixed** (`Graham_Graham_Status`, `Lynch_Lynch_Status`) because
 `process_ticker` does `row.update({f"Graham_{k}": v ...})` over an
 already-prefixed dict. The frontend reads those exact keys (`web/src/score.ts`,
-`format.tsx`). Don't "fix" the prefix without updating the frontend in the same diff.
+`format.tsx`, `filters.ts`, `StockCard.tsx`, `Scorecard.tsx`). Don't "fix" the prefix without updating the frontend in the same diff.
 
 ## Layout
 
@@ -295,8 +295,9 @@ After that: the weekday cron (`0 11 * * 1-5`) refreshes data and auto-deploys (v
 ## Gotchas
 
 - **Service worker caching.** The app shell is precached; `results.json` is
-  deliberately NOT (runtime `NetworkFirst`, see `vite.config.ts`), so new data
-  shows without a new deploy. Fetch it at its one stable URL with
+  deliberately NOT (runtime `NetworkFirst`, see `vite.config.ts`): a data-only
+  deploy leaves `sw.js` byte-identical, so it reaches users through the "Fresh
+  data" toast, not the app "Update" prompt. Fetch it at its one stable URL with
   `cache: 'no-cache'` — a `?v=` cache-buster defeats the offline copy. A new
   deploy waits for the user's "Update" tap (`registerType: 'prompt'`).
 

@@ -9,6 +9,7 @@ interface HeaderProps {
   generatedAt?: string
   checking: boolean
   lastChecked: Date | null
+  checkFailed: boolean
   onCheck: () => void
   onMethodology: () => void
 }
@@ -16,7 +17,7 @@ interface HeaderProps {
 // Always-visible answer to "how old is this?": a live relative age, amber once
 // the pipeline has missed a week of runs, grey with an offline note when the
 // numbers came from the service worker's cached copy.
-function FreshnessChip({ generatedAt, checking, lastChecked, onCheck }: Omit<HeaderProps, 'onMethodology'>) {
+function FreshnessChip({ generatedAt, checking, lastChecked, checkFailed, onCheck }: Omit<HeaderProps, 'onMethodology'>) {
   const now = useNow()
   const online = useOnline()
   const [open, setOpen] = useState(false)
@@ -75,7 +76,10 @@ function FreshnessChip({ generatedAt, checking, lastChecked, onCheck }: Omit<Hea
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-slate-400">Last checked</dt>
-              <dd className="tnum text-right text-slate-100">{lastChecked ? relativeAge(now.getTime() - lastChecked.getTime()) : '—'}</dd>
+              <dd className={`tnum text-right ${checkFailed ? 'text-amber-300' : 'text-slate-100'}`}>
+                {checkFailed ? 'failed · ' : ''}
+                {lastChecked ? relativeAge(now.getTime() - lastChecked.getTime()) : '—'}
+              </dd>
             </div>
           </dl>
           <p className="mt-3 text-xs leading-relaxed text-slate-500">
@@ -113,6 +117,7 @@ export default function Header(props: HeaderProps) {
             generatedAt={props.generatedAt}
             checking={props.checking}
             lastChecked={props.lastChecked}
+            checkFailed={props.checkFailed}
             onCheck={props.onCheck}
           />
           <button

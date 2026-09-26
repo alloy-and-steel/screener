@@ -6,7 +6,7 @@ import Scorecard from './Scorecard'
 import MethodologyDialog from './MethodologyDialog'
 import Toasts from './Toasts'
 import { filterRows, sortRows, type SortKey } from './filters'
-import { combinedVerdict, verdicts } from './score'
+import { PASS_RULE, combinedVerdict, verdicts } from './score'
 import { useDataset } from './useDataset'
 import { INDEX_LABEL, type IndexName, type Row } from './types'
 
@@ -21,7 +21,12 @@ function useHashTicker(): [string | null, (t: string | null) => void] {
   const [ticker, setTicker] = useState<string | null>(read)
   const pushed = useRef(false)
   useEffect(() => {
-    const onHash = () => setTicker(read())
+    const onHash = () => {
+      const t = read()
+      // Closed by the browser's own back gesture: nothing left to pop.
+      if (!t) pushed.current = false
+      setTicker(t)
+    }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
@@ -46,18 +51,13 @@ function Summary({ rows, pool }: { rows: Row[]; pool: IndexName | null }) {
     let all = 0
     const per = { Azqato: 0, Lynch: 0, Graham: 0 }
     for (const r of rows) {
-      const vs = verdicts(r)
-      if (vs.every((v) => v.pass)) all++
-      for (const v of vs) if (v.pass) per[v.system]++
+      if (combinedVerdict(r).passCount === 3) all++
+      for (const v of verdicts(r)) if (v.pass) per[v.system]++
     }
     return { all, per }
   }, [rows])
 
-  const tiles: { label: string; hint: string; value: number }[] = [
-    { label: 'Azqato', hint: 'tier A or better', value: stats.per.Azqato },
-    { label: 'Lynch', hint: 'Buy or Strong Buy', value: stats.per.Lynch },
-    { label: 'Graham', hint: 'Buy or Deep Buy', value: stats.per.Graham },
-  ]
+  const tiles = (['Azqato', 'Lynch', 'Graham'] as const).map((s) => ({ label: s, hint: PASS_RULE[s], value: stats.per[s] }))
 
   return (
     <section className="pb-4 pt-5 sm:pb-5 sm:pt-8">
@@ -82,7 +82,7 @@ function Summary({ rows, pool }: { rows: Row[]; pool: IndexName | null }) {
 }
 
 export default function App() {
-  const { load, reload, pending, applyPending, dismissPending, check, checking, lastChecked } = useDataset()
+  const { load, reload, pending, applyPending, dismissPending, check, checking, lastChecked, checkFailed } = useDataset()
   const [minPass, setMinPass] = useState(3) // default: pass all three
   const [pool, setPool] = useState<IndexName | null>(null)
   const [sort, setSort] = useState<SortKey>('best')
@@ -105,12 +105,8 @@ export default function App() {
   }, [candidates])
 
   const shown = useMemo(
-    () =>
-      sortRows(
-        candidates.filter((r) => combinedVerdict(r).passCount >= minPass),
-        sort,
-      ),
-    [candidates, minPass, sort],
+    () => sortRows(filterRows(rows, { minPass, pool, query: deferredQuery }), sort),
+    [rows, minPass, pool, deferredQuery, sort],
   )
 
   useEffect(() => setLimit(PAGE), [minPass, pool, sort, deferredQuery, rows])
@@ -146,6 +142,7 @@ export default function App() {
         generatedAt={load.status === 'ready' ? load.data.generated_at : undefined}
         checking={checking}
         lastChecked={lastChecked}
+        checkFailed={checkFailed}
         onCheck={() => void check(true)}
         onMethodology={() => setInfoOpen(true)}
       />

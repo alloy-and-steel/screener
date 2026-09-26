@@ -85,42 +85,10 @@ export const TONE: Record<Tone, { text: string; bg: string; ring: string; dot: s
   },
 }
 
-// Colorblind-safe redundancy: every tone also carries a glyph.
-export const GLYPH: Record<Tone, string> = { green: '✓', yellow: '–', red: '✕', slate: '–' }
-
 export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
   const t = TONE[tone]
   return (
     <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${t.bg} ${t.text} ${t.ring}`}>
-      {children}
-    </span>
-  )
-}
-
-// The canonical verdict chip — glyph + label, used in the grid and scorecard.
-// `colors` overrides the tone's palette (azqato tier colors); tier letters are
-// self-describing, so an override also drops the glyph.
-export function VerdictPill({
-  tone,
-  glyph = true,
-  colors,
-  children,
-}: {
-  tone: Tone
-  glyph?: boolean
-  colors?: { text: string; bg: string; ring: string }
-  children: ReactNode
-}) {
-  const t = colors ?? TONE[tone]
-  return (
-    <span
-      className={`inline-flex h-5 items-center gap-1 rounded-md px-2 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset ${t.bg} ${t.text} ${t.ring}`}
-    >
-      {glyph && !colors && (
-        <span aria-hidden className="text-[10px] leading-none">
-          {GLYPH[tone]}
-        </span>
-      )}
       {children}
     </span>
   )

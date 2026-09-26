@@ -14,6 +14,13 @@ export const TIER_LABEL: Record<AzqatoTier, string> = { sp: 'S+', s: 'S', a: 'A'
 export const TIER_TONE: Record<AzqatoTier, Tone> = { sp: 'green', s: 'green', a: 'green', b: 'yellow', c: 'yellow', f: 'red' }
 const AZQATO_PASS_TIERS = new Set<AzqatoTier>(['sp', 's', 'a'])
 
+// What clears each gate, in words — keep in step with the three sets above.
+export const PASS_RULE: Record<Verdict['system'], string> = {
+  Azqato: 'tier A or better',
+  Lynch: 'Buy or Strong Buy',
+  Graham: 'Buy or Deep Buy',
+}
+
 // azqato's own tier palette (style.css --color-tier-*): S dark green, A light
 // green, B yellow, C light red, F dark red; S+ purple, apart from the green
 // ramp. Overrides the 4-tone chip colors wherever a tier is rendered.

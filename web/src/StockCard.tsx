@@ -1,9 +1,9 @@
 import { memo } from 'react'
 import type { Row } from './types'
 import { DASH, TONE, num, pct, type Tone } from './format'
-import { azPegDisplay, combinedVerdict, verdicts } from './score'
+import { azPegDisplay, combinedVerdict, verdicts, type Verdict } from './score'
 
-const SHORT: Record<string, string> = { Azqato: 'AZQ', Lynch: 'LYN', Graham: 'GRA' }
+const SHORT: Record<Verdict['system'], string> = { Azqato: 'AZQ', Lynch: 'LYN', Graham: 'GRA' }
 
 function signedPct(v: number | null | undefined): string {
   if (typeof v !== 'number' || !Number.isFinite(v)) return DASH
@@ -115,28 +115,31 @@ function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void
 
       {/* The three independent verdicts */}
       <div className="grid grid-cols-3 gap-1.5">
-        {vs.map((v) => (
-          <div
-            key={v.system}
-            className={`flex flex-col items-start gap-1.5 rounded-xl px-2.5 py-2 ring-1 ring-inset ${
-              v.pass ? 'bg-emerald-400/[0.06] ring-emerald-400/20' : 'bg-white/[0.025] ring-white/[0.05]'
-            }`}
-          >
-            <span className="flex w-full items-center justify-between text-[10px] font-medium uppercase tracking-[0.08em] text-slate-500">
-              <span title={v.system}>{SHORT[v.system]}</span>
-              {v.pass ? (
-                <span className="text-emerald-300" aria-label="passes">
-                  ✓
-                </span>
-              ) : null}
-            </span>
-            <span
-              className={`inline-flex h-6 items-center whitespace-nowrap rounded-md px-2 text-[12px] font-semibold ring-1 ring-inset ${(v.pillColors ?? TONE[v.tone]).bg} ${(v.pillColors ?? TONE[v.tone]).text} ${(v.pillColors ?? TONE[v.tone]).ring}`}
+        {vs.map((v) => {
+          const chip = v.pillColors ?? TONE[v.tone]
+          return (
+            <div
+              key={v.system}
+              className={`flex flex-col items-start gap-1.5 rounded-xl px-2.5 py-2 ring-1 ring-inset ${
+                v.pass ? 'bg-emerald-400/[0.06] ring-emerald-400/20' : 'bg-white/[0.025] ring-white/[0.05]'
+              }`}
             >
-              {v.label}
-            </span>
-          </div>
-        ))}
+              <span className="flex w-full items-center justify-between text-[10px] font-medium uppercase tracking-[0.08em] text-slate-500">
+                <span title={v.system}>{SHORT[v.system]}</span>
+                {v.pass ? (
+                  <span className="text-emerald-300" aria-label="passes">
+                    ✓
+                  </span>
+                ) : null}
+              </span>
+              <span
+                className={`inline-flex h-6 items-center whitespace-nowrap rounded-md px-2 text-[12px] font-semibold ring-1 ring-inset ${chip.bg} ${chip.text} ${chip.ring}`}
+              >
+                {v.label}
+              </span>
+            </div>
+          )
+        })}
       </div>
 
       {/* Headline statistics */}

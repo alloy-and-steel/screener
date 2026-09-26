@@ -17,10 +17,10 @@ export default defineConfig({
     tailwindcss(),
     // Service worker: the app shell is precached, so the site opens instantly
     // and offline. `prompt` = a new deploy waits in the background until the
-    // user taps "Update" (UpdateToast.tsx) instead of swapping code under them.
+    // user taps "Update" (Toasts.tsx) instead of swapping code under them.
     VitePWA({
       registerType: 'prompt',
-      injectRegister: false, // registered by useRegisterSW in UpdateToast.tsx
+      injectRegister: false, // registered by useRegisterSW in Toasts.tsx
       manifest: {
         name: 'Screener3000',
         short_name: 'Screener',

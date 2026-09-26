@@ -17,7 +17,8 @@ describe('sortRows', () => {
   it('puts missing values last in BOTH directions — a dash is never ranked as zero', () => {
     const rows = [row('A', { OverallScore: 10 }), row('B', { OverallScore: null }), row('C', { OverallScore: 90 })]
     expect(sortRows(rows, 'overall').map((r) => r.Ticker)).toEqual(['C', 'A', 'B'])
-    expect(sortRows(rows, 'peg').map((r) => r.Ticker)).toEqual(['A', 'B', 'C']) // no PEG anywhere: stable
+    const pegs = [row('A', { Lynch_PEG: 1.5 }), row('B', { Lynch_PEG: null }), row('C', { Lynch_PEG: 0.5 })]
+    expect(sortRows(pegs, 'peg').map((r) => r.Ticker)).toEqual(['C', 'A', 'B'])
   })
 
   it('ranks a non-positive PEG (shrinking earnings) after every positive one, ahead of missing', () => {

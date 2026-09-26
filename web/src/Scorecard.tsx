@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import type { Row, Azqato } from './types'
 import { INDEX_LABEL, INDEX_NAMES } from './types'
-import { DASH, Dot, Meter, RangeBar, RsiGauge, TONE, num, pct } from './format'
-import { TIER_LABEL, TIER_TONE, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
+import { DASH, Dot, Meter, RangeBar, RsiGauge, TONE, compactUsd, num, pct } from './format'
+import { TIER_LABEL, TIER_TONE, azNetCashMc, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
   return (
@@ -133,7 +133,7 @@ function OverallPanel({ row }: { row: Row }) {
           </div>
         ))}
       </div>
-      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-white/[0.06] pt-3 text-sm sm:grid-cols-3">
+      <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 border-t border-white/[0.06] pt-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
         <DriverRow d={{ label: 'Sector', value: row.Sector ?? DASH }} />
         <DriverRow d={{ label: 'Piotroski F', value: typeof row.Piotroski_F === 'number' ? `${row.Piotroski_F}/9` : DASH }} />
         <DriverRow d={{ label: 'Altman Z', value: num(row.Altman_Z) }} />
@@ -149,6 +149,33 @@ function OverallPanel({ row }: { row: Row }) {
 
 // Full detail for one name, shown in a sheet over the card grid: bottom sheet
 // on phones, right-hand panel on wide screens. Escape / backdrop / ✕ close it.
+// The raw inputs behind the verdicts — what the old full-width grid showed —
+// so a fair value can be traced back to the growth and earnings it came from.
+function FundamentalsPanel({ row }: { row: Row }) {
+  const az = row.azqato
+  const cells: Driver[] = [
+    { label: 'Growth (g) used', value: pct(row.Growth_g_Pct) },
+    { label: 'EPS TTM', value: num(row.EPS_TTM) },
+    { label: 'P/B', value: num(row.PB_Ratio) },
+    { label: 'Dividend yield', value: pct(row.DivYield_Pct) },
+    { label: 'Lynch score', value: num(row.Lynch_Lynch_Score) },
+    { label: 'P/E FWD', value: az ? num(az.peFwd) : DASH },
+    { label: 'Cash', value: az ? compactUsd(az.cash) : DASH },
+    { label: 'Debt', value: az ? compactUsd(az.debt) : DASH },
+    { label: 'Net cash / cap', value: az ? pct(azNetCashMc(az)) : DASH },
+  ]
+  return (
+    <div className="mt-3 rounded-2xl bg-surface-1 p-4 ring-1 ring-inset ring-white/[0.07]">
+      <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Fundamentals</div>
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+        {cells.map((d) => (
+          <DriverRow key={d.label} d={d} />
+        ))}
+      </dl>
+    </div>
+  )
+}
+
 export default function Scorecard({ row, onClose }: { row: Row; onClose: () => void }) {
   const c = combinedVerdict(row)
   const ct = TONE[c.tone]
@@ -174,7 +201,7 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
       aria-label={`${row.Ticker} scorecard`}
     >
       <div className="fade-in absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
-      <div className="sheet-in relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-canvas shadow-2xl sm:max-h-none sm:max-w-3xl sm:rounded-none sm:rounded-l-3xl">
+      <div className="sheet-in relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-canvas shadow-2xl sm:max-h-none sm:max-w-5xl sm:rounded-none sm:rounded-l-3xl">
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-white/20 sm:hidden" aria-hidden />
         <header className="shrink-0 border-b border-white/[0.06] px-5 pb-4 pt-3 sm:px-6 sm:pt-5">
           <div className="flex items-center gap-3">
@@ -227,12 +254,13 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
                   universe, and the Graham defensive checks still run.
                 </p>
               ) : null}
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 lg:grid-cols-3">
                 {verdicts(row).map((v) => (
                   <Card key={v.system} v={v} row={row} />
                 ))}
               </div>
               <OverallPanel row={row} />
+              <FundamentalsPanel row={row} />
               <p className="mt-4 text-xs leading-relaxed text-slate-500">
                 Three independent systems. They often disagree — that disagreement is the signal. The default list shows only names that
                 clear all three.

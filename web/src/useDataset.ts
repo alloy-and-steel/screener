@@ -25,6 +25,7 @@ export function useDataset() {
   const [pending, setPending] = useState<Dataset | null>(null)
   const [checking, setChecking] = useState(false)
   const [lastChecked, setLastChecked] = useState<Date | null>(null)
+  const [checkFailed, setCheckFailed] = useState(false)
   const current = useRef<string | undefined>(undefined)
   // A dataset the user waved away isn't re-offered by the background poll;
   // an explicit "Check for new data" still shows it.
@@ -48,11 +49,13 @@ export function useDataset() {
     try {
       const next = await fetchDataset()
       setLastChecked(new Date())
+      setCheckFailed(false)
       if (isNewerDataset(current.current, next.generated_at) && (manual || next.generated_at !== dismissed.current)) setPending(next)
     } catch (e) {
-      // A failed background check leaves the loaded data untouched; the
-      // freshness chip keeps showing its real age, so nothing is hidden.
+      // The loaded data stays (its real age is still on the chip); the
+      // popover says the last check failed.
       console.warn('Background data check failed:', e)
+      setCheckFailed(true)
     } finally {
       setChecking(false)
     }
@@ -84,7 +87,7 @@ export function useDataset() {
     }
   }, [check])
 
-  return { load, reload, pending, applyPending, dismissPending, check, checking, lastChecked }
+  return { load, reload, pending, applyPending, dismissPending, check, checking, lastChecked, checkFailed }
 }
 
 // Re-renders the caller every `ms` so relative times ("3 hr ago") stay true.
