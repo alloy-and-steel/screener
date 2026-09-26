@@ -92,7 +92,10 @@ jobs:
               cp "${prev_ledger}" web/public/data/selections.json
               echo "Seeded the selection ledger."
             else
-              echo "::warning::No selections.json on the data branch -- the ledger restarts with this run."
+              # The data branch exists, so a ledger should too: running on
+              # would re-stamp every current pick with today's price.
+              echo "::error::data branch has no selections.json -- refusing to restart the selection ledger."
+              exit 1
             fi
           else
             echo "No data branch yet (bootstrap run) -- constituent fallback unavailable."

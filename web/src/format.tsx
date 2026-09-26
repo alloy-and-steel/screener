@@ -27,6 +27,18 @@ export function compactUsd(v: unknown): string {
   return v.toFixed(0)
 }
 
+// Signed percent ("+12%"), dash when missing.
+export function signedPct(v: number | null | undefined, decimals = 0): string {
+  if (isMissing(v) || typeof v !== 'number') return DASH
+  return `${v > 0 ? '+' : ''}${v.toFixed(decimals)}%`
+}
+
+// Green up, red down, neutral at zero or missing.
+export function signTone(v: number | null | undefined): string {
+  if (isMissing(v) || typeof v !== 'number' || v === 0) return 'text-slate-100'
+  return v > 0 ? 'text-emerald-300' : 'text-rose-300'
+}
+
 // Share price in dollars.
 export function usd(v: unknown): string {
   if (isMissing(v) || typeof v !== 'number') return DASH

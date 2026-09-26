@@ -23,6 +23,8 @@ interface FilterBarProps {
   onSubmit: () => void
 }
 
+// Descending bars: "sorted by".
+const SORT_ICON = 'M3 5h14v1.5H3V5Zm2.5 4.25h9v1.5h-9v-1.5ZM8 13.5h4V15H8v-1.5Z'
 const CHEVRON = 'M5.5 7.5 10 12l4.5-4.5 1 1L10 14 4.5 8.5l1-1Z'
 
 // A native select, so the phone's own picker does the listing. The visible
@@ -30,22 +32,29 @@ const CHEVRON = 'M5.5 7.5 10 12l4.5-4.5 1 1L10 14 4.5 8.5l1-1Z'
 // over it, so the choice always shows and truncates cleanly.
 function Picker<T extends string>({
   label,
+  icon,
   value,
   options,
   onChange,
 }: {
   label: string
+  icon?: string // svg path shown before the choice, naming what the picker does
   value: T
   options: { value: T; label: string }[]
   onChange: (v: T) => void
 }) {
   const current = options.find((o) => o.value === value)?.label ?? ''
   return (
-    <label className="relative flex h-11 min-w-0 items-center gap-1.5 rounded-xl bg-white/[0.04] pl-3.5 pr-9 text-[14px] ring-1 ring-inset ring-white/10 focus-within:ring-emerald-400/50">
+    <label className="relative flex h-11 min-w-0 items-center gap-1.5 rounded-xl bg-white/[0.04] pl-3 pr-8 text-[14px] ring-1 ring-inset ring-white/10 focus-within:ring-emerald-400/50">
+      {icon ? (
+        <svg viewBox="0 0 20 20" className="size-4 shrink-0 text-slate-500" fill="currentColor" aria-hidden>
+          <path d={icon} />
+        </svg>
+      ) : null}
       <span className="truncate font-medium text-slate-100">{current}</span>
       <svg
         viewBox="0 0 20 20"
-        className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-500"
+        className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-500"
         fill="currentColor"
         aria-hidden
       >
@@ -134,7 +143,7 @@ export default function FilterBar(p: FilterBarProps) {
           options={POOL_OPTIONS}
           onChange={(v) => p.onPool(v === ALL_POOLS ? null : (v as IndexName))}
         />
-        <Picker label="Sort" value={p.sort} options={SORT_OPTIONS} onChange={p.onSort} />
+        <Picker label="Sort" icon={SORT_ICON} value={p.sort} options={SORT_OPTIONS} onChange={p.onSort} />
       </div>
     </div>
   )

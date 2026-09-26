@@ -1,18 +1,8 @@
 import { memo } from 'react'
 import type { Row } from './types'
-import { DASH, TONE, capB, num, pct, usd, type Tone } from './format'
+import { DASH, TONE, capB, num, pct, signTone, signedPct, usd, type Tone } from './format'
 import { azPegDisplay, combinedVerdict, verdicts } from './score'
 import { selectionView, type EntryView } from './selection'
-
-function signedPct(v: number | null | undefined): string {
-  if (typeof v !== 'number' || !Number.isFinite(v)) return DASH
-  return `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
-}
-
-function signTone(v: number | null | undefined): string {
-  if (typeof v !== 'number' || !Number.isFinite(v) || v === 0) return 'text-slate-100'
-  return v > 0 ? 'text-emerald-300' : 'text-rose-300'
-}
 
 function Stat({ label, value, className = 'text-slate-100' }: { label: string; value: string; className?: string }) {
   return (
@@ -48,7 +38,7 @@ function EntryLine({ label, e }: { label: string; e: EntryView }) {
   return (
     <div className="tnum truncate">
       {label} {e.date} at <span className="text-slate-300">{usd(e.price)}</span>
-      {e.change !== null ? <span className={`ml-1.5 font-medium ${signTone(e.change)}`}>{signedPct(e.change)}</span> : null}
+      {e.change !== null ? <span className={`ml-1.5 font-medium ${signTone(e.change)}`}>{signedPct(e.change, 1)}</span> : null}
     </div>
   )
 }
@@ -86,16 +76,13 @@ function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void
   const vs = verdicts(row)
   const c = combinedVerdict(row)
   const az = row.azqato
-  const aligned = c.passCount === 3
   const sel = selectionView(row, new Date())
 
   return (
     <button
       type="button"
       onClick={() => onOpen(row.Ticker)}
-      className={`card relative flex w-full flex-col gap-4 overflow-hidden rounded-2xl bg-surface-1 p-4 text-left ring-1 ring-inset transition duration-200 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
-        aligned ? 'ring-emerald-400/25 hover:ring-emerald-400/45' : 'ring-white/[0.07] hover:ring-white/15'
-      }`}
+      className={`card relative flex w-full flex-col gap-4 overflow-hidden rounded-2xl bg-surface-1 p-4 text-left ring-1 ring-inset transition duration-200 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${'ring-white/[0.07] hover:ring-white/15'}`}
     >
       {/* Identity + price */}
       <div className="flex items-start gap-3">
@@ -121,8 +108,8 @@ function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void
             <div
               key={v.system}
               aria-label={`${v.system}: ${v.label}${v.pass ? ', passes' : ''}`}
-              className={`flex flex-col items-start gap-1 rounded-xl px-2.5 py-2 ring-1 ring-inset ${
-                v.pass ? 'bg-emerald-400/[0.06] ring-emerald-400/20' : 'bg-white/[0.025] ring-white/[0.05]'
+              className={`flex flex-col items-start gap-1 rounded-xl px-2.5 py-2 ${
+                v.pass ? 'bg-emerald-400/[0.07]' : 'bg-white/[0.025]'
               }`}
             >
               <span className="text-[11px] text-slate-500">{v.system}</span>
@@ -150,7 +137,7 @@ function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void
         <div className="-mt-1 space-y-0.5 text-[12px] text-slate-500">
           <EntryLine label="Picked" e={sel.first} />
           {sel.reentry ? <EntryLine label="Back on" e={sel.reentry} /> : null}
-          {!sel.selected ? <div>Not on the 2+ list now</div> : null}
+          {!sel.selected ? <div>Not picked now</div> : null}
         </div>
       ) : null}
 

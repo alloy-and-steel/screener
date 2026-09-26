@@ -102,9 +102,7 @@ export default function Header(props: HeaderProps) {
     <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-canvas/75 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6">
         <div className="flex items-center gap-2.5">
-          <span className="grid size-8 place-items-center rounded-xl bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/25">
-            <Logo className="size-4.5 text-emerald-400" />
-          </span>
+          <Logo className="size-5 text-emerald-400" />
           <span className="hidden text-[15px] font-semibold tracking-tight text-slate-50 min-[400px]:inline">Screener3000</span>
         </div>
         <div className="ml-auto flex items-center gap-2">

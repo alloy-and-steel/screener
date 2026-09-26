@@ -312,10 +312,12 @@ After that: the weekday cron (`0 11 * * 1-5`) refreshes data and auto-deploys (v
   `cache: 'no-cache'` — a `?v=` cache-buster defeats the offline copy. A new
   deploy waits for the user's "Update" tap (`registerType: 'prompt'`).
 
-- **The selection ledger exists only on the `data` branch.** A screen run that
-  starts without it (no seed) begins a new ledger and re-stamps every current
-  pick with today's price; a ledger it can't read aborts the publish instead.
-  The runs before 2026-08-20 are unrecoverable, so history starts there.
+- **The selection ledger exists only on the `data` branch.** `screen.yml`
+  fails if the branch exists without `selections.json`, and `write_json` aborts
+  on one it can't read -- either way, rather than re-stamping every current
+  pick with today's price. Runs before 2026-08-20 are unrecoverable, so history
+  starts there. Entry prices are nominal (not split-adjusted): a split after
+  the pick shows as a false drop in the "since picked" move.
 
 - **`.gitignore` ignores `*.json`.** Any JSON that must be tracked needs an
   explicit `!path` exception (see `web/package.json`, `web/tsconfig.json`).

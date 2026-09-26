@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import type { Row, Azqato } from './types'
 import { INDEX_LABEL, INDEX_NAMES } from './types'
-import { DASH, Dot, RangeBar, RsiGauge, TONE, capB, compactUsd, num, pct, usd } from './format'
+import { DASH, Dot, RangeBar, RsiGauge, TONE, capB, compactUsd, num, pct, signTone, signedPct, usd } from './format'
 import { inPool } from './filters'
 import { selectionView, type EntryView } from './selection'
 import { TIER_LABEL, TIER_TONE, azNetCashMc, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
@@ -52,6 +52,9 @@ function AzqatoByIndex({ az }: { az: Azqato }) {
 function AzqatoViz({ az }: { az: Azqato }) {
   return (
     <div className="space-y-2.5">
+      <p className="text-[12px] text-slate-500">
+        Dots rank each metric against every screened name: green top of the field, amber middle, red bottom or missing.
+      </p>
       <AzqatoByIndex az={az} />
       <div>
         <div className="mb-1 text-[11px] text-slate-500">RSI(14) — entry timing</div>
@@ -138,13 +141,7 @@ function OverallPanel({ row }: { row: Row }) {
   )
 }
 
-// Full detail for one name, shown in a sheet over the card grid: bottom sheet
-// on phones, right-hand panel on wide screens. Escape / backdrop / ✕ close it.
-function signed(v: number | null): string {
-  return v === null ? DASH : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`
-}
-
-// When the screen picked this stock (2+ screens) and what it has done since.
+// When the screen picked this stock (passed 2+ screens) and what it has done since.
 // "Latest entry" appears only after a drop-out and return; the first entry is
 // never overwritten.
 function SelectionPanel({ row }: { row: Row }) {
@@ -159,7 +156,7 @@ function SelectionPanel({ row }: { row: Row }) {
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Since selected</div>
         <div className={`text-xs ${v.selected ? 'text-emerald-300' : 'text-slate-500'}`}>
-          {v.selected ? 'On the 2+ list now' : 'Not on the 2+ list now'}
+          {v.selected ? 'Picked now' : 'Not picked now'}
         </div>
       </div>
       <dl className="space-y-1.5">
@@ -170,11 +167,7 @@ function SelectionPanel({ row }: { row: Row }) {
             </dt>
             <dd className="tnum text-right text-slate-100">
               {usd(e.price)}
-              <span
-                className={`ml-2 font-medium ${e.change === null ? 'text-slate-500' : e.change >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}
-              >
-                {signed(e.change)}
-              </span>
+              <span className={`ml-2 font-medium ${signTone(e.change)}`}>{signedPct(e.change, 1)}</span>
             </dd>
           </div>
         ))}
@@ -210,6 +203,8 @@ function FundamentalsPanel({ row }: { row: Row }) {
   )
 }
 
+// Full detail for one name, shown in a sheet over the card grid: bottom sheet
+// on phones, right-hand panel on wide screens. Escape / backdrop / ✕ close it.
 export default function Scorecard({ row, onClose }: { row: Row; onClose: () => void }) {
   const c = combinedVerdict(row)
   const ct = TONE[c.tone]
@@ -269,7 +264,7 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
                 <span className="text-slate-200">{capB(row.MarketCap_B)}</span> mkt cap
               </span>
             )}
-            <span className="text-xs text-slate-500">
+            <span className="w-full truncate text-xs text-slate-500">
               {[row.Sector, ...INDEX_NAMES.filter((n) => inPool(row, n)).map((n) => INDEX_LABEL[n])].filter(Boolean).join(' · ')}
             </span>
           </div>

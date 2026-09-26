@@ -9,6 +9,7 @@ keeps, per ticker:
               Written once, never overwritten.
   latest   -- the run and price of its most recent entry: equal to `first`
               until it drops out and comes back, then moved to the re-entry.
+              A run where the stock is an error row changes nothing.
   selected -- whether the most recent run had it selected.
 
 The ledger is carried run to run on the `data` branch next to results.json
@@ -64,9 +65,13 @@ def update_ledger(ledger: dict, rows: list[dict], generated_at: str) -> dict:
     out = copy.deepcopy(ledger)
     tickers = out["tickers"]
     now = {r["Ticker"]: r for r in rows if screens_passed(r) >= SELECTION_MIN_PASS}
+    # An error row is a failed fetch, not a verdict: we don't know whether the
+    # stock still passes, so its entry is left exactly as it was. Treating it
+    # as a drop-out would log a fake re-entry at the next clean run.
+    unknown = {r["Ticker"] for r in rows if r.get("Error")}
 
     for t, entry in tickers.items():
-        if t not in now:
+        if t not in now and t not in unknown:
             entry["selected"] = False
 
     for t, r in now.items():

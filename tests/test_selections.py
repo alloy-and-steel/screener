@@ -12,6 +12,7 @@ RULES
   first      = the run and price it was first seen selected; never overwritten
   latest     = the run and price of its most recent entry (== first until it
                drops out and comes back)
+  an error row (failed fetch) leaves its entry untouched -- unknown, not out
   a run older than, or equal to, the ledger's last run is refused, so a replay
   can't masquerade as a re-entry
 
@@ -94,6 +95,14 @@ def test_leaving_the_universe_counts_as_dropping_out():
     led = update_ledger(empty_ledger(), [row("AAA", 100.0, **TWO)], D1)
     led = update_ledger(led, [row("ZZZ", 1.0)], D2)
     assert led["tickers"]["AAA"]["selected"] is False
+
+
+def test_an_error_row_is_unknown_not_a_drop_out():
+    led = update_ledger(empty_ledger(), [row("AAA", 100.0, **TWO)], D1)
+    led = update_ledger(led, [row("AAA", None, error="Processing failed")], D2)
+    assert led["tickers"]["AAA"]["selected"] is True
+    led = update_ledger(led, [row("AAA", 130.0, **TWO)], D3)
+    assert led["tickers"]["AAA"]["latest"] == {"at": D1, "price": 100.0}  # no fake re-entry
 
 
 def test_missing_price_is_recorded_as_none_not_zero():
