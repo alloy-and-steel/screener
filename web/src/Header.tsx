@@ -50,14 +50,9 @@ function FreshnessChip({ generatedAt, checking, lastChecked, checkFailed, onChec
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className={`flex h-9 items-center gap-2 rounded-full bg-white/[0.04] pl-3 pr-3.5 text-[13px] ring-1 ring-inset ring-white/10 transition hover:bg-white/[0.08] ${text}`}
+        className={`flex h-11 items-center gap-2 rounded-full bg-white/[0.04] pl-3.5 pr-4 text-[14px] ring-1 ring-inset ring-white/10 transition hover:bg-white/[0.08] ${text}`}
       >
-        <span className="relative flex size-2">
-          {f && !f.stale && online ? (
-            <span className={`absolute inline-flex size-full animate-ping rounded-full opacity-60 ${tone}`} />
-          ) : null}
-          <span className={`relative inline-flex size-2 rounded-full ${online ? tone : 'bg-slate-500'}`} />
-        </span>
+        <span className={`size-2 shrink-0 rounded-full ${online ? tone : 'bg-slate-500'}`} aria-hidden />
         {!online ? 'Offline · ' : ''}
         {f ? `Updated ${f.relative}` : 'Data date unknown'}
         {f?.stale ? <span className="font-semibold">· stale</span> : null}
@@ -92,7 +87,7 @@ function FreshnessChip({ generatedAt, checking, lastChecked, checkFailed, onChec
             type="button"
             onClick={onCheck}
             disabled={checking || !online}
-            className="mt-3 w-full rounded-xl bg-white/[0.06] py-2 text-[13px] font-medium text-slate-100 ring-1 ring-inset ring-white/10 transition hover:bg-white/10 disabled:opacity-50"
+            className="mt-3 h-11 w-full rounded-xl bg-white/[0.06] text-[14px] font-medium text-slate-100 ring-1 ring-inset ring-white/10 transition hover:bg-white/10 disabled:opacity-50"
           >
             {checking ? 'Checking…' : 'Check for new data'}
           </button>
@@ -106,12 +101,12 @@ export default function Header(props: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-canvas/75 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6">
-        <a href="#" className="flex items-center gap-2.5" aria-label="Screener3000 home">
+        <div className="flex items-center gap-2.5">
           <span className="grid size-8 place-items-center rounded-xl bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/25">
             <Logo className="size-4.5 text-emerald-400" />
           </span>
-          <span className="hidden text-[15px] font-semibold tracking-tight text-slate-50 sm:inline">Screener3000</span>
-        </a>
+          <span className="hidden text-[15px] font-semibold tracking-tight text-slate-50 min-[400px]:inline">Screener3000</span>
+        </div>
         <div className="ml-auto flex items-center gap-2">
           <FreshnessChip
             generatedAt={props.generatedAt}
@@ -125,7 +120,7 @@ export default function Header(props: HeaderProps) {
             onClick={props.onMethodology}
             aria-label="How the screens work"
             title="How the screens work"
-            className="grid size-9 place-items-center rounded-full bg-white/[0.04] text-slate-300 ring-1 ring-inset ring-white/10 transition hover:bg-white/[0.08] hover:text-slate-50"
+            className="grid size-11 shrink-0 place-items-center rounded-full bg-white/[0.04] text-slate-300 ring-1 ring-inset ring-white/10 transition hover:bg-white/[0.08] hover:text-slate-50"
           >
             <svg viewBox="0 0 20 20" className="size-4" fill="currentColor" aria-hidden>
               <path d="M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 3.5a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2ZM11.2 14.5H8.8v-1.2h.6V10h-.6V8.8h1.8v4.5h.6v1.2Z" />

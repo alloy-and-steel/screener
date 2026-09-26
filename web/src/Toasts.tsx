@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 // Look for a new deploy hourly and whenever the app is brought back to the
@@ -17,7 +16,7 @@ function Toast({ children, onDismiss }: { children: React.ReactNode; onDismiss?:
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="grid size-8 place-items-center rounded-full text-slate-400 hover:bg-white/10 hover:text-slate-100"
+          className="grid size-11 place-items-center rounded-full text-slate-400 hover:bg-white/10 hover:text-slate-100"
         >
           ✕
         </button>
@@ -31,7 +30,7 @@ function Action({ onClick, children }: { onClick: () => void; children: React.Re
     <button
       type="button"
       onClick={onClick}
-      className="h-8 shrink-0 rounded-full bg-emerald-400 px-3.5 text-[13px] font-semibold text-emerald-950 transition hover:bg-emerald-300"
+      className="h-11 shrink-0 rounded-full bg-emerald-400 px-3.5 text-[13px] font-semibold text-emerald-950 transition hover:bg-emerald-300"
     >
       {children}
     </button>
@@ -47,7 +46,6 @@ interface ToastsProps {
 export default function Toasts({ pendingAt, onLoadPending, onDismissPending }: ToastsProps) {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
-    offlineReady: [offlineReady, setOfflineReady],
     updateServiceWorker,
   } = useRegisterSW({
     onRegisteredSW(_url, reg) {
@@ -62,12 +60,6 @@ export default function Toasts({ pendingAt, onLoadPending, onDismissPending }: T
       console.error('Service worker registration failed:', e)
     },
   })
-
-  useEffect(() => {
-    if (!offlineReady) return
-    const id = window.setTimeout(() => setOfflineReady(false), 4000)
-    return () => window.clearTimeout(id)
-  }, [offlineReady, setOfflineReady])
 
   const pendingLabel = pendingAt
     ? new Date(pendingAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
@@ -93,7 +85,6 @@ export default function Toasts({ pendingAt, onLoadPending, onDismissPending }: T
           </div>
         </Toast>
       ) : null}
-      {offlineReady ? <Toast>Saved for offline use.</Toast> : null}
     </div>
   )
 }

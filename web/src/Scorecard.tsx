@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import type { Row, Azqato } from './types'
 import { INDEX_LABEL, INDEX_NAMES } from './types'
-import { DASH, Dot, Meter, RangeBar, RsiGauge, TONE, compactUsd, num, pct } from './format'
+import { DASH, Dot, RangeBar, RsiGauge, TONE, capB, compactUsd, num, pct, usd } from './format'
+import { inPool } from './filters'
 import { TIER_LABEL, TIER_TONE, azNetCashMc, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
@@ -59,11 +60,6 @@ function AzqatoViz({ az }: { az: Azqato }) {
         <div className="mb-1 text-[11px] text-slate-500">52-week position</div>
         <RangeBar pct={az.pos_52w_pct} />
       </div>
-      <div className="text-[10px] leading-tight text-slate-500">
-        Each metric is ranked against every screened name (green = top of the pack, red = bottom; a missing metric scores zero). The
-        per-pool ranks above re-score the same stock against just that pool, the way azqato&rsquo;s own screener does — the tier driving the
-        pass gate is the all-names one. RSI and 52-week position are entry-timing context, not scored.
-      </div>
     </div>
   )
 }
@@ -78,18 +74,13 @@ function Card({ v, row }: { v: Verdict; row: Row }) {
       </div>
 
       {/* Verdict(s) — Azqato is a single rank tier; Lynch & Graham each have two */}
-      <div className="min-h-[44px]">
-        <div className="space-y-2.5">
-          {lines.map((line) => (
-            <div key={line.name} className="flex items-center justify-between gap-3">
-              <span className="text-[11px] uppercase tracking-[0.06em] text-slate-500">{line.name}</span>
-              <span className="flex items-center gap-2">
-                <Meter level={line.level} tone={line.tone} fillClass={line.colors?.fill} />
-                <span className={`w-24 text-right text-sm font-semibold ${line.colors?.text ?? TONE[line.tone].text}`}>{line.label}</span>
-              </span>
-            </div>
-          ))}
-        </div>
+      <div className="space-y-2 lg:min-h-[52px]">
+        {lines.map((line) => (
+          <div key={line.name} className="flex items-baseline justify-between gap-3">
+            <span className="text-[13px] text-slate-400">{line.name}</span>
+            <span className={`text-[15px] font-semibold ${line.colors?.text ?? TONE[line.tone].text}`}>{line.label}</span>
+          </div>
+        ))}
       </div>
 
       <div className="text-sm text-slate-300">{v.tagline}</div>
@@ -134,7 +125,6 @@ function OverallPanel({ row }: { row: Row }) {
         ))}
       </div>
       <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 border-t border-white/[0.06] pt-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-        <DriverRow d={{ label: 'Sector', value: row.Sector ?? DASH }} />
         <DriverRow d={{ label: 'Piotroski F', value: typeof row.Piotroski_F === 'number' ? `${row.Piotroski_F}/9` : DASH }} />
         <DriverRow d={{ label: 'Altman Z', value: num(row.Altman_Z) }} />
         <DriverRow d={{ label: 'DCF discount', value: pct(row.DCF_Discount_Pct) }} />
@@ -202,7 +192,6 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
     >
       <div className="fade-in absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div className="sheet-in relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-canvas shadow-2xl sm:max-h-none sm:max-w-5xl sm:rounded-none sm:rounded-l-3xl">
-        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-white/20 sm:hidden" aria-hidden />
         <header className="shrink-0 border-b border-white/[0.06] px-5 pb-4 pt-3 sm:px-6 sm:pt-5">
           <div className="flex items-center gap-3">
             <a
@@ -210,21 +199,20 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
               target="_blank"
               rel="noopener noreferrer"
               title="Open on Finviz"
-              className="font-mono text-2xl font-bold tracking-tight text-slate-50 hover:text-sky-300"
+              className="py-1.5 font-mono text-2xl font-bold tracking-tight text-slate-50 hover:text-sky-300"
             >
               {row.Ticker} <span className="text-base text-slate-500">↗</span>
             </a>
             {!row.Error && (
               <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 ring-1 ring-inset ${ct.bg} ${ct.ring}`}>
-                <span className={`text-xs font-semibold ${ct.text}`}>{c.label}</span>
-                <span className={`tnum text-xs font-bold ${ct.text}`}>{c.passCount}/3</span>
+                <span className={`tnum text-xs font-semibold ${ct.text}`}>{c.passCount}/3 screens</span>
               </span>
             )}
             <button
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="ml-auto grid size-9 shrink-0 place-items-center rounded-full bg-white/[0.05] text-slate-300 ring-1 ring-inset ring-white/10 hover:bg-white/10 hover:text-slate-50"
+              className="ml-auto grid size-11 shrink-0 place-items-center rounded-full bg-white/[0.05] text-slate-300 ring-1 ring-inset ring-white/10 hover:bg-white/10 hover:text-slate-50"
             >
               ✕
             </button>
@@ -232,12 +220,14 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
           <div className="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm text-slate-400">
             {!row.Error && (
               <span className="tnum">
-                <span className="text-slate-200">{num(row.Price)}</span>
+                <span className="text-slate-200">{usd(row.Price)}</span>
                 <span className="mx-2 text-slate-600">·</span>
-                <span className="text-slate-200">{num(row.MarketCap_B, 1)}B</span> mkt cap
+                <span className="text-slate-200">{capB(row.MarketCap_B)}</span> mkt cap
               </span>
             )}
-            <span className="text-xs text-slate-500">{[row.Sector, row.Indexes].filter(Boolean).join(' · ')}</span>
+            <span className="text-xs text-slate-500">
+              {[row.Sector, ...INDEX_NAMES.filter((n) => inPool(row, n)).map((n) => INDEX_LABEL[n])].filter(Boolean).join(' · ')}
+            </span>
           </div>
         </header>
 
@@ -261,10 +251,6 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
               </div>
               <OverallPanel row={row} />
               <FundamentalsPanel row={row} />
-              <p className="mt-4 text-xs leading-relaxed text-slate-500">
-                Three independent systems. They often disagree — that disagreement is the signal. The default list shows only names that
-                clear all three.
-              </p>
             </>
           )}
         </div>

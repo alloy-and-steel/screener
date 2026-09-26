@@ -14,13 +14,6 @@ export const TIER_LABEL: Record<AzqatoTier, string> = { sp: 'S+', s: 'S', a: 'A'
 export const TIER_TONE: Record<AzqatoTier, Tone> = { sp: 'green', s: 'green', a: 'green', b: 'yellow', c: 'yellow', f: 'red' }
 const AZQATO_PASS_TIERS = new Set<AzqatoTier>(['sp', 's', 'a'])
 
-// What clears each gate, in words — keep in step with the three sets above.
-export const PASS_RULE: Record<Verdict['system'], string> = {
-  Azqato: 'tier A or better',
-  Lynch: 'Buy or Strong Buy',
-  Graham: 'Buy or Deep Buy',
-}
-
 // azqato's own tier palette (style.css --color-tier-*): S dark green, A light
 // green, B yellow, C light red, F dark red; S+ purple, apart from the green
 // ramp. Overrides the 4-tone chip colors wherever a tier is rendered.
@@ -75,16 +68,6 @@ export function azNetCashMc(az: Azqato): number | null {
 // writes into Lynch_Lynch_Status / Graham_Graham_Status.
 export const NA_LABEL = 'N/A'
 
-// Graded verdict -> 0..1 meter fill.
-const GRADE_LEVEL: Record<string, number> = {
-  'Strong Buy': 1,
-  'Deep Buy': 1,
-  Buy: 0.8,
-  Hold: 0.5,
-  Watch: 0.5,
-  Avoid: 0.2,
-}
-
 export interface Driver {
   label: string
   value: string
@@ -98,7 +81,6 @@ export interface Verdict {
   tagline: string // one-line plain-english read
   tone: Tone
   pillColors?: TierColors // azqato tier palette; Lynch/Graham use the tone
-  level: number // 0..1 fill for graded meter
   pass: boolean // counts toward "passes all 3"
   drivers: Driver[]
 }
@@ -114,7 +96,6 @@ export function azqatoVerdict(row: Row): Verdict {
       label: NA_LABEL,
       tagline: 'No data',
       tone: 'slate',
-      level: 0,
       pass: false,
       drivers: [],
     }
@@ -126,7 +107,6 @@ export function azqatoVerdict(row: Row): Verdict {
     tagline: TIER_TAGLINE[az.tier],
     tone: TIER_TONE[az.tier],
     pillColors: TIER_STYLE[az.tier],
-    level: az.score / 100,
     pass: AZQATO_PASS_TIERS.has(az.tier),
     drivers: [
       { label: 'Score', value: `${az.score}/100` },
@@ -150,7 +130,6 @@ export function lynchVerdict(row: Row): Verdict {
     label: status ?? NA_LABEL,
     tagline: lynchTagline(tone),
     tone,
-    level: status ? (GRADE_LEVEL[status] ?? 0) : 0,
     pass: status ? LYNCH_BUY.has(status) : false,
     drivers: [
       { label: 'P/E', value: num(row.Lynch_PE) },
@@ -170,7 +149,6 @@ export function grahamVerdict(row: Row): Verdict {
     label: status ?? NA_LABEL,
     tagline: grahamTagline(tone),
     tone,
-    level: status ? (GRADE_LEVEL[status] ?? 0) : 0,
     pass: status ? GRAHAM_BUY.has(status) : false,
     drivers: [
       { label: 'Fair value', value: num(row.Graham_Graham_FV) },
@@ -199,7 +177,6 @@ export interface VerdictLine {
   label: string
   tone: Tone
   colors?: TierColors // azqato tier palette; graded lines use the tone
-  level: number
 }
 
 function gradeLine(name: string, field: string, status: string | null | undefined): VerdictLine {
@@ -207,7 +184,6 @@ function gradeLine(name: string, field: string, status: string | null | undefine
     name,
     label: status ?? NA_LABEL,
     tone: status ? signalTone(field, status) : 'slate',
-    level: status ? (GRADE_LEVEL[status] ?? 0) : 0,
   }
 }
 
@@ -224,7 +200,6 @@ export function verdictLines(system: 'Azqato' | 'Lynch' | 'Graham', row: Row): V
         label: scored ? TIER_LABEL[az.tier!] : NA_LABEL,
         tone: scored ? TIER_TONE[az.tier!] : 'slate',
         colors: scored ? TIER_STYLE[az.tier!] : undefined,
-        level: scored ? az.score! / 100 : 0,
       },
     ]
   }
@@ -239,9 +214,9 @@ export function verdictLines(system: 'Azqato' | 'Lynch' | 'Graham', row: Row): V
     gradeLine('Valuation', 'Graham_Graham_Status', row.Graham_Graham_Status as string | null | undefined),
     {
       name: 'Defensive',
-      label: (row.DefensiveLabel as string) ?? NA_LABEL,
+      // The meter that used to carry the 0-8 score is gone; the count rides on the label.
+      label: row.DefensiveLabel ? `${row.DefensiveLabel as string}${typeof def === 'number' ? ` · ${def}/8` : ''}` : NA_LABEL,
       tone: row.DefensiveLabel ? signalTone('DefensiveLabel', row.DefensiveLabel as string) : 'slate',
-      level: typeof def === 'number' ? def / 8 : 0,
     },
   ]
 }
@@ -253,7 +228,6 @@ export function verdicts(row: Row): Verdict[] {
 export interface Combined {
   passCount: number
   tone: Tone
-  label: string
 }
 
 // How many of the three independent systems a name clears.
@@ -261,8 +235,7 @@ export function combinedVerdict(row: Row): Combined {
   const vs = verdicts(row)
   const passCount = vs.filter((v) => v.pass).length
   const tone: Tone = passCount === 3 ? 'green' : passCount >= 1 ? 'yellow' : 'red'
-  const label = passCount === 3 ? 'Aligned' : passCount === 0 ? 'None' : 'Split'
-  return { passCount, tone, label }
+  return { passCount, tone }
 }
 
 // Default screener list: a name must clear ALL THREE independent systems.

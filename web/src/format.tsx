@@ -27,6 +27,18 @@ export function compactUsd(v: unknown): string {
   return v.toFixed(0)
 }
 
+// Share price in dollars.
+export function usd(v: unknown): string {
+  if (isMissing(v) || typeof v !== 'number') return DASH
+  return `$${v.toFixed(2)}`
+}
+
+// Market cap given in billions -> "$268B" / "$4.92T".
+export function capB(b: unknown): string {
+  if (isMissing(b) || typeof b !== 'number') return DASH
+  return b >= 1000 ? `$${(b / 1000).toFixed(2)}T` : `$${b.toFixed(b >= 100 ? 0 : 1)}B`
+}
+
 // Ratio with an unbounded case: Infinity (cash with zero debt) renders as ∞.
 export function ratio(v: number | null | undefined): string {
   if (isMissing(v) || typeof v !== 'number') return DASH
@@ -96,20 +108,6 @@ export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
 
 export function Dot({ tone }: { tone: Tone }) {
   return <span className={`inline-block size-2 shrink-0 rounded-full ${TONE[tone].dot}`} aria-hidden />
-}
-
-// 5-segment graded meter. `level` is 0..1; `fillClass` overrides the tone's
-// fill (azqato tier colors).
-export function Meter({ level, tone, fillClass, segments = 5 }: { level: number; tone: Tone; fillClass?: string; segments?: number }) {
-  const filled = Math.max(0, Math.min(segments, Math.round(level * segments)))
-  const fill = fillClass ?? TONE[tone].fill
-  return (
-    <span className="inline-flex gap-[3px]" aria-hidden>
-      {Array.from({ length: segments }, (_, i) => (
-        <span key={i} className={`h-2.5 w-3 rounded-[2px] ${i < filled ? fill : 'bg-slate-700/50'}`} />
-      ))}
-    </span>
-  )
 }
 
 // 52-week range bar: track + thumb positioned by `pct` (0 = at low, 100 = at

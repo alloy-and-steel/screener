@@ -6,7 +6,7 @@ import Scorecard from './Scorecard'
 import MethodologyDialog from './MethodologyDialog'
 import Toasts from './Toasts'
 import { filterRows, sortRows, type SortKey } from './filters'
-import { PASS_RULE, combinedVerdict, verdicts } from './score'
+import { combinedVerdict } from './score'
 import { useDataset } from './useDataset'
 import { loadPrefs, savePrefs } from './prefs'
 import { INDEX_LABEL, type IndexName, type Row } from './types'
@@ -47,38 +47,15 @@ function useHashTicker(): [string | null, (t: string | null) => void] {
   return [ticker, set]
 }
 
+// One line of context above the list. The per-screen pass counts that used
+// to sit here as tiles pushed the first card below the fold on a phone.
 function Summary({ rows, pool }: { rows: Row[]; pool: IndexName | null }) {
-  const stats = useMemo(() => {
-    let all = 0
-    const per = { Azqato: 0, Lynch: 0, Graham: 0 }
-    for (const r of rows) {
-      if (combinedVerdict(r).passCount === 3) all++
-      for (const v of verdicts(r)) if (v.pass) per[v.system]++
-    }
-    return { all, per }
-  }, [rows])
-
-  const tiles = (['Azqato', 'Lynch', 'Graham'] as const).map((s) => ({ label: s, hint: PASS_RULE[s], value: stats.per[s] }))
-
+  const all = useMemo(() => rows.filter((r) => combinedVerdict(r).passCount === 3).length, [rows])
   return (
-    <section className="pb-4 pt-5 sm:pb-5 sm:pt-8">
-      <h1 className="text-balance text-[22px] font-semibold leading-tight tracking-tight text-slate-50 sm:text-3xl">
-        <span className="tnum bg-gradient-to-br from-emerald-300 to-sky-300 bg-clip-text text-transparent">{stats.all}</span> of{' '}
-        <span className="tnum">{rows.length}</span> {pool ? `${INDEX_LABEL[pool]} stocks` : 'stocks'} pass all three screens
-      </h1>
-      <p className="mt-1.5 text-sm text-slate-400">
-        Azqato, Lynch and Graham judge each name independently — where they agree is the short list.
-      </p>
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:max-w-xl">
-        {tiles.map((t) => (
-          <div key={t.label} className="rounded-2xl bg-surface-1 px-3 py-2.5 ring-1 ring-inset ring-white/[0.07]">
-            <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-slate-500">{t.label}</div>
-            <div className="tnum mt-0.5 text-xl font-semibold text-slate-100">{t.value}</div>
-            <div className="truncate text-[11px] text-slate-500">{t.hint}</div>
-          </div>
-        ))}
-      </div>
-    </section>
+    <h1 className="text-balance pb-3 pt-4 text-[17px] font-semibold leading-snug tracking-tight text-slate-100 sm:pt-6 sm:text-2xl">
+      <span className="tnum text-emerald-300">{all}</span> of <span className="tnum">{rows.length}</span> stocks
+      {pool ? ` in ${INDEX_LABEL[pool]}` : ''} pass all three screens
+    </h1>
   )
 }
 
@@ -158,7 +135,7 @@ export default function App() {
             <button
               type="button"
               onClick={reload}
-              className="rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-300"
+              className="h-11 rounded-full bg-emerald-400 px-5 text-sm font-semibold text-emerald-950 hover:bg-emerald-300"
             >
               Try again
             </button>
@@ -168,7 +145,7 @@ export default function App() {
             {load.status === 'ready' ? (
               <Summary rows={poolRows} pool={pool} />
             ) : (
-              <div className="skeleton mb-5 mt-8 h-24 max-w-xl rounded-2xl bg-surface-1" />
+              <div className="skeleton mb-3 mt-4 h-6 max-w-sm rounded-lg bg-surface-1" />
             )}
 
             <FilterBar
@@ -192,12 +169,21 @@ export default function App() {
               </div>
             ) : shown.length === 0 ? (
               <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-center">
-                <p className="text-slate-300">No stocks match.</p>
+                <p className="text-slate-300">No stocks match{query.trim() ? ` “${query.trim()}”` : ''}.</p>
+                {query.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    className="h-11 rounded-full bg-white/[0.06] px-5 text-sm text-slate-100 ring-1 ring-inset ring-white/10 hover:bg-white/10"
+                  >
+                    Clear search
+                  </button>
+                ) : null}
                 {looser !== undefined ? (
                   <button
                     type="button"
                     onClick={() => setMinPass(looser)}
-                    className="rounded-full bg-white/[0.06] px-4 py-2 text-sm text-slate-100 ring-1 ring-inset ring-white/10 hover:bg-white/10"
+                    className="h-11 rounded-full bg-white/[0.06] px-5 text-sm text-slate-100 ring-1 ring-inset ring-white/10 hover:bg-white/10"
                   >
                     Show {looser === 0 ? 'every name' : `${looser}+ screens`} ({counts[looser]})
                   </button>

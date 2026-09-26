@@ -37,7 +37,7 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md px-2 py-1 text-slate-400 hover:bg-surface-3 hover:text-slate-100"
+            className="grid size-11 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-surface-3 hover:text-slate-100"
           >
             ✕
           </button>
@@ -97,13 +97,13 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
           </Block>
 
           <Block title="Reading the screen">
-            Each card shows the three verdicts side by side (a <strong className="text-slate-100">✓</strong> marks a pass), the
-            informational Overall score in the ring, and the headline numbers: PEG, forward PEG, forward EPS growth, the Graham and Lynch
-            discounts to fair value, dividend yield and where the price sits in its 52-week range. Tap a card (or type a ticker and press
-            Enter) for the full scorecard &mdash; every verdict, its drivers, an RSI gauge, the per-pool Azqato ranks and the raw
-            fundamentals behind them. Relax the <em>All 3</em> filter to see names that clear 2, 1, or any; narrow to one pool with the
-            chips. The dot at the top shows how old the data is; the app checks for a new screen in the background and offers it when one
-            lands, and keeps working offline once installed.
+            Each card shows the three verdicts side by side (a green-tinted tile is a pass), the informational Overall score in the ring,
+            and the headline numbers: PEG, forward PEG, forward EPS growth, the Graham and Lynch discounts to fair value, dividend yield and
+            where the price sits in its 52-week range. Tap a card (or type a ticker and press Enter) for the full scorecard &mdash; every
+            verdict, its drivers, an RSI gauge, the per-pool Azqato ranks and the raw fundamentals behind them. Relax the <em>All 3</em>{' '}
+            filter to see names that clear 2, 1, or any; narrow to one pool with the
+            <em>Pool</em> picker. The dot at the top shows how old the data is; the app checks for a new screen in the background and offers
+            it when one lands, and keeps working offline once installed.
           </Block>
 
           <p className="mt-5 border-t border-white/[0.06] pt-4 text-[12px] leading-relaxed text-slate-500">

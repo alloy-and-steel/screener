@@ -41,14 +41,14 @@ function pegKey(v: number | null): Key {
 }
 
 export const SORTS = {
-  best: { label: 'Screens passed', dir: 'desc', keys: (r) => [combinedVerdict(r).passCount, n(r.azqato?.score)] },
+  best: { label: 'Consensus', dir: 'desc', keys: (r) => [combinedVerdict(r).passCount, n(r.azqato?.score)] },
   azqato: { label: 'Azqato score', dir: 'desc', keys: (r) => [n(r.azqato?.score)] },
   overall: { label: 'Overall score', dir: 'desc', keys: (r) => [n(r.OverallScore)] },
   graham: { label: 'Graham discount', dir: 'desc', keys: (r) => [n(r.Graham_Graham_Discount_Pct)] },
   lynch: { label: 'Lynch discount', dir: 'desc', keys: (r) => [n(r.Lynch_Lynch_Discount_Pct)] },
   peg: { label: 'Lowest PEG', dir: 'asc', keys: (r) => [pegKey(n(r.Lynch_PEG))] },
-  pegFwd: { label: 'Lowest forward PEG', dir: 'asc', keys: (r) => [pegKey(r.azqato ? n(azPegDisplay(r.azqato)) : null)] },
-  epsFwd: { label: 'Forward EPS growth', dir: 'desc', keys: (r) => [n(r.azqato?.epsFwd)] },
+  pegFwd: { label: 'Lowest fwd PEG', dir: 'asc', keys: (r) => [pegKey(r.azqato ? n(azPegDisplay(r.azqato)) : null)] },
+  epsFwd: { label: 'Fwd EPS growth', dir: 'desc', keys: (r) => [n(r.azqato?.epsFwd)] },
   yield: { label: 'Dividend yield', dir: 'desc', keys: (r) => [n(r.DivYield_Pct)] },
   cap: { label: 'Market cap', dir: 'desc', keys: (r) => [n(r.MarketCap_B)] },
   ticker: { label: 'Ticker A–Z', dir: 'asc', keys: (r) => [r.Ticker] },

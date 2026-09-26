@@ -1,9 +1,7 @@
 import { memo } from 'react'
 import type { Row } from './types'
-import { DASH, TONE, num, pct, type Tone } from './format'
-import { azPegDisplay, combinedVerdict, verdicts, type Verdict } from './score'
-
-const SHORT: Record<Verdict['system'], string> = { Azqato: 'AZQ', Lynch: 'LYN', Graham: 'GRA' }
+import { DASH, TONE, capB, num, pct, usd, type Tone } from './format'
+import { azPegDisplay, combinedVerdict, verdicts } from './score'
 
 function signedPct(v: number | null | undefined): string {
   if (typeof v !== 'number' || !Number.isFinite(v)) return DASH
@@ -15,15 +13,10 @@ function signTone(v: number | null | undefined): string {
   return v > 0 ? 'text-emerald-300' : 'text-rose-300'
 }
 
-function capLabel(b: number | null | undefined): string {
-  if (typeof b !== 'number' || !Number.isFinite(b)) return DASH
-  return b >= 1000 ? `$${(b / 1000).toFixed(2)}T` : `$${b.toFixed(b >= 100 ? 0 : 1)}B`
-}
-
 function Stat({ label, value, className = 'text-slate-100' }: { label: string; value: string; className?: string }) {
   return (
     <div className="min-w-0">
-      <div className="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-slate-500">{label}</div>
+      <div className="truncate text-[11px] text-slate-500">{label}</div>
       <div className={`tnum mt-0.5 truncate text-[15px] font-semibold ${className}`}>{value}</div>
     </div>
   )
@@ -32,12 +25,12 @@ function Stat({ label, value, className = 'text-slate-100' }: { label: string; v
 // Where today's price sits in the 52-week range; the lower quarter is azqato's
 // favourable-entry band (timing context, not scored).
 function RangeStrip({ p }: { p: number | null | undefined }) {
-  if (typeof p !== 'number' || !Number.isFinite(p)) return <div className="text-[11px] text-slate-500">52w {DASH}</div>
+  if (typeof p !== 'number' || !Number.isFinite(p)) return <div className="text-[11px] text-slate-500">52-wk {DASH}</div>
   const tone: Tone = p <= 25 ? 'green' : p >= 75 ? 'red' : 'slate'
   const x = Math.max(0, Math.min(100, p))
   return (
     <div className="flex items-center gap-2.5 text-[11px] text-slate-500" title="Position in the 52-week range">
-      <span className="shrink-0">52w</span>
+      <span className="shrink-0">52-wk</span>
       <span className="relative h-1 flex-1 rounded-full bg-white/[0.07]">
         <span className="absolute inset-y-0 left-0 rounded-full bg-white/[0.12]" style={{ width: `${x}%` }} />
         <span
@@ -89,14 +82,10 @@ function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void
     <button
       type="button"
       onClick={() => onOpen(row.Ticker)}
-      className={`card group relative flex w-full flex-col gap-4 overflow-hidden rounded-2xl bg-surface-1 p-4 text-left ring-1 ring-inset transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
+      className={`card relative flex w-full flex-col gap-4 overflow-hidden rounded-2xl bg-surface-1 p-4 text-left ring-1 ring-inset transition duration-200 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
         aligned ? 'ring-emerald-400/25 hover:ring-emerald-400/45' : 'ring-white/[0.07] hover:ring-white/15'
       }`}
     >
-      {aligned ? (
-        <span aria-hidden className="pointer-events-none absolute -right-10 -top-12 size-32 rounded-full bg-emerald-400/10 blur-2xl" />
-      ) : null}
-
       {/* Identity + price */}
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
@@ -105,9 +94,9 @@ function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void
             <span className="truncate text-xs text-slate-500">{row.Sector ?? ''}</span>
           </div>
           <div className="tnum mt-0.5 text-[13px] text-slate-400">
-            <span className="text-slate-200">{typeof row.Price === 'number' ? `$${num(row.Price)}` : DASH}</span>
+            <span className="text-slate-200">{usd(row.Price)}</span>
             <span className="mx-1.5 text-slate-600">·</span>
-            {capLabel(row.MarketCap_B)}
+            {capB(row.MarketCap_B)}
           </div>
         </div>
         <OverallRing score={row.OverallScore} />
@@ -120,18 +109,12 @@ function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void
           return (
             <div
               key={v.system}
-              className={`flex flex-col items-start gap-1.5 rounded-xl px-2.5 py-2 ring-1 ring-inset ${
+              aria-label={`${v.system}: ${v.label}${v.pass ? ', passes' : ''}`}
+              className={`flex flex-col items-start gap-1 rounded-xl px-2.5 py-2 ring-1 ring-inset ${
                 v.pass ? 'bg-emerald-400/[0.06] ring-emerald-400/20' : 'bg-white/[0.025] ring-white/[0.05]'
               }`}
             >
-              <span className="flex w-full items-center justify-between text-[10px] font-medium uppercase tracking-[0.08em] text-slate-500">
-                <span title={v.system}>{SHORT[v.system]}</span>
-                {v.pass ? (
-                  <span className="text-emerald-300" aria-label="passes">
-                    ✓
-                  </span>
-                ) : null}
-              </span>
+              <span className="text-[11px] text-slate-500">{v.system}</span>
               <span
                 className={`inline-flex h-6 items-center whitespace-nowrap rounded-md px-2 text-[12px] font-semibold ring-1 ring-inset ${chip.bg} ${chip.text} ${chip.ring}`}
               >
