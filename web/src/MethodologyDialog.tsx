@@ -26,9 +26,9 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden />
-      <div className="relative z-10 max-h-[85vh] w-full max-w-2xl overflow-auto rounded-2xl border border-edge bg-surface-2 shadow-2xl">
-        <header className="sticky top-0 flex items-center justify-between border-b border-hairline bg-surface-2 px-6 py-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="relative z-10 max-h-[85vh] w-full max-w-2xl overflow-auto rounded-3xl border border-white/10 bg-surface-1 shadow-2xl">
+        <header className="sticky top-0 flex items-center justify-between border-b border-white/[0.06] bg-surface-1/95 backdrop-blur-xl px-6 py-4">
           <div className="flex items-center gap-2">
             <Logo className="h-5 w-5 text-emerald-400" />
             <h2 className="text-lg font-bold tracking-tight text-slate-100">How Screener3000 works</h2>
@@ -97,12 +97,15 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
           </Block>
 
           <Block title="Reading the screen">
-            Each row&rsquo;s left rail and the <strong className="text-slate-100">N/3</strong> chip show how many systems a stock clears.
-            Click any row (or search a ticker) for the full scorecard &mdash; every verdict, its drivers, an RSI gauge, and a 52-week-range
-            bar. Relax the <em>Pass</em> filter to see names that clear 2, 1, or any; use <em>Columns</em> to choose what the grid shows.
+            Each card shows the three verdicts side by side (a <strong className="text-slate-100">✓</strong> marks a pass), the
+            informational Overall score in the ring, and the headline numbers: PEG, forward PEG, Graham discount to fair value, forward EPS
+            growth, dividend yield and where the price sits in its 52-week range. Tap a card (or type a ticker and press Enter) for the full
+            scorecard &mdash; every verdict, its drivers, an RSI gauge, and the per-pool Azqato ranks. Relax the <em>All 3</em> filter to
+            see names that clear 2, 1, or any; narrow to one pool with the chips. The dot at the top shows how old the data is; the app
+            checks for a new screen in the background and offers it when one lands, and keeps working offline once installed.
           </Block>
 
-          <p className="mt-5 border-t border-hairline pt-4 text-[12px] leading-relaxed text-slate-500">
+          <p className="mt-5 border-t border-white/[0.06] pt-4 text-[12px] leading-relaxed text-slate-500">
             Fundamentals from Yahoo Finance and Finnhub; AAA yield from FRED. Missing values render as &ldquo;&mdash;&rdquo;, never zero.{' '}
             <strong className="text-slate-400">Educational use only &mdash; not financial advice.</strong> Verify every name yourself before
             acting.

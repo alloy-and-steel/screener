@@ -12,7 +12,7 @@ name: Screen
 
 on:
   schedule:
-    - cron: "0 11 * * 1-5"   # 6am ET weekdays
+    - cron: "0 11 * * 1-5"   # 6am ET weekdays; web/src/freshness.ts mirrors this
   workflow_dispatch:
 
 permissions:

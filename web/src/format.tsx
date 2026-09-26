@@ -155,7 +155,7 @@ export function RangeBar({ pct: p }: { pct: number | null | undefined }) {
     <span className="inline-flex w-full items-center gap-2">
       <span className="relative h-1.5 flex-1 rounded-full bg-surface-3">
         <span
-          className={`absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full ring-2 ring-surface-2 ${TONE[tone].fill}`}
+          className={`absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full ring-2 ring-surface-1 ${TONE[tone].fill}`}
           style={{ left: `calc(${Math.max(0, Math.min(100, p))}% - 5px)` }}
         />
       </span>

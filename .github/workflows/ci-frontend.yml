@@ -1,6 +1,6 @@
 name: CI - Frontend
 
-# Type-checks and builds the SPA on every change to web/. Catches type errors
+# Type-checks, unit-tests and builds the SPA on every change to web/. Catches type errors
 # (vite build strips types without checking them) and build breaks before they
 # reach a deploy. Does NOT deploy — deploy.yml ships the built SPA with fresh data
 # on the cron schedule. The build needs no results.json: the SPA fetches it at
@@ -48,6 +48,9 @@ jobs:
 
       - name: Type-check
         run: pnpm -C web run typecheck
+
+      - name: Unit tests
+        run: pnpm -C web test
 
       - name: Build
         run: pnpm -C web build

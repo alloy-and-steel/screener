@@ -1,130 +1,227 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { SortingState, VisibilityState } from '@tanstack/react-table'
-import Toolbar, { type PassCounts } from './Toolbar'
-import DataTable from './DataTable'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import Header from './Header'
+import FilterBar, { type PassCounts } from './FilterBar'
+import StockCard from './StockCard'
 import Scorecard from './Scorecard'
-import { columns, presetVisibility } from './columns'
-import { combinedVerdict } from './score'
-import type { Dataset } from './types'
+import MethodologyDialog from './MethodologyDialog'
+import Toasts from './Toasts'
+import { filterRows, sortRows, type SortKey } from './filters'
+import { combinedVerdict, verdicts } from './score'
+import { useDataset } from './useDataset'
+import { INDEX_LABEL, type IndexName, type Row } from './types'
 
-const DATA_URL = `${import.meta.env.BASE_URL}data/results.json`
+// Cards render in pages as the list is scrolled — ~520 cards at once is a
+// noticeable stall on a phone, and nobody reads past the first screenful.
+const PAGE = 48
 
-type LoadState = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; data: Dataset }
-
-export default function App() {
-  const [load, setLoad] = useState<LoadState>({ status: 'loading' })
-  const [minPass, setMinPass] = useState(3) // default: pass all three
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => presetVisibility('summary'))
-  const [query, setQuery] = useState('')
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'combined', desc: true }])
-
-  const fetchData = useCallback(() => {
-    setLoad({ status: 'loading' })
-    fetch(`${DATA_URL}?v=${Date.now()}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status} fetching results.json`)
-        return r.json() as Promise<Dataset>
-      })
-      .then((data) => setLoad({ status: 'ready', data }))
-      .catch((e: unknown) => setLoad({ status: 'error', message: e instanceof Error ? e.message : String(e) }))
+// The open scorecard lives in the URL hash (#AAPL), so it is linkable and the
+// phone's back gesture closes it.
+function useHashTicker(): [string | null, (t: string | null) => void] {
+  const read = () => decodeURIComponent(window.location.hash.slice(1)).toUpperCase() || null
+  const [ticker, setTicker] = useState<string | null>(read)
+  const pushed = useRef(false)
+  useEffect(() => {
+    const onHash = () => setTicker(read())
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
   }, [])
-
-  useEffect(fetchData, [fetchData])
-
-  const rows = load.status === 'ready' ? load.data.rows : []
-  const q = query.trim().toUpperCase()
-
-  const counts = useMemo<PassCounts>(() => {
-    const nonErr = rows.filter((r) => !r.Error)
-    const pc = nonErr.map((r) => combinedVerdict(r).passCount)
-    return {
-      3: pc.filter((n) => n >= 3).length,
-      2: pc.filter((n) => n >= 2).length,
-      1: pc.filter((n) => n >= 1).length,
-      0: nonErr.length,
+  const set = useCallback((t: string | null) => {
+    if (t) {
+      pushed.current = true
+      window.location.hash = encodeURIComponent(t)
+    } else if (pushed.current) {
+      pushed.current = false
+      window.history.back()
+    } else {
+      // Arrived on a deep link: there is no in-app entry to go back to.
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
+      setTicker(null)
     }
+  }, [])
+  return [ticker, set]
+}
+
+function Summary({ rows, pool }: { rows: Row[]; pool: IndexName | null }) {
+  const stats = useMemo(() => {
+    let all = 0
+    const per = { Azqato: 0, Lynch: 0, Graham: 0 }
+    for (const r of rows) {
+      const vs = verdicts(r)
+      if (vs.every((v) => v.pass)) all++
+      for (const v of vs) if (v.pass) per[v.system]++
+    }
+    return { all, per }
   }, [rows])
 
-  const exactMatch = useMemo(() => (q ? rows.find((r) => r.Ticker?.toUpperCase() === q) : undefined), [rows, q])
-
-  const filtered = useMemo(() => {
-    return rows.filter((r) => {
-      if (r.Error) return false
-      if (combinedVerdict(r).passCount < minPass) return false
-      if (q && !r.Ticker.toUpperCase().includes(q)) return false
-      return true
-    })
-  }, [rows, minPass, q])
-
-  if (load.status === 'error') {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-canvas text-slate-200">
-        <p className="text-rose-300">Failed to load data: {load.message}</p>
-        <button
-          type="button"
-          onClick={fetchData}
-          className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
-        >
-          Retry
-        </button>
-      </div>
-    )
-  }
-
-  const looser = [2, 1, 0].find((l) => l < minPass && counts[l as keyof PassCounts] > 0)
+  const tiles: { label: string; hint: string; value: number }[] = [
+    { label: 'Azqato', hint: 'tier A or better', value: stats.per.Azqato },
+    { label: 'Lynch', hint: 'Buy or Strong Buy', value: stats.per.Lynch },
+    { label: 'Graham', hint: 'Buy or Deep Buy', value: stats.per.Graham },
+  ]
 
   return (
-    <div className="flex h-full flex-col bg-canvas text-slate-100">
-      <Toolbar
-        minPass={minPass}
-        onMinPass={setMinPass}
-        counts={counts}
-        visibility={columnVisibility}
-        onVisibility={setColumnVisibility}
-        query={query}
-        onQuery={setQuery}
-        shown={filtered.length}
-        total={rows.length}
+    <section className="pb-4 pt-5 sm:pb-5 sm:pt-8">
+      <h1 className="text-balance text-[22px] font-semibold leading-tight tracking-tight text-slate-50 sm:text-3xl">
+        <span className="tnum bg-gradient-to-br from-emerald-300 to-sky-300 bg-clip-text text-transparent">{stats.all}</span> of{' '}
+        <span className="tnum">{rows.length}</span> {pool ? `${INDEX_LABEL[pool]} stocks` : 'stocks'} pass all three screens
+      </h1>
+      <p className="mt-1.5 text-sm text-slate-400">
+        Azqato, Lynch and Graham judge each name independently — where they agree is the short list.
+      </p>
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:max-w-xl">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-2xl bg-surface-1 px-3 py-2.5 ring-1 ring-inset ring-white/[0.07]">
+            <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-slate-500">{t.label}</div>
+            <div className="tnum mt-0.5 text-xl font-semibold text-slate-100">{t.value}</div>
+            <div className="truncate text-[11px] text-slate-500">{t.hint}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export default function App() {
+  const { load, reload, pending, applyPending, dismissPending, check, checking, lastChecked } = useDataset()
+  const [minPass, setMinPass] = useState(3) // default: pass all three
+  const [pool, setPool] = useState<IndexName | null>(null)
+  const [sort, setSort] = useState<SortKey>('best')
+  const [query, setQuery] = useState('')
+  const [limit, setLimit] = useState(PAGE)
+  const [infoOpen, setInfoOpen] = useState(false)
+  const [openTicker, setOpenTicker] = useHashTicker()
+  const deferredQuery = useDeferredValue(query)
+
+  const rows = load.status === 'ready' ? load.data.rows : []
+
+  // Everything the pass filter chooses between: pool + search applied, pass
+  // floor not — so each segment's count is what tapping it would show.
+  const candidates = useMemo(() => filterRows(rows, { minPass: 0, pool, query: deferredQuery }), [rows, pool, deferredQuery])
+  const poolRows = useMemo(() => filterRows(rows, { minPass: 0, pool, query: '' }), [rows, pool])
+
+  const counts = useMemo<PassCounts>(() => {
+    const pc = candidates.map((r) => combinedVerdict(r).passCount)
+    return { 3: pc.filter((n) => n >= 3).length, 2: pc.filter((n) => n >= 2).length, 1: pc.filter((n) => n >= 1).length, 0: pc.length }
+  }, [candidates])
+
+  const shown = useMemo(
+    () =>
+      sortRows(
+        candidates.filter((r) => combinedVerdict(r).passCount >= minPass),
+        sort,
+      ),
+    [candidates, minPass, sort],
+  )
+
+  useEffect(() => setLimit(PAGE), [minPass, pool, sort, deferredQuery, rows])
+
+  const sentinel = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = sentinel.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (es) => {
+        if (es.some((e) => e.isIntersecting)) setLimit((l) => l + PAGE)
+      },
+      { rootMargin: '800px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [shown.length, limit])
+
+  const openRow = openTicker ? rows.find((r) => r.Ticker.toUpperCase() === openTicker) : undefined
+
+  // Enter in the search box opens an exact ticker match straight away.
+  const onSubmit = () => {
+    const q = query.trim().toUpperCase()
+    const hit = rows.find((r) => r.Ticker.toUpperCase() === q) ?? (shown.length === 1 ? shown[0] : undefined)
+    if (hit) setOpenTicker(hit.Ticker)
+  }
+
+  const looser = ([2, 1, 0] as const).find((l) => l < minPass && counts[l] > 0)
+
+  return (
+    <div className="min-h-full">
+      <Header
         generatedAt={load.status === 'ready' ? load.data.generated_at : undefined}
+        checking={checking}
+        lastChecked={lastChecked}
+        onCheck={() => void check(true)}
+        onMethodology={() => setInfoOpen(true)}
       />
 
-      <main className="min-h-0 flex-1">
-        {load.status === 'loading' ? (
-          <div className="space-y-1 p-5">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="skeleton h-8 rounded bg-surface-2" />
-            ))}
-          </div>
-        ) : exactMatch ? (
-          <Scorecard row={exactMatch} onBack={() => setQuery('')} />
-        ) : filtered.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <p className="text-slate-300">No names match this filter.</p>
-            {looser !== undefined ? (
-              <button
-                type="button"
-                onClick={() => setMinPass(looser)}
-                className="rounded-md bg-surface-3 px-4 py-2 text-sm text-slate-100 ring-1 ring-inset ring-edge hover:bg-surface-2"
-              >
-                Relax to {looser === 0 ? 'show all' : `${looser}+ screens`} ({counts[looser as keyof PassCounts]})
-              </button>
-            ) : null}
+      <main className="mx-auto max-w-7xl px-4 pb-24 sm:px-6">
+        {load.status === 'error' ? (
+          <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
+            <p className="text-rose-300">Couldn&rsquo;t load the screen: {load.message}</p>
+            <button
+              type="button"
+              onClick={reload}
+              className="rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-300"
+            >
+              Try again
+            </button>
           </div>
         ) : (
-          <div className="h-full p-4">
-            <div className="h-full overflow-hidden rounded-xl border border-hairline">
-              <DataTable
-                data={filtered}
-                columns={columns}
-                sorting={sorting}
-                onSortingChange={setSorting}
-                columnVisibility={columnVisibility}
-                onRowClick={(row) => setQuery(row.Ticker)}
-              />
-            </div>
-          </div>
+          <>
+            {load.status === 'ready' ? (
+              <Summary rows={poolRows} pool={pool} />
+            ) : (
+              <div className="skeleton mb-5 mt-8 h-24 max-w-xl rounded-2xl bg-surface-1" />
+            )}
+
+            <FilterBar
+              minPass={minPass}
+              onMinPass={setMinPass}
+              counts={counts}
+              pool={pool}
+              onPool={setPool}
+              sort={sort}
+              onSort={setSort}
+              query={query}
+              onQuery={setQuery}
+              onSubmit={onSubmit}
+            />
+
+            {load.status === 'loading' ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="skeleton h-64 rounded-2xl bg-surface-1" />
+                ))}
+              </div>
+            ) : shown.length === 0 ? (
+              <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-center">
+                <p className="text-slate-300">No stocks match.</p>
+                {looser !== undefined ? (
+                  <button
+                    type="button"
+                    onClick={() => setMinPass(looser)}
+                    className="rounded-full bg-white/[0.06] px-4 py-2 text-sm text-slate-100 ring-1 ring-inset ring-white/10 hover:bg-white/10"
+                  >
+                    Show {looser === 0 ? 'every name' : `${looser}+ screens`} ({counts[looser]})
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {shown.slice(0, limit).map((r) => (
+                    <StockCard key={r.Ticker} row={r} onOpen={setOpenTicker} />
+                  ))}
+                </div>
+                {limit < shown.length ? <div ref={sentinel} className="h-px" aria-hidden /> : null}
+                <p className="mt-8 text-center text-xs text-slate-600">
+                  {shown.length} of {counts[0]} shown · Educational use only — not financial advice.
+                </p>
+              </>
+            )}
+          </>
         )}
       </main>
+
+      {openRow ? <Scorecard row={openRow} onClose={() => setOpenTicker(null)} /> : null}
+      {infoOpen ? <MethodologyDialog onClose={() => setInfoOpen(false)} /> : null}
+      <Toasts pendingAt={pending?.generated_at} onLoadPending={applyPending} onDismissPending={dismissPending} />
     </div>
   )
 }

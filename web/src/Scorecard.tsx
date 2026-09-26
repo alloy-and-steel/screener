@@ -1,6 +1,7 @@
+import { useEffect } from 'react'
 import type { Row, Azqato } from './types'
 import { INDEX_LABEL, INDEX_NAMES } from './types'
-import { DASH, Dot, Meter, RangeBar, RsiGauge, TONE, num, pct, VerdictPill } from './format'
+import { DASH, Dot, Meter, RangeBar, RsiGauge, TONE, num, pct } from './format'
 import { TIER_LABEL, TIER_TONE, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
@@ -70,7 +71,7 @@ function AzqatoViz({ az }: { az: Azqato }) {
 function Card({ v, row }: { v: Verdict; row: Row }) {
   const lines = verdictLines(v.system, row)
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-edge bg-surface-2 p-4">
+    <div className="flex flex-col gap-3 rounded-2xl bg-surface-1 p-4 ring-1 ring-inset ring-white/[0.07]">
       <div>
         <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{v.system}</div>
         <div className="text-xs text-slate-500">{v.question}</div>
@@ -95,7 +96,7 @@ function Card({ v, row }: { v: Verdict; row: Row }) {
 
       {v.system === 'Azqato' && row.azqato ? <AzqatoViz az={row.azqato} /> : null}
 
-      <dl className="mt-auto space-y-1.5 border-t border-hairline pt-3">
+      <dl className="mt-auto space-y-1.5 border-t border-white/[0.06] pt-3">
         {v.drivers.map((d) => (
           <DriverRow key={d.label} d={d} />
         ))}
@@ -116,7 +117,7 @@ function OverallPanel({ row }: { row: Row }) {
     { label: 'Safety', value: scores?.safety },
   ]
   return (
-    <div className="mt-3 rounded-xl border border-edge bg-surface-2 p-4">
+    <div className="mt-3 rounded-2xl bg-surface-1 p-4 ring-1 ring-inset ring-white/[0.07]">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Overall</div>
@@ -132,7 +133,7 @@ function OverallPanel({ row }: { row: Row }) {
           </div>
         ))}
       </div>
-      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-hairline pt-3 text-sm sm:grid-cols-3">
+      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-white/[0.06] pt-3 text-sm sm:grid-cols-3">
         <DriverRow d={{ label: 'Sector', value: row.Sector ?? DASH }} />
         <DriverRow d={{ label: 'Piotroski F', value: typeof row.Piotroski_F === 'number' ? `${row.Piotroski_F}/9` : DASH }} />
         <DriverRow d={{ label: 'Altman Z', value: num(row.Altman_Z) }} />
@@ -146,74 +147,99 @@ function OverallPanel({ row }: { row: Row }) {
   )
 }
 
-export default function Scorecard({ row, onBack }: { row: Row; onBack: () => void }) {
+// Full detail for one name, shown in a sheet over the card grid: bottom sheet
+// on phones, right-hand panel on wide screens. Escape / backdrop / ✕ close it.
+export default function Scorecard({ row, onClose }: { row: Row; onClose: () => void }) {
   const c = combinedVerdict(row)
   const ct = TONE[c.tone]
 
-  return (
-    <div className="h-full overflow-auto bg-canvas px-6 py-5">
-      <div className="mx-auto max-w-5xl">
-        <button
-          type="button"
-          onClick={onBack}
-          className="mb-4 inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-slate-400 hover:bg-surface-2 hover:text-slate-100"
-        >
-          ‹ Back to screener
-        </button>
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
 
-        {/* Combined verdict strip */}
-        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-edge bg-surface-2 px-5 py-3">
-          <a
-            href={`https://finviz.com/quote.ashx?t=${row.Ticker}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-2xl font-bold text-slate-100 hover:text-sky-300"
-          >
-            {row.Ticker}
-          </a>
-          <span className="text-sm text-slate-400">{(row.Indexes as string) ?? ''}</span>
-          {!row.Error && (
-            <span className="text-sm text-slate-400">
-              <span className="tnum text-slate-200">{num(row.Price)}</span>
-              <span className="mx-2 text-slate-600">·</span>
-              <span className="tnum text-slate-200">{num(row.MarketCap_B, 1)}B</span> mkt cap
-            </span>
-          )}
-          {!row.Error && (
-            <span className={`ml-auto inline-flex items-center gap-2 rounded-lg px-3 py-1 ring-1 ring-inset ${ct.bg} ${ct.ring}`}>
-              <span className={`text-sm font-semibold ${ct.text}`}>{c.label}</span>
-              <span className={`tnum text-sm font-bold ${ct.text}`}>{c.passCount}/3</span>
-            </span>
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center sm:items-stretch sm:justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${row.Ticker} scorecard`}
+    >
+      <div className="fade-in absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="sheet-in relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-canvas shadow-2xl sm:max-h-none sm:max-w-3xl sm:rounded-none sm:rounded-l-3xl">
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-white/20 sm:hidden" aria-hidden />
+        <header className="shrink-0 border-b border-white/[0.06] px-5 pb-4 pt-3 sm:px-6 sm:pt-5">
+          <div className="flex items-center gap-3">
+            <a
+              href={`https://finviz.com/quote.ashx?t=${row.Ticker}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open on Finviz"
+              className="font-mono text-2xl font-bold tracking-tight text-slate-50 hover:text-sky-300"
+            >
+              {row.Ticker} <span className="text-base text-slate-500">↗</span>
+            </a>
+            {!row.Error && (
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 ring-1 ring-inset ${ct.bg} ${ct.ring}`}>
+                <span className={`text-xs font-semibold ${ct.text}`}>{c.label}</span>
+                <span className={`tnum text-xs font-bold ${ct.text}`}>{c.passCount}/3</span>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="ml-auto grid size-9 shrink-0 place-items-center rounded-full bg-white/[0.05] text-slate-300 ring-1 ring-inset ring-white/10 hover:bg-white/10 hover:text-slate-50"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm text-slate-400">
+            {!row.Error && (
+              <span className="tnum">
+                <span className="text-slate-200">{num(row.Price)}</span>
+                <span className="mx-2 text-slate-600">·</span>
+                <span className="text-slate-200">{num(row.MarketCap_B, 1)}B</span> mkt cap
+              </span>
+            )}
+            <span className="text-xs text-slate-500">{[row.Sector, row.Indexes].filter(Boolean).join(' · ')}</span>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 sm:px-6">
+          {row.Error ? (
+            <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
+              No scores for {row.Ticker}: {String(row.Error)}.
+            </div>
+          ) : (
+            <>
+              {row.Valuation_Input_Warning ? (
+                <p className="mb-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] px-4 py-2.5 text-xs text-amber-200/90">
+                  Lynch and Graham are N/A here: {row.Valuation_Input_Warning}. The name stays visible — Azqato ranks it relative to the
+                  universe, and the Graham defensive checks still run.
+                </p>
+              ) : null}
+              <div className="grid gap-3 md:grid-cols-3">
+                {verdicts(row).map((v) => (
+                  <Card key={v.system} v={v} row={row} />
+                ))}
+              </div>
+              <OverallPanel row={row} />
+              <p className="mt-4 text-xs leading-relaxed text-slate-500">
+                Three independent systems. They often disagree — that disagreement is the signal. The default list shows only names that
+                clear all three.
+              </p>
+            </>
           )}
         </div>
-
-        {row.Error ? (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-            No scores for {row.Ticker}: {String(row.Error)}.
-          </div>
-        ) : (
-          <>
-            {row.Valuation_Input_Warning ? (
-              <p className="mb-3 rounded-lg border border-edge bg-surface-2 px-4 py-2 text-xs text-amber-300/80">
-                Lynch and Graham are N/A here: {row.Valuation_Input_Warning}. The name stays visible — Azqato ranks it relative to the
-                universe, and the Graham defensive checks still run.
-              </p>
-            ) : null}
-            <div className="grid gap-3 md:grid-cols-3">
-              {verdicts(row).map((v) => (
-                <Card key={v.system} v={v} row={row} />
-              ))}
-            </div>
-            <OverallPanel row={row} />
-            <p className="mt-4 flex items-center gap-2 text-xs text-slate-500">
-              <span className="inline-flex items-center gap-1">
-                <VerdictPill tone="green">Pass</VerdictPill>
-              </span>
-              Three independent systems. They often disagree — that disagreement is the signal. The screener's default list shows only names
-              that clear all three.
-            </p>
-          </>
-        )}
       </div>
     </div>
   )
