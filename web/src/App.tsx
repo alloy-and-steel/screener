@@ -8,6 +8,7 @@ import Toasts from './Toasts'
 import { filterRows, sortRows, type SortKey } from './filters'
 import { PASS_RULE, combinedVerdict, verdicts } from './score'
 import { useDataset } from './useDataset'
+import { loadPrefs, savePrefs } from './prefs'
 import { INDEX_LABEL, type IndexName, type Row } from './types'
 
 // Cards render in pages as the list is scrolled — ~520 cards at once is a
@@ -83,9 +84,12 @@ function Summary({ rows, pool }: { rows: Row[]; pool: IndexName | null }) {
 
 export default function App() {
   const { load, reload, pending, applyPending, dismissPending, check, checking, lastChecked, checkFailed } = useDataset()
-  const [minPass, setMinPass] = useState(3) // default: pass all three
-  const [pool, setPool] = useState<IndexName | null>(null)
-  const [sort, setSort] = useState<SortKey>('best')
+  // First visit opens on the all-three short list; after that, the last view.
+  const [initial] = useState(loadPrefs)
+  const [minPass, setMinPass] = useState(initial.minPass)
+  const [pool, setPool] = useState<IndexName | null>(initial.pool)
+  const [sort, setSort] = useState<SortKey>(initial.sort)
+  useEffect(() => savePrefs({ minPass, pool, sort }), [minPass, pool, sort])
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(PAGE)
   const [infoOpen, setInfoOpen] = useState(false)
