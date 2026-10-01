@@ -24,6 +24,7 @@ import os
 import sys
 import json
 import math
+import re
 import time
 import logging
 import requests
@@ -753,13 +754,16 @@ def fetch_nasdaq100() -> set:
 # weight, top 100 after collapsing dual share classes. The raw count band is a
 # guard so a truncated response can never quietly shrink a pool. The previous
 # /investment-products/etfs/profile/api/ path was retired after 2026-08-08 and
-# now answers 200 with the site's HTML shell.
+# now redirects to the site's HTML shell.
 VANGUARD_HOLDINGS_API = "https://investor.vanguard.com/irr/funds/profile/{fund}-AdditionalFundData"
 VANGUARD_HEADERS = {**WIKI_HEADERS, "Accept": "application/json"}
 VANGUARD_TOP_N = 100
 VANGUARD_RAW_MIN, VANGUARD_RAW_MAX = 110, 500
+# A listed symbol in the dash convention; anything else (a CVR's "2223637D")
+# aborts the pool, as azqato's sync does.
+VANGUARD_SYMBOL_RE = re.compile(r"^[A-Z][A-Z-]{0,5}$")
 # Drop the duplicate share class only when the kept sibling is also present.
-# Keys/values use this repo's dash convention (BRK-B), not Vanguard's dots.
+# Keys/values use this repo's dash convention (BRK-B), not Vanguard's slashes.
 DUAL_CLASS_DROP = {
     "GOOG": "GOOGL",
     "FOX": "FOXA",
@@ -781,7 +785,10 @@ def _fetch_vanguard_top_holdings(fund: str) -> set:
     content_type = str(resp.headers.get("content-type") or "")
     if "json" not in content_type.lower():
         raise ValueError(f"{fund}: Vanguard returned non-JSON (HTTP {resp.status_code}, content-type {content_type or 'unknown'}) — a bot challenge, or the endpoint moved again")
-    entities = resp.json()["holdingDetails"]["equityHoldings"]
+    try:
+        entities = list(resp.json()["holdingDetails"]["equityHoldings"])
+    except (KeyError, TypeError) as exc:
+        raise ValueError(f"{fund}: Vanguard JSON has no holdingDetails.equityHoldings list ({type(exc).__name__}: {exc}) — the endpoint changed shape") from exc
     if not (VANGUARD_RAW_MIN <= len(entities) <= VANGUARD_RAW_MAX):
         raise ValueError(f"{fund}: unexpected raw holdings count {len(entities)} (expected {VANGUARD_RAW_MIN}-{VANGUARD_RAW_MAX})")
 
@@ -789,7 +796,7 @@ def _fetch_vanguard_top_holdings(fund: str) -> set:
     for entity in entities:
         # Share classes arrive as "BRK/B", weights as "13.61%".
         symbol = str(entity.get("ticker") or "").strip().upper().replace(" ", "").replace("/", "-").replace(".", "-")
-        weight = _safe_float(str(entity.get("marketValuePercentage") or "").replace("%", "").replace(",", ""))
+        weight = _safe_float(str(entity.get("marketValuePercentage") or "").replace("%", ""))
         if symbol and weight is not None:
             weighted.append((weight, symbol))
     weighted.sort(key=lambda pair: -pair[0])
@@ -805,6 +812,9 @@ def _fetch_vanguard_top_holdings(fund: str) -> set:
             break
     if len(picked) < VANGUARD_TOP_N:
         raise ValueError(f"{fund}: resolved only {len(picked)} of {VANGUARD_TOP_N} holdings")
+    suspicious = [symbol for symbol in picked if not VANGUARD_SYMBOL_RE.match(symbol)]
+    if suspicious:
+        raise ValueError(f"{fund}: suspicious tickers in the top {VANGUARD_TOP_N}: {suspicious}")
     return set(picked)
 
 

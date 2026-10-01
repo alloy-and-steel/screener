@@ -226,6 +226,11 @@ def _vanguard_payload(entities):
     return type("R", (), {"status_code": 200, "headers": {"content-type": "application/json"}, "raise_for_status": lambda self: None, "json": lambda self: body})()
 
 
+def _sym(i):
+    """A letters-only synthetic symbol ("TAA", "TAB", ...), ordered like i."""
+    return f"T{chr(65 + i // 26)}{chr(65 + i % 26)}"
+
+
 def _holding(ticker, weight):
     return {"ticker": ticker, "securityLongDescription": f"{ticker} Inc", "marketValuePercentage": None if weight is None else f"{weight:,.2f}%"}
 
@@ -237,7 +242,7 @@ def test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes():
     sibling is present. Mirrors his update_etf_constituents.py.
     """
     # 130 synthetic holdings in descending weight, plus GOOG right behind GOOGL.
-    entities = [_holding(f"T{i:03d}", 500.0 - i) for i in range(130)]
+    entities = [_holding(_sym(i), 500.0 - i) for i in range(130)]
     entities.insert(3, _holding("GOOGL", 497.5))
     entities.insert(4, _holding("GOOG", 497.4))
     # A dual class whose sibling is NOT in the fund must be kept, not dropped.
@@ -247,8 +252,13 @@ def test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes():
 
     original = screener._HTTP_GET
     seen = []
+
+    def fake_get(url, **kw):
+        seen.append(url)
+        return _vanguard_payload(entities)
+
     try:
-        screener._HTTP_GET = lambda url, **kw: seen.append(url) or _vanguard_payload(entities)
+        screener._HTTP_GET = fake_get
         members = screener.fetch_growth100()
     finally:
         screener._HTTP_GET = original
@@ -260,14 +270,49 @@ def test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes():
     assert "NOWT" not in members, "an unweighted row has no rank"
     assert "GOOGL" in members and "GOOG" not in members, "dual class should collapse to the kept sibling"
     assert "HEI-A" in members, "a dual class with no sibling in the fund stays"
-    assert "T000" in members and "T099" not in members, "the cut must follow weight order, not ticker order"
+    assert _sym(0) in members and _sym(99) not in members, "the cut must follow weight order, not ticker order"
+
+
+def _vanguard_error(payload_fn):
+    original = screener._HTTP_GET
+    try:
+        screener._HTTP_GET = payload_fn
+        try:
+            screener.fetch_dividend100()
+        except ValueError as exc:
+            return str(exc)
+        raise AssertionError("the pool should have aborted")
+    finally:
+        screener._HTTP_GET = original
+
+
+def test_vanguard_names_a_payload_shape_it_does_not_recognise():
+    """
+    The endpoint has moved once already. If the JSON changes shape again, the
+    fallback warning must say so, not log a bare KeyError('holdingDetails').
+    """
+    old_shape = type("R", (), {"status_code": 200, "headers": {"content-type": "application/json"}, "raise_for_status": lambda self: None, "json": lambda self: {"fund": {"entity": []}}})()
+    message = _vanguard_error(lambda url, **kw: old_shape)
+    assert "holdingDetails.equityHoldings" in message, message
+
+
+def test_vanguard_pool_rejects_a_ticker_that_is_not_a_listed_symbol():
+    """
+    Funds hold CVRs and placeholders under ids like "2223637D". One weighted
+    into the top 100 aborts the pool (as azqato's sync does) rather than
+    entering the universe as a stock.
+    """
+    entities = [_holding(_sym(i), 100.0 - i * 0.5) for i in range(130)]
+    entities.insert(0, _holding("2223637D", 150.0))
+    message = _vanguard_error(lambda url, **kw: _vanguard_payload(entities))
+    assert message.endswith("['2223637D']"), message
 
 
 def test_vanguard_pool_rejects_a_truncated_holdings_response():
     """A short response must abort the pool, never quietly publish a small one."""
     original = screener._HTTP_GET
     try:
-        screener._HTTP_GET = lambda url, **kw: _vanguard_payload([_holding(f"T{i:03d}", 100.0 - i) for i in range(40)])
+        screener._HTTP_GET = lambda url, **kw: _vanguard_payload([_holding(_sym(i), 100.0 - i) for i in range(40)])
         try:
             screener.fetch_value100()
         except ValueError as exc:
@@ -553,6 +598,8 @@ def run_all():
         test_dow_fetch_uses_component_list_page,
         test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes,
         test_vanguard_pool_rejects_a_truncated_holdings_response,
+        test_vanguard_names_a_payload_shape_it_does_not_recognise,
+        test_vanguard_pool_rejects_a_ticker_that_is_not_a_listed_symbol,
         test_every_pool_is_scored_as_its_own_cross_section,
         test_negative_eps_is_retained_as_worst_discount_not_a_fetch_error,
         test_valuation_warning_lists_every_applicable_reason,
