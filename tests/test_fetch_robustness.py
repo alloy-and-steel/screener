@@ -233,7 +233,7 @@ def test_run_screener_survives_one_ticker_crash():
         {"ticker": ["GOODCO", "BOOM", "OTHERCO"], "indexes": ["S&P500", "S&P500", "S&P500"]}
     )
 
-    def fake_process(ticker, aaa_yield, risk_free_rate=None):
+    def fake_process(ticker, aaa_yield, risk_free_rate=None, finnhub=None):
         if ticker == "BOOM":
             raise KeyError("surprise shape from provider")
         return {
@@ -261,6 +261,104 @@ def test_run_screener_survives_one_ticker_crash():
     good = df[df["Ticker"] == "GOODCO"].iloc[0]
     assert good["Error"] is None or pd.isna(good["Error"])
     assert good["azqato"]["score"] is not None
+
+
+def _azqato_inputs():
+    return {
+        "revTTM": 5.0, "revFwd": 6.0, "epsTTM": 7.0, "epsFwd": 8.0,
+        "peFwd": 20.0, "pegFwd": 1.5, "cash": 10.0, "debt": 5.0, "marketCap": 1e9,
+    }
+
+
+def _run_screener_with_finnhub_caps(universe, caps_m):
+    """
+    run_screener over `universe` with Finnhub faked at the HTTP seam (each
+    ticker's marketCapitalization in $M; None = Finnhub has no figure) and
+    process_ticker faked to record the Finnhub bundle it was handed.
+    Returns (df, finnhub_urls_by_ticker, handed_by_ticker).
+    """
+    finnhub_calls = {}
+    handed = {}
+
+    def fake_get(url, params=None, **kw):
+        finnhub_calls[params["symbol"]] = finnhub_calls.get(params["symbol"], 0) + 1
+        cap = caps_m[params["symbol"]]
+        return _FakeResponse(200, {"metric": {} if cap is None else {"marketCapitalization": cap}})
+
+    def fake_process(ticker, aaa_yield, risk_free_rate=None, finnhub=None):
+        handed[ticker] = finnhub
+        return {"Ticker": ticker, "Error": None, "Provider_Finnhub_OK": True, "azqato": _azqato_inputs()}
+
+    orig = screener._HTTP_GET, screener.process_ticker, screener._FINNHUB_SLEEP
+    screener._HTTP_GET, screener.process_ticker, screener._FINNHUB_SLEEP = fake_get, fake_process, lambda s: None
+    try:
+        df = screener.run_screener(universe, aaa_yield=5.0)
+    finally:
+        screener._HTTP_GET, screener.process_ticker, screener._FINNHUB_SLEEP = orig
+    return df, finnhub_calls, handed
+
+
+def test_total_us_floor_drops_only_small_names_found_through_the_market_pool():
+    """
+    The Total US pool is floored at $1B. The floor gates entry through that
+    pool alone: a small name the S&P also holds stays, and a name whose cap
+    Finnhub can't report is screened (unknown is not "below").
+    """
+    universe = pd.DataFrame({
+        "ticker": ["BIGCO", "TINYCO", "NOCAP", "SMALLSP"],
+        "indexes": ["TotalUS", "TotalUS", "TotalUS", "S&P500, TotalUS"],
+    })
+    caps_m = {"BIGCO": 1000.0, "TINYCO": 999.9, "NOCAP": None, "SMALLSP": 800.0}
+    df, finnhub_calls, handed = _run_screener_with_finnhub_caps(universe, caps_m)
+
+    assert sorted(df["Ticker"]) == ["BIGCO", "NOCAP", "SMALLSP"], sorted(df["Ticker"])
+    # The size check's Finnhub bundle is the one the screen uses: no second call.
+    assert handed["BIGCO"] == {"marketCapitalization": 1000.0}, handed
+    assert finnhub_calls == {"BIGCO": 1, "TINYCO": 1, "NOCAP": 1}, finnhub_calls
+    assert handed["SMALLSP"] is None, "a curated name fetches its own Finnhub data in process_ticker"
+
+
+def test_finnhub_calls_are_spaced_to_the_free_tier_rate():
+    """
+    60 calls/min is the free tier's limit. Calls that arrive back to back (a
+    name dropped by the size floor costs one Finnhub call and nothing else)
+    wait out the gap; a call that already came late does not wait.
+    """
+    clock = {"now": 100.0}
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(round(seconds, 3))
+        clock["now"] += seconds
+
+    orig = screener._HTTP_GET, screener._FINNHUB_SLEEP, screener._CLOCK, screener._finnhub_last_call
+    screener._HTTP_GET = lambda url, **kw: _FakeResponse(200, {"metric": {}})
+    screener._FINNHUB_SLEEP, screener._CLOCK, screener._finnhub_last_call = fake_sleep, lambda: clock["now"], None
+    try:
+        screener.get_finnhub_metrics("A")  # first call: nothing to wait for
+        clock["now"] += 0.2
+        screener.get_finnhub_metrics("B")  # 0.2s later: waits 0.9s
+        clock["now"] += 5.0
+        screener.get_finnhub_metrics("C")  # 5s later: no wait
+    finally:
+        screener._HTTP_GET, screener._FINNHUB_SLEEP, screener._CLOCK, screener._finnhub_last_call = orig
+    assert sleeps == [0.9], sleeps
+
+
+def test_total_us_is_not_rescored_as_its_own_pool():
+    """
+    The tier already ranks every name against the whole merged market, which
+    is the Total US pool plus a handful of curated names: a per-pool Total US
+    rank would repeat it. The curated pools are still re-scored on their own.
+    """
+    universe = pd.DataFrame({
+        "ticker": ["AAA", "BBB", "CCC"],
+        "indexes": ["S&P500, TotalUS", "S&P500, TotalUS", "TotalUS"],
+    })
+    df, _, _ = _run_screener_with_finnhub_caps(universe, {"CCC": 5000.0})
+    by_index = {r["Ticker"]: r["azqato"].get("byIndex", {}) for _, r in df.iterrows()}
+    assert set(by_index["AAA"]) == {"S&P500"}, by_index
+    assert by_index["CCC"] == {}, by_index
 
 
 if __name__ == "__main__":

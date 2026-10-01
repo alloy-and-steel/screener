@@ -1,6 +1,6 @@
 // Which cards are shown, and in what order. Pure; the card grid only renders.
 
-import type { IndexName, Row } from './types'
+import { INDEX_LABEL, INDEX_NAMES, type IndexName, type Row } from './types'
 import { azPegDisplay, combinedVerdict } from './score'
 
 export interface Filter {
@@ -11,6 +11,14 @@ export interface Filter {
 
 export function inPool(row: Row, pool: IndexName): boolean {
   return typeof row.Indexes === 'string' && row.Indexes.split(',').some((s) => s.trim() === pool)
+}
+
+// The pools a stock belongs to, for display. Nearly every name is in Total US,
+// so it is named only when it is the one pool that brought the stock in.
+export function poolLabels(row: Row): string[] {
+  const pools = INDEX_NAMES.filter((n) => inPool(row, n))
+  const curated = pools.filter((n) => n !== 'TotalUS')
+  return (curated.length ? curated : pools).map((n) => INDEX_LABEL[n])
 }
 
 export function filterRows(rows: Row[], f: Filter): Row[] {

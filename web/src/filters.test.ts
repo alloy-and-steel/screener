@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterRows, sortRows } from './filters'
+import { filterRows, poolLabels, sortRows } from './filters'
 import type { Row } from './types'
 
 // Minimal rows: only the fields the filters/sorts read.
@@ -62,5 +62,13 @@ describe('filterRows', () => {
   it('searches ticker and sector, case-insensitively', () => {
     expect(filterRows(rows, { minPass: 0, pool: null, query: 'aap' }).map((r) => r.Ticker)).toEqual(['AAPL'])
     expect(filterRows(rows, { minPass: 0, pool: null, query: 'defens' }).map((r) => r.Ticker)).toEqual(['KO'])
+  })
+})
+
+describe('poolLabels', () => {
+  it('names Total US only for a stock that no curated pool holds', () => {
+    expect(poolLabels(row('AAPL', { Indexes: 'S&P500, Nasdaq100, TotalUS' }))).toEqual(['S&P 500', 'Nasdaq 100'])
+    expect(poolLabels(row('SMID', { Indexes: 'TotalUS' }))).toEqual(['Total US $1B+'])
+    expect(poolLabels(row('NONE', { Indexes: null }))).toEqual([])
   })
 })

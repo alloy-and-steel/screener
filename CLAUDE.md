@@ -2,9 +2,10 @@
 
 ## What this is
 
-A three-system stock screener over six pools — the S&P 500, Dow 30, Nasdaq-100,
+A three-system stock screener over seven pools — the S&P 500, Dow 30, Nasdaq-100,
 and (from azqato) Growth 100 / Value 100 / Dividend 100, the top-100 holdings by
-weight of VUG / VTV / VIG — merged into ONE deduplicated universe (~523 names),
+weight of VUG / VTV / VIG, and Total US, every US-listed VTI holding of $1B+
+market cap — merged into ONE deduplicated universe (~2,000 names),
 plus a 4th **informational** composite score. A Python job fetches fundamentals and
 scores every name through **three independent screens** (the pass/fail gate);
 a static React SPA renders the results. Deployed to GitHub Pages on a weekday
@@ -69,10 +70,10 @@ no EPS for Lynch/Graham to value, and International is local-exchange listings
 (`005930.KS`, `7203.T`) that the Finnhub free tier doesn't cover — two of this
 fork's three systems would have nothing to score them with, so they could never
 clear the gate. His **Growth/Value/Dividend 100** pools ARE screened (see
-`INDEX_FETCHERS`). His **Domestic** universe (v4.9.x, all ~3,500 US holdings
-of VTI, refreshed weekly) is NOT screened: ~3,500 Finnhub calls is about an hour
-at 60 req/min, and folding it into the merged cross-section would re-tier every
-name. Still unported: the `grossMargin`/`netMargin` feed fields and the v4.3.6
+`INDEX_FETCHERS`), and so is his **Domestic** universe (v4.9.x, all ~3,465
+US holdings of VTI) as `TotalUS`, floored at $1B market cap (~1,950 names;
+owner's call 2026-10-01, as was ranking Azqato over the whole merged market —
+which re-tiered every name). Still unported: the `grossMargin`/`netMargin` feed fields and the v4.3.6
 trailing ratios (`peTTM`, `fcfYield`, `roe`, ...) — research-page extras no
 azqato metric reads. Re-checked through `3c6d71c` (2026-09-28, v4.9.6): scoring
 unchanged. Adopted from it: the v3.37.2 stale-data
@@ -189,7 +190,7 @@ Screen and publish are SEPARATE workflows, decoupled through a dedicated
 refresh never churns the submodule pointer (the original reason data was kept off
 `master`; the old design committed `docs/data/results.json` to the tracked branch
 and churned it daily). A frontend-only change redeploys immediately by REUSING the
-last screened data; it does not re-run the ~515-call screener. Fresh data comes
+last screened data; it does not re-run the ~80-minute screener. Fresh data comes
 from the cron screen (or a manual Screen run).
 
 Bootstrap: the `data` branch must exist before the first deploy. Run **Screen**
@@ -210,17 +211,22 @@ reached absent, null if never picked) merged in by `write_json` from the ledger.
 ## Layout
 
 - `stock_screener.py` — universe -> fetch -> score -> `write_json`. Entry
-  point. `get_universe` walks `INDEX_FETCHERS` (the six pools, in membership
+  point. `get_universe` walks `INDEX_FETCHERS` (the seven pools, in membership
   order) and wraps each fetch in `_fetch_index_with_fallback`, which on failure
   falls back to that pool's membership in the last published `results.json`
   (`_cached_index_members`) and logs a warning; with no cached members it
   re-raises rather than screening a partial universe. S&P/Dow/Nasdaq come from
   Wikipedia component-list pages (the parent index articles no longer carry a
   symbols table — both fetches are pinned by regression tests); Growth/Value/
-  Dividend come from Vanguard's fund-profile holdings API via
-  `_fetch_vanguard_top_holdings`, top 100 by weight, dual share classes
-  collapsed, with a raw-count band so a truncated response aborts instead of
-  quietly shrinking a pool. Also holds the `overall_score()` engine + its `SCORE_*`/`PILLAR_
+  Dividend/Total US come from Vanguard's holdings endpoint
+  (`_fetch_vanguard_holdings`; the old profile-API path was retired and now
+  serves an HTML shell): G/V/D the top 100 by weight with dual share classes
+  collapsed, Total US every listed symbol, each with a count band so a
+  truncated response aborts instead of quietly shrinking a pool. The Total US
+  $1B floor is applied in `run_screener`, not the fetcher: a name only that
+  pool brought in gets its Finnhub bundle first (reused by `process_ticker`)
+  and is skipped under `TOTAL_MARKET_MIN_CAP_M`; unknown cap is screened, and
+  Total US is not re-scored into `byIndex` (it would repeat the tier). Also holds the `overall_score()` engine + its `SCORE_*`/`PILLAR_
   WEIGHTS`/`DCF_*` constants, the Phase 6 factor helpers (`_compute_fcf_
   yield`, `_compute_ev_ebit`, `_compute_roic`, `_compute_shareholder_yield`,
   `_compute_price_signals`), the Phase 7 distress/DCF helpers (`_compute_
@@ -342,8 +348,10 @@ After that: the weekday cron (`0 11 * * 1-5`) refreshes data and auto-deploys (v
   feature). CI pins pnpm 11; build locally with the same.
 - **52-week range + RSI use `auto_adjust=False`** (nominal prices) so they share
   a basis with the raw `fast_info` last price and the Finviz/azqato convention.
-- **Finnhub free tier is 60 req/min** (~515 calls/run). yfinance latency paces it
-  under the limit; the publish guard covers a rate-limit-induced degraded run.
+- **Finnhub free tier is 60 req/min** (~3,500 calls/run: every Total US name is
+  size-checked). `get_finnhub_metrics` spaces calls `FINNHUB_MIN_INTERVAL`
+  apart, so a run is ~80 min (estimated); the publish guard covers a rate-limit-induced
+  degraded run.
 - Names with no usable (positive) EPS or non-positive/uncomputable growth are
   kept **visible** with valuation N/A (Graham-defensive + Azqato still
   computed — the azqato model ranks loss-makers worst on valuation instead of

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { Row, Azqato } from './types'
 import { INDEX_LABEL, INDEX_NAMES } from './types'
 import { DASH, Dot, RangeBar, RsiGauge, TONE, capB, compactUsd, num, pct, signTone, signedPct, usd } from './format'
-import { inPool } from './filters'
+import { poolLabels } from './filters'
 import { LEVEL_LABEL, pickViews } from './selection'
 import { TIER_LABEL, TIER_TONE, azNetCashMc, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
@@ -267,7 +267,7 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
               </span>
             )}
             <span className="w-full truncate text-xs text-slate-500">
-              {[row.Sector, ...INDEX_NAMES.filter((n) => inPool(row, n)).map((n) => INDEX_LABEL[n])].filter(Boolean).join(' · ')}
+              {[row.Sector, ...poolLabels(row)].filter(Boolean).join(' · ')}
             </span>
           </div>
         </header>

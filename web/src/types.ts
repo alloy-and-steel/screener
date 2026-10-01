@@ -23,7 +23,8 @@ export type AzqatoMetricKey =
 
 // The pools the screener covers, in the order stock_screener.INDEX_FETCHERS
 // lists them — each is a universe azqato's own screener ranks separately.
-export const INDEX_NAMES = ['S&P500', 'Dow30', 'Nasdaq100', 'Growth100', 'Value100', 'Dividend100'] as const
+// TotalUS is every US-listed VTI holding of $1B+ market cap.
+export const INDEX_NAMES = ['S&P500', 'Dow30', 'Nasdaq100', 'Growth100', 'Value100', 'Dividend100', 'TotalUS'] as const
 export type IndexName = (typeof INDEX_NAMES)[number]
 
 export const INDEX_LABEL: Record<IndexName, string> = {
@@ -33,6 +34,7 @@ export const INDEX_LABEL: Record<IndexName, string> = {
   Growth100: 'Growth 100',
   Value100: 'Value 100',
   Dividend100: 'Dividend 100',
+  TotalUS: 'Total US $1B+',
 }
 
 export interface Azqato {

@@ -765,6 +765,11 @@ VANGUARD_RAW_MIN, VANGUARD_RAW_MAX = 110, 500
 # enough that a half-empty response aborts).
 TOTAL_MARKET_RAW_MIN, TOTAL_MARKET_RAW_MAX = 2500, 5000
 TOTAL_MARKET_MIN, TOTAL_MARKET_MAX = 2800, 4200
+# The Total US pool admits a name only at >= $1B market cap (Finnhub
+# marketCapitalization, $M: the figure the card shows), checked in run_screener
+# before the expensive yfinance fetch. It gates entry through that pool alone:
+# a curated pool's member is screened whatever its size.
+TOTAL_MARKET_MIN_CAP_M = 1000.0
 # A listed symbol in the dash convention; anything else (a CVR's "2223637D")
 # aborts a top-100 pool and is dropped from the Total US market, as azqato's
 # sync does.
@@ -912,11 +917,12 @@ def _fetch_index_with_fallback(index_name: str, fetcher) -> set:
         raise
 
 
-# Every pool the screener covers, in the order membership is listed. These are
-# also the cross-sections the Azqato model is re-scored over for the scorecard
-# (see run_screener) — each one is a universe azqato's own screener ranks
-# separately, so a name can be reconciled against whichever of his views it
-# appears in. NOT ported: his ETFs list (a different, technicals-only scoring
+# Every pool the screener covers, in the order membership is listed. Each is a
+# universe azqato's own screener ranks separately, and all but Total US are
+# also re-scored as their own cross-section for the scorecard (see
+# run_screener), so a name can be reconciled against whichever of his views it
+# appears in. Total US is his "Domestic" list floored at $1B
+# (TOTAL_MARKET_MIN_CAP_M). NOT ported: his ETFs list (a different, technicals-only scoring
 # model with no EPS for Lynch/Graham to value) and his International list
 # (local-exchange listings that the Finnhub free tier does not cover, so two of
 # this screener's three systems would have nothing to score them with).
@@ -927,6 +933,7 @@ INDEX_FETCHERS = (
     ("Growth100", fetch_growth100),
     ("Value100", fetch_value100),
     ("Dividend100", fetch_dividend100),
+    ("TotalUS", fetch_total_market),
 )
 INDEX_NAMES = tuple(name for name, _ in INDEX_FETCHERS)
 
@@ -992,6 +999,24 @@ def fetch_risk_free_rate() -> float:
 import yfinance as yf
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
+# The free tier allows 60 calls/min. yfinance latency used to space the calls;
+# a name dropped by the Total US size floor costs a Finnhub call and nothing
+# else, so the spacing is explicit now.
+FINNHUB_MIN_INTERVAL = 1.1  # seconds between call starts
+_FINNHUB_SLEEP = time.sleep
+_CLOCK = time.monotonic
+_finnhub_last_call: float | None = None
+
+
+def _finnhub_throttle() -> None:
+    global _finnhub_last_call
+    now = _CLOCK()
+    if _finnhub_last_call is not None:
+        wait = FINNHUB_MIN_INTERVAL - (now - _finnhub_last_call)
+        if wait > 0:
+            _FINNHUB_SLEEP(wait)
+            now += wait
+    _finnhub_last_call = now
 
 
 def get_finnhub_metrics(ticker: str) -> dict:
@@ -999,6 +1024,7 @@ def get_finnhub_metrics(ticker: str) -> dict:
     Fetch the full metric bundle from Finnhub stock/metric endpoint.
     Returns the raw metric dict, or empty dict on failure.
     """
+    _finnhub_throttle()
     try:
         r = _http_get_with_retries(
             f"{FINNHUB_BASE}/stock/metric",
@@ -1818,7 +1844,7 @@ def get_yf_price_and_history(ticker: str) -> dict:
     return result
 
 
-def get_combined_data(ticker: str) -> dict:
+def get_combined_data(ticker: str, finnhub: dict | None = None) -> dict:
     """
     Merge yfinance (price, EPS history, Phase 6/7 statement components) and
     Finnhub (current fundamentals). Finnhub values take precedence for current
@@ -1844,7 +1870,8 @@ def get_combined_data(ticker: str) -> dict:
         income_stmt_df, balance_sheet_df, cashflow_df
     """
     yf_data = get_yf_price_and_history(ticker)
-    fh = get_finnhub_metrics(ticker)
+    # `finnhub` is the bundle run_screener already fetched for the size floor.
+    fh = finnhub if finnhub is not None else get_finnhub_metrics(ticker)
 
     # ── Price (yfinance is fastest) ─────────────────────────────────
     price = yf_data["price"]
@@ -2272,7 +2299,7 @@ def combined_score(lynch_discount: float | None, graham_discount: float | None) 
 # ═════════════════════════════════════════════
 
 
-def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None = None) -> dict:
+def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None = None, finnhub: dict | None = None) -> dict:
     """Run the full pipeline for one ticker. Returns a flat result dict."""
     # Error defaults to None (not omitted) so the column always exists in the
     # output DataFrame even on a run where every ticker succeeds --
@@ -2283,7 +2310,7 @@ def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None =
         return round(float(value), 2) if value is not None else None
 
     # --- Fetch all data (yfinance price + history, Finnhub fundamentals) ---
-    fund = get_combined_data(ticker)
+    fund = get_combined_data(ticker, finnhub=finnhub)
     row["Provider_Finnhub_OK"] = bool(fund.get("finnhub_ok"))
 
     # ── Price ───────────────────────────────────────────────────────
@@ -2657,15 +2684,25 @@ def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None =
 
 def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float | None = None) -> pd.DataFrame:
     results = []
+    below_floor = 0
     total = len(universe)
     for i, row in universe.iterrows():
         ticker = row["ticker"]
         log.info(f"[{i + 1}/{total}] Processing {ticker}...")
-        # One name with a surprise data shape must not abort the other ~520:
+        # The Total US size floor, for names that pool alone brought in. An
+        # unknown cap is not a small one: that name is screened.
+        finnhub = None
+        if _row_indexes(row["indexes"]) == {"TotalUS"}:
+            finnhub = get_finnhub_metrics(ticker)
+            cap_m = _safe_float(finnhub.get("marketCapitalization"))
+            if cap_m is not None and cap_m < TOTAL_MARKET_MIN_CAP_M:
+                below_floor += 1
+                continue
+        # One name with a surprise data shape must not abort the others:
         # it becomes a visible error row, and the write_json publish guards
         # still abort the run if such rows are widespread.
         try:
-            result = process_ticker(ticker, aaa_yield, risk_free_rate)
+            result = process_ticker(ticker, aaa_yield, risk_free_rate, finnhub=finnhub)
         except Exception as exc:
             log.exception(f"{ticker}: processing failed")
             result = {
@@ -2677,6 +2714,7 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float
             }
         result["Indexes"] = row["indexes"]
         results.append(result)
+    log.info(f"Total US size floor: {below_floor} names under ${TOTAL_MARKET_MIN_CAP_M / 1000:g}B skipped; {len(results)} screened")
 
     # ── Azqato relative scoring — one cross-sectional pass ──────────────
     # The model ranks every metric against the loaded peers, so it can only run
@@ -2698,8 +2736,12 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float
     # pooled cross-section above (this fork screens one merged universe by
     # design); these per-pool scores exist so a name can be reconciled against
     # whichever of his views it appears in. Deliberately lean — score and tier
-    # only, no parts/pctiles, so six extra cross-sections cost little JSON.
+    # only, no parts/pctiles, so the extra cross-sections cost little JSON.
+    # Not Total US: the merged cross-section above is that pool plus a handful
+    # of curated names, so its own rank would repeat the tier.
     for name in INDEX_NAMES:
+        if name == "TotalUS":
+            continue
         members = {r["Ticker"]: r["azqato"] for r in results if "azqato" in r and name in _row_indexes(r.get("Indexes"))}
         if not members:
             log.warning(f"Azqato per-pool scoring: no scorable members for {name}")

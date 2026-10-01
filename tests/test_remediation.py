@@ -369,7 +369,7 @@ def test_every_pool_is_scored_as_its_own_cross_section():
     that is what makes a name comparable to azqato's per-universe views. Pin the
     pool list and the membership parser that drives it.
     """
-    assert screener.INDEX_NAMES == ("S&P500", "Dow30", "Nasdaq100", "Growth100", "Value100", "Dividend100")
+    assert screener.INDEX_NAMES == ("S&P500", "Dow30", "Nasdaq100", "Growth100", "Value100", "Dividend100", "TotalUS")
     assert len(screener.INDEX_FETCHERS) == len(screener.INDEX_NAMES)
     assert screener._row_indexes("S&P500, Nasdaq100") == {"S&P500", "Nasdaq100"}
     assert screener._row_indexes("S&P500,Dow30 ,  Nasdaq100") == {"S&P500", "Dow30", "Nasdaq100"}
@@ -452,7 +452,7 @@ def test_negative_eps_is_retained_as_worst_discount_not_a_fetch_error():
     synthetic = dict(_SYNTHETIC_LOSS_MAKER)
 
     try:
-        screener.get_combined_data = lambda _ticker: synthetic
+        screener.get_combined_data = lambda _ticker, finnhub=None: synthetic
         row = screener.process_ticker("LOSS", aaa_yield=5.0, risk_free_rate=4.0)
     finally:
         screener.get_combined_data = original
@@ -484,9 +484,9 @@ def test_valuation_warning_lists_every_applicable_reason():
     healthy["growth_pct"] = 8.0
 
     try:
-        screener.get_combined_data = lambda _ticker: base
+        screener.get_combined_data = lambda _ticker, finnhub=None: base
         both = screener.process_ticker("BOTH", aaa_yield=5.0, risk_free_rate=4.0)
-        screener.get_combined_data = lambda _ticker: healthy
+        screener.get_combined_data = lambda _ticker, finnhub=None: healthy
         ok = screener.process_ticker("OKAY", aaa_yield=5.0, risk_free_rate=4.0)
     finally:
         screener.get_combined_data = original
