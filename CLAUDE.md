@@ -23,12 +23,13 @@ this fork kept its own Vite/React `web/`, `azqato.py`, and decoupled
 non-gating** layer to preserve this fork's "three independent systems,
 disagreement is the signal" design — see the `Overall` bullet below.
 
-Synced with upstream through `e71db99` (2026-08-10). Everything upstream has
+Synced with upstream through `e71db99` (2026-08-10); re-checked through
+`7eee1f6` (2026-09-30). Everything upstream has
 published since `a8cf842` (2026-07-16) is `chore: update screener results` data
 commits (upstream commits its dataset to `master`; this fork keeps it on `data`
 by design). `a8cf842` itself and `d36a503` are vanilla-`docs/`-dashboard changes
-with no React analogue. To re-check for drift:
-`git fetch upstream && git log upstream/master --oneline -- . ':(exclude)docs/data'`.
+with no React analogue. To re-check for drift (there is no `upstream` remote):
+`git fetch https://github.com/VoxMachina1/graham-screener master && git log FETCH_HEAD --oneline -- . ':(exclude)docs/data'`.
 
 A full function-by-function comparison against `upstream/master:stock_screener.py`
 (2026-08-10) found the fork at parity or ahead everywhere. Deliberately NOT
@@ -68,8 +69,13 @@ no EPS for Lynch/Graham to value, and International is local-exchange listings
 (`005930.KS`, `7203.T`) that the Finnhub free tier doesn't cover — two of this
 fork's three systems would have nothing to score them with, so they could never
 clear the gate. His **Growth/Value/Dividend 100** pools ARE screened (see
-`INDEX_FETCHERS`). Still unported: upstream's `grossMargin`/`netMargin` feed
-fields, which no current metric reads. Adopted from it: the v3.37.2 stale-data
+`INDEX_FETCHERS`). His **Domestic** universe (v4.9.x, all ~3,500 US holdings
+of VTI, refreshed weekly) is NOT screened: ~3,500 Finnhub calls is about an hour
+at 60 req/min, and folding it into the merged cross-section would re-tier every
+name. Still unported: the `grossMargin`/`netMargin` feed fields and the v4.3.6
+trailing ratios (`peTTM`, `fcfYield`, `roe`, ...) — research-page extras no
+azqato metric reads. Re-checked through `3c6d71c` (2026-09-28, v4.9.6): scoring
+unchanged. Adopted from it: the v3.37.2 stale-data
 lesson — `freshness.ts`'s `STALE_AFTER_MS` is a week, not 3 days, since a
 weekday cron leaves Friday's data legitimately ~3 days old on Monday morning.
 To re-check: `git clone --filter=blob:none https://github.com/Azqato/stocks`
