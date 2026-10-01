@@ -220,11 +220,14 @@ def test_dow_fetch_uses_component_list_page():
 
 
 def _vanguard_payload(entities):
-    return type("R", (), {"status_code": 200, "headers": {"content-type": "application/json"}, "raise_for_status": lambda self: None, "json": lambda self: {"fund": {"entity": entities}}})()
+    # Shape of https://investor.vanguard.com/irr/funds/profile/{fund}-AdditionalFundData
+    # as captured 2026-10-01: weights are percent strings, share classes use a slash.
+    body = {"holdingDetails": {"asOfDate": "2026-08-31", "equityHoldings": entities, "shortTermReservesHoldings": [], "derivativeHoldings": []}}
+    return type("R", (), {"status_code": 200, "headers": {"content-type": "application/json"}, "raise_for_status": lambda self: None, "json": lambda self: body})()
 
 
 def _holding(ticker, weight):
-    return {"ticker": ticker, "longName": f"{ticker} Inc.", "percentWeight": weight}
+    return {"ticker": ticker, "securityLongDescription": f"{ticker} Inc", "marketValuePercentage": None if weight is None else f"{weight:,.2f}%"}
 
 
 def test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes():
@@ -238,16 +241,23 @@ def test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes():
     entities.insert(3, _holding("GOOGL", 497.5))
     entities.insert(4, _holding("GOOG", 497.4))
     # A dual class whose sibling is NOT in the fund must be kept, not dropped.
-    entities.insert(5, _holding("HEI.A", 497.3))
+    entities.insert(5, _holding("HEI/A", 497.3))
+    # Vanguard sends a few rows with no weight at all; they can't be ranked.
+    entities.insert(6, _holding("NOWT", None))
 
     original = screener._HTTP_GET
+    seen = []
     try:
-        screener._HTTP_GET = lambda url, **kw: _vanguard_payload(entities)
+        screener._HTTP_GET = lambda url, **kw: seen.append(url) or _vanguard_payload(entities)
         members = screener.fetch_growth100()
     finally:
         screener._HTTP_GET = original
 
+    # The old /investment-products/etfs/profile/api/ path now answers with the
+    # site's HTML shell; this is the endpoint Vanguard's own page calls.
+    assert seen == ["https://investor.vanguard.com/irr/funds/profile/VUG-AdditionalFundData"], seen
     assert len(members) == 100
+    assert "NOWT" not in members, "an unweighted row has no rank"
     assert "GOOGL" in members and "GOOG" not in members, "dual class should collapse to the kept sibling"
     assert "HEI-A" in members, "a dual class with no sibling in the fund stays"
     assert "T000" in members and "T099" not in members, "the cut must follow weight order, not ticker order"

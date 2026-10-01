@@ -748,10 +748,13 @@ def fetch_nasdaq100() -> set:
 
 
 # ── Vanguard-ETF-derived pools (azqato's Growth/Value/Dividend 100) ──────────
-# Same source his update_etf_constituents.py uses: the fund profile API, ranked
-# by portfolio weight, top 100 after collapsing dual share classes. The raw
-# count band is a guard so a truncated response can never quietly shrink a pool.
-VANGUARD_HOLDINGS_API = "https://investor.vanguard.com/investment-products/etfs/profile/api/{fund}/portfolio-holding/stock"
+# Same source his update_etf_constituents.py uses: the holdings endpoint
+# Vanguard's own portfolio-composition component calls, ranked by portfolio
+# weight, top 100 after collapsing dual share classes. The raw count band is a
+# guard so a truncated response can never quietly shrink a pool. The previous
+# /investment-products/etfs/profile/api/ path was retired after 2026-08-08 and
+# now answers 200 with the site's HTML shell.
+VANGUARD_HOLDINGS_API = "https://investor.vanguard.com/irr/funds/profile/{fund}-AdditionalFundData"
 VANGUARD_HEADERS = {**WIKI_HEADERS, "Accept": "application/json"}
 VANGUARD_TOP_N = 100
 VANGUARD_RAW_MIN, VANGUARD_RAW_MAX = 110, 500
@@ -772,19 +775,21 @@ def _fetch_vanguard_top_holdings(fund: str) -> set:
     """Top `VANGUARD_TOP_N` holdings of a Vanguard ETF, by portfolio weight."""
     resp = _http_get_with_retries(VANGUARD_HOLDINGS_API.format(fund=fund), what=f"Vanguard {fund} holdings", headers=VANGUARD_HEADERS, timeout=30)
     resp.raise_for_status()
-    # Vanguard's edge answers bot checks with a 200 text/html app shell; name
-    # that plainly instead of letting .json() die on "Expecting value: line 1".
+    # Vanguard answers both a bot check and a retired path with a 200 text/html
+    # app shell; name that plainly instead of letting .json() die on
+    # "Expecting value: line 1".
     content_type = str(resp.headers.get("content-type") or "")
     if "json" not in content_type.lower():
-        raise ValueError(f"{fund}: Vanguard returned non-JSON (HTTP {resp.status_code}, content-type {content_type or 'unknown'}) — likely a bot challenge")
-    entities = resp.json()["fund"]["entity"]
+        raise ValueError(f"{fund}: Vanguard returned non-JSON (HTTP {resp.status_code}, content-type {content_type or 'unknown'}) — a bot challenge, or the endpoint moved again")
+    entities = resp.json()["holdingDetails"]["equityHoldings"]
     if not (VANGUARD_RAW_MIN <= len(entities) <= VANGUARD_RAW_MAX):
         raise ValueError(f"{fund}: unexpected raw holdings count {len(entities)} (expected {VANGUARD_RAW_MIN}-{VANGUARD_RAW_MAX})")
 
     weighted = []
     for entity in entities:
-        symbol = str(entity.get("ticker") or "").strip().upper().replace(" ", "").replace(".", "-")
-        weight = _safe_float(entity.get("percentWeight"))
+        # Share classes arrive as "BRK/B", weights as "13.61%".
+        symbol = str(entity.get("ticker") or "").strip().upper().replace(" ", "").replace("/", "-").replace(".", "-")
+        weight = _safe_float(str(entity.get("marketValuePercentage") or "").replace("%", "").replace(",", ""))
         if symbol and weight is not None:
             weighted.append((weight, symbol))
     weighted.sort(key=lambda pair: -pair[0])
