@@ -363,11 +363,11 @@ def test_vanguard_pool_rejects_a_truncated_holdings_response():
         screener._HTTP_GET = original
 
 
-def test_every_pool_is_scored_as_its_own_cross_section():
+def test_pool_list_and_membership_parser():
     """
-    The Azqato model is relative, so each pool has to be re-scored on its own —
-    that is what makes a name comparable to azqato's per-universe views. Pin the
-    pool list and the membership parser that drives it.
+    The pools are azqato's universes; every curated one is re-scored on its own
+    so a name is comparable to his per-universe views. Pin the pool list and
+    the membership parser that drives membership and re-scoring.
     """
     assert screener.INDEX_NAMES == ("S&P500", "Dow30", "Nasdaq100", "Growth100", "Value100", "Dividend100", "TotalUS")
     assert len(screener.INDEX_FETCHERS) == len(screener.INDEX_NAMES)
@@ -642,7 +642,7 @@ def run_all():
         test_vanguard_pool_rejects_a_ticker_that_is_not_a_listed_symbol,
         test_total_market_keeps_every_us_listed_holding,
         test_total_market_rejects_a_half_empty_response,
-        test_every_pool_is_scored_as_its_own_cross_section,
+        test_pool_list_and_membership_parser,
         test_negative_eps_is_retained_as_worst_discount_not_a_fetch_error,
         test_valuation_warning_lists_every_applicable_reason,
         test_trap_reasons_are_explicit_and_warning_only,

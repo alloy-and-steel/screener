@@ -14,7 +14,7 @@ Port azqato's "Domestic" universe (every US-listed VTI holding, ~3,465) as a 7th
 
 ## Approach
 1. `INDEX_FETCHERS += ("TotalUS", fetch_total_market)` ([stock_screener.py](../../stock_screener.py)).
-2. `run_screener`: TotalUS-only -> `get_finnhub_metrics` -> skip if cap < floor; else pass metrics into `process_ticker` -> `get_combined_data(fh=...)`.
+2. `run_screener`: TotalUS-only -> `get_finnhub_metrics` -> skip if cap < floor; else pass metrics into `process_ticker` -> `get_combined_data(finnhub=...)`.
 3. Finnhub limiter in `get_finnhub_metrics` with a sleep/clock seam for tests.
 4. Per-pool loop skips TotalUS.
 5. Frontend: `INDEX_NAMES`/`INDEX_LABEL` ("Total US $1B+") in `web/src/types.ts`; Scorecard membership line hides TotalUS when another pool is present; methodology copy.

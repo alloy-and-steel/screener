@@ -770,6 +770,7 @@ TOTAL_MARKET_MIN, TOTAL_MARKET_MAX = 2800, 4200
 # before the expensive yfinance fetch. It gates entry through that pool alone:
 # a curated pool's member is screened whatever its size.
 TOTAL_MARKET_MIN_CAP_M = 1000.0
+TOTAL_MARKET_POOL = "TotalUS"
 # A listed symbol in the dash convention; anything else (a CVR's "2223637D")
 # aborts a top-100 pool and is dropped from the Total US market, as azqato's
 # sync does.
@@ -920,8 +921,7 @@ def _fetch_index_with_fallback(index_name: str, fetcher) -> set:
 # Every pool the screener covers, in the order membership is listed. Each is a
 # universe azqato's own screener ranks separately, and all but Total US are
 # also re-scored as their own cross-section for the scorecard (see
-# run_screener), so a name can be reconciled against whichever of his views it
-# appears in. Total US is his "Domestic" list floored at $1B
+# run_screener). Total US is his "Domestic" list floored at $1B
 # (TOTAL_MARKET_MIN_CAP_M). NOT ported: his ETFs list (a different, technicals-only scoring
 # model with no EPS for Lynch/Graham to value) and his International list
 # (local-exchange listings that the Finnhub free tier does not cover, so two of
@@ -933,7 +933,7 @@ INDEX_FETCHERS = (
     ("Growth100", fetch_growth100),
     ("Value100", fetch_value100),
     ("Dividend100", fetch_dividend100),
-    ("TotalUS", fetch_total_market),
+    (TOTAL_MARKET_POOL, fetch_total_market),
 )
 INDEX_NAMES = tuple(name for name, _ in INDEX_FETCHERS)
 
@@ -2692,7 +2692,7 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float
         # The Total US size floor, for names that pool alone brought in. An
         # unknown cap is not a small one: that name is screened.
         finnhub = None
-        if _row_indexes(row["indexes"]) == {"TotalUS"}:
+        if _row_indexes(row["indexes"]) == {TOTAL_MARKET_POOL}:
             finnhub = get_finnhub_metrics(ticker)
             cap_m = _safe_float(finnhub.get("marketCapitalization"))
             if cap_m is not None and cap_m < TOTAL_MARKET_MIN_CAP_M:
@@ -2740,7 +2740,7 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float
     # Not Total US: the merged cross-section above is that pool plus a handful
     # of curated names, so its own rank would repeat the tier.
     for name in INDEX_NAMES:
-        if name == "TotalUS":
+        if name == TOTAL_MARKET_POOL:
             continue
         members = {r["Ticker"]: r["azqato"] for r in results if "azqato" in r and name in _row_indexes(r.get("Indexes"))}
         if not members:

@@ -43,13 +43,14 @@ def _run_with_fake_http(responses, fn):
             raise step
         return step
 
-    orig_get, orig_sleep = screener._HTTP_GET, screener._RETRY_SLEEP
+    orig_get, orig_sleep, orig_spacing = screener._HTTP_GET, screener._RETRY_SLEEP, screener._FINNHUB_SLEEP
     screener._HTTP_GET = fake_get
     screener._RETRY_SLEEP = sleeps.append
+    screener._FINNHUB_SLEEP = lambda seconds: None  # call spacing, not a retry backoff
     try:
         return fn(), calls, sleeps
     finally:
-        screener._HTTP_GET, screener._RETRY_SLEEP = orig_get, orig_sleep
+        screener._HTTP_GET, screener._RETRY_SLEEP, screener._FINNHUB_SLEEP = orig_get, orig_sleep, orig_spacing
 
 
 def test_http_get_retries_connection_error_then_succeeds():
@@ -359,6 +360,37 @@ def test_total_us_is_not_rescored_as_its_own_pool():
     by_index = {r["Ticker"]: r["azqato"].get("byIndex", {}) for _, r in df.iterrows()}
     assert set(by_index["AAA"]) == {"S&P500"}, by_index
     assert by_index["CCC"] == {}, by_index
+
+
+def test_combined_data_uses_the_finnhub_bundle_it_is_handed():
+    """
+    run_screener size-checks a Total US name with one Finnhub call and hands
+    that bundle on; fetching it again would double those names' Finnhub cost.
+    """
+    class QuietTicker:
+        def __init__(self, ticker):
+            pass
+
+        fast_info = type("FI", (), {"last_price": 50.0})()
+        info = {}
+        income_stmt = dividends = cashflow = balance_sheet = None
+        earnings_estimate = revenue_estimate = None
+
+        def history(self, **kwargs):
+            return pd.DataFrame()
+
+    finnhub_urls = []
+    orig = screener.yf.Ticker, screener._HTTP_GET, screener._RETRY_SLEEP
+    screener.yf.Ticker = QuietTicker
+    screener._HTTP_GET = lambda url, **kw: finnhub_urls.append(url) or _FakeResponse(200, {"metric": {}})
+    screener._RETRY_SLEEP = lambda s: None
+    try:
+        d = screener.get_combined_data("MIDCO", finnhub={"marketCapitalization": 2500.0})
+    finally:
+        screener.yf.Ticker, screener._HTTP_GET, screener._RETRY_SLEEP = orig
+
+    assert finnhub_urls == [], finnhub_urls
+    assert d["market_cap_b"] == 2.5
 
 
 if __name__ == "__main__":

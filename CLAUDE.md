@@ -70,10 +70,10 @@ no EPS for Lynch/Graham to value, and International is local-exchange listings
 (`005930.KS`, `7203.T`) that the Finnhub free tier doesn't cover — two of this
 fork's three systems would have nothing to score them with, so they could never
 clear the gate. His **Growth/Value/Dividend 100** pools ARE screened (see
-`INDEX_FETCHERS`), and so is his **Domestic** universe (v4.9.x, all ~3,465
-US holdings of VTI) as `TotalUS`, floored at $1B market cap (~1,950 names;
-owner's call 2026-10-01, as was ranking Azqato over the whole merged market —
-which re-tiered every name). Still unported: the `grossMargin`/`netMargin` feed fields and the v4.3.6
+`INDEX_FETCHERS`), and so is his **Domestic** universe (all ~3,465 US
+holdings of VTI) as `TotalUS`, floored at $1B market cap (~1,950 names). Azqato
+ranks over the whole merged market, Total US included (owner's call). Still
+unported: the `grossMargin`/`netMargin` feed fields and the v4.3.6
 trailing ratios (`peTTM`, `fcfYield`, `roe`, ...) — research-page extras no
 azqato metric reads. Re-checked through `3c6d71c` (2026-09-28, v4.9.6): scoring
 unchanged. Adopted from it: the v3.37.2 stale-data
@@ -98,7 +98,7 @@ The three screens (decoupled on purpose — disagreement is the signal):
   gate) = tier A or better. RSI(14) + 52-week position are scorecard display
   only, not scored. **Because the model is relative, the peer set IS part of
   the score**: azqato's own site loads one pool at a time, so the same name can
-  sit two tiers apart there. `run_screener` therefore also re-scores each pool
+  sit two tiers apart there. `run_screener` therefore also re-scores each curated pool (not Total US)
   as its own cross-section into `azqato.byIndex` (score + tier only) — for the
   Scorecard's "rank inside each pool" panel and nothing else. The cards, the
   tier, and the gate all read the merged cross-section; measured on the
@@ -219,8 +219,7 @@ reached absent, null if never picked) merged in by `write_json` from the ledger.
   Wikipedia component-list pages (the parent index articles no longer carry a
   symbols table — both fetches are pinned by regression tests); Growth/Value/
   Dividend/Total US come from Vanguard's holdings endpoint
-  (`_fetch_vanguard_holdings`; the old profile-API path was retired and now
-  serves an HTML shell): G/V/D the top 100 by weight with dual share classes
+  (`_fetch_vanguard_holdings`): G/V/D the top 100 by weight with dual share classes
   collapsed, Total US every listed symbol, each with a count band so a
   truncated response aborts instead of quietly shrinking a pool. The Total US
   $1B floor is applied in `run_screener`, not the fetcher: a name only that
@@ -363,5 +362,6 @@ After that: the weekday cron (`0 11 * * 1-5`) refreshes data and auto-deploys (v
   `_http_get_with_retries` (Wikipedia/Vanguard/Finnhub; retries 5xx/429
   honoring Retry-After) and `_call_with_retries` (FRED, and each yfinance
   field via `_yf_fetch`, one retry each). Offline tests fake HTTP by patching
-  the seams `screener._HTTP_GET` and `screener._RETRY_SLEEP` — patching
+  the seams `screener._HTTP_GET` and `screener._RETRY_SLEEP` (plus
+  `_FINNHUB_SLEEP`/`_CLOCK` for Finnhub call spacing) — patching
   `requests.get` no longer intercepts anything and hits the real network.

@@ -41,7 +41,7 @@ jobs:
 
       - name: Run offline regression tests
         # Fail fast on a broken scoring function before spending the Finnhub
-        # rate-limit budget (~515 calls/run) on a live run that would abort anyway.
+        # rate-limit budget (~3,500 calls/run) on a live run that would abort anyway.
         run: |
           set -e
           for f in tests/test_*.py; do

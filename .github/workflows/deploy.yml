@@ -4,7 +4,7 @@ name: Deploy
 # results.json from the `data` branch (produced by screen.yml), builds the SPA,
 # and ships data + frontend together as one same-origin GitHub Pages artifact.
 # Never runs the screener: the data is reused, so a frontend change republishes
-# WITHOUT a ~515-call rescreen.
+# WITHOUT an ~80-minute rescreen.
 #
 # Triggers:
 #   - web/** push   -> redeploy on a frontend change (reuses the last data)

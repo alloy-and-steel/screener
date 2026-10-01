@@ -11,7 +11,7 @@ import { useDataset } from './useDataset'
 import { loadPrefs, savePrefs } from './prefs'
 import { INDEX_LABEL, type IndexName, type Row } from './types'
 
-// Cards render in pages as the list is scrolled — ~520 cards at once is a
+// Cards render in pages as the list is scrolled — ~2,000 cards at once is a
 // noticeable stall on a phone, and nobody reads past the first screenful.
 const PAGE = 48
 
