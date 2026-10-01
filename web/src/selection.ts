@@ -26,6 +26,8 @@ export function entryDate(at: string, now: Date): string {
 
 const LEVELS: PickLevel[] = [3, 2, 1]
 
+export const LEVEL_LABEL: Record<PickLevel, string> = { 3: 'all 3 screens', 2: '2 screens', 1: '1 screen' }
+
 // The picks at or above `minPass` (the visitor's pass floor; 0 = any), highest
 // level first. Below the floor is left out: those are levels the visitor has
 // filtered away.
@@ -33,7 +35,7 @@ export function pickViews(row: Row, minPass: number, now: Date): PickView[] {
   const picks = row.picks
   if (!picks) return []
   return LEVELS.filter((l) => l >= minPass).flatMap((level) => {
-    const m = picks[level]
+    const m = picks[`${level}`]
     return m ? [{ level, date: entryDate(m.at, now), price: m.price, change: changeSince(m.price, row.Price) }] : []
   })
 }

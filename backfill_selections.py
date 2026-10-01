@@ -101,6 +101,8 @@ def main() -> None:
         payload = json.loads(args.annotate.read_text(encoding="utf-8"))
         if payload["generated_at"] != ledger["updated_at"]:
             raise SystemExit(f"{args.annotate} is from {payload['generated_at']}, ledger ends at {ledger['updated_at']}")
+        for row in payload["rows"]:
+            row.pop("selection", None)  # the version-1 field this ledger replaces
         selections.annotate_rows(payload["rows"], ledger)
         args.annotate.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
         print(f"annotated {args.annotate}")

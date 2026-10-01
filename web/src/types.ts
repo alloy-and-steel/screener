@@ -141,7 +141,8 @@ export interface EntryMark {
 
 export type PickLevel = 1 | 2 | 3
 
-export type Picks = Partial<Record<PickLevel, EntryMark>>
+// Keyed by the level as a string: that is how the JSON carries it.
+export type Picks = Partial<Record<`${PickLevel}`, EntryMark>>
 
 export interface Scores {
   overall: number | null

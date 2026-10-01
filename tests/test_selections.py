@@ -58,7 +58,7 @@ def row(t, price, tier=None, lynch=None, graham=None, error=None):
 THREE = dict(tier="s", lynch="Buy", graham="Buy")
 TWO = dict(tier="a", lynch="Buy")
 ONE = dict(tier="b", lynch="Buy")
-NONE = dict(tier="c", lynch="Hold", graham="Watch")
+ZERO = dict(tier="c", lynch="Hold", graham="Watch")
 
 
 def mark(at, price):
@@ -76,7 +76,7 @@ def test_screens_passed_mirrors_the_frontend_gates():
 def test_a_pick_is_recorded_at_the_exact_level_passed():
     led = update_ledger(
         empty_ledger(),
-        [row("AAA", 100.0, **TWO), row("BBB", 50.0, **ONE), row("CCC", 7.0, **THREE), row("DDD", 3.0, **NONE)],
+        [row("AAA", 100.0, **TWO), row("BBB", 50.0, **ONE), row("CCC", 7.0, **THREE), row("DDD", 3.0, **ZERO)],
         D1,
     )
     assert led["tickers"] == {
@@ -97,7 +97,7 @@ def test_each_level_keeps_only_its_first_pick():
 
 def test_dropping_out_or_leaving_the_universe_changes_nothing():
     led = update_ledger(empty_ledger(), [row("AAA", 100.0, **TWO)], D1)
-    led = update_ledger(led, [row("AAA", 90.0, **NONE)], D2)
+    led = update_ledger(led, [row("AAA", 90.0, **ZERO)], D2)
     led = update_ledger(led, [row("ZZZ", 1.0)], D3)
     assert led["tickers"] == {"AAA": {"2": mark(D1, 100.0)}}
 
@@ -173,7 +173,7 @@ def _write_json_in(tmp, df):
 
 def _screen_df():
     # 120 valued rows clear the row-count guard; AAA passes 2 screens.
-    rows = [row(f"T{i}", 10.0, **NONE) for i in range(120)]
+    rows = [row(f"T{i}", 10.0, **ZERO) for i in range(120)]
     rows.append(row("AAA", 42.0, **TWO))
     return pd.DataFrame(rows)
 

@@ -3,7 +3,7 @@ import type { Row, Azqato } from './types'
 import { INDEX_LABEL, INDEX_NAMES } from './types'
 import { DASH, Dot, RangeBar, RsiGauge, TONE, capB, compactUsd, num, pct, signTone, signedPct, usd } from './format'
 import { inPool } from './filters'
-import { pickViews } from './selection'
+import { LEVEL_LABEL, pickViews } from './selection'
 import { TIER_LABEL, TIER_TONE, azNetCashMc, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
@@ -141,8 +141,6 @@ function OverallPanel({ row }: { row: Row }) {
   )
 }
 
-const LEVEL_LABEL = { 3: 'All 3 screens', 2: '2 screens', 1: '1 screen' } as const
-
 // When the screen first picked this stock at each pass level (exactly 1, 2 or
 // 3 screens) and what it has done since. Every level is listed, so one it has
 // never reached reads as such; the first pick is never overwritten.
@@ -158,7 +156,7 @@ function PicksPanel({ row }: { row: Row }) {
           const e = picks.find((p) => p.level === level)
           return (
             <div key={level} className="flex items-baseline justify-between gap-3 text-sm">
-              <dt className="text-slate-400">
+              <dt className="text-slate-400 first-letter:uppercase">
                 {LEVEL_LABEL[level]} {e ? <span className="text-slate-500">{e.date}</span> : null}
                 {level === now ? <span className="ml-2 text-xs text-emerald-300">now</span> : null}
               </dt>

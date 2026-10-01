@@ -2881,9 +2881,10 @@ def write_json(df: pd.DataFrame) -> None:
     rows = json.loads(df.to_json(orient="records"))
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Selection ledger: record the price of every name's first run at each
-    # pass level (exactly 1, 2, 3 screens), then attach its picks to its row. screen.yml seeds the
-    # previous ledger from the data branch; with none there, this run starts it.
+    # Selection ledger: record the price of every name's first run at each pass
+    # level (exactly 1, 2, 3 screens), then attach its picks to its row.
+    # screen.yml seeds the previous ledger from the data branch; with none
+    # there, this run starts it.
     try:
         ledger = selections.load_ledger(SELECTIONS_PATH)
         if ledger is None:

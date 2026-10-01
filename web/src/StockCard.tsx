@@ -2,7 +2,7 @@ import { memo } from 'react'
 import type { Row } from './types'
 import { DASH, TONE, capB, num, pct, signTone, signedPct, usd, type Tone } from './format'
 import { azPegDisplay, combinedVerdict, verdicts } from './score'
-import { pickViews, type PickView } from './selection'
+import { LEVEL_LABEL, pickViews, type PickView } from './selection'
 
 function Stat({ label, value, className = 'text-slate-100' }: { label: string; value: string; className?: string }) {
   return (
@@ -37,7 +37,7 @@ function RangeStrip({ p }: { p: number | null | undefined }) {
 function PickLine({ e }: { e: PickView }) {
   return (
     <div className="tnum truncate">
-      Picked {e.level}/3 {e.date} at <span className="text-slate-300">{usd(e.price)}</span>
+      Picked on {LEVEL_LABEL[e.level]} {e.date} at <span className="text-slate-300">{usd(e.price)}</span>
       {e.change !== null ? <span className={`ml-1.5 font-medium ${signTone(e.change)}`}>{signedPct(e.change, 1)}</span> : null}
     </div>
   )

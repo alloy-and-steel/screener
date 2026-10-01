@@ -318,12 +318,15 @@ After that: the weekday cron (`0 11 * * 1-5`) refreshes data and auto-deploys (v
   fails if the branch exists without `selections.json`, and `write_json` aborts
   on one it can't read -- either way, rather than re-stamping every current
   pick with today's price. Runs before 2026-08-20 are unrecoverable, so history
-  starts there. Changing the ledger's shape means: bump `LEDGER_VERSION`,
-  rename the row field (an old cached app shell reads the new `results.json`),
-  extend `backfill_selections.RUNS` (data-branch push SHAs from the public
-  Events API), replay, and push the rebuilt ledger + re-annotated
-  `results.json` to `data` right beside landing the code. Entry prices are nominal (not split-adjusted): a split after
+  starts there. Entry prices are nominal (not split-adjusted): a split after
   the pick shows as a false drop in the "since picked" move.
+  Changing the ledger's shape means: bump `LEDGER_VERSION`, rename the row
+  field (an old cached app shell reads the new `results.json`), extend
+  `backfill_selections.RUNS` (data-branch push SHAs from the public Events
+  API), replay with `--annotate`, then push the rebuilt ledger + results to
+  `data` and land the code back to back while no Screen run is queued or in
+  progress -- a run on the old code force-pushes the old ledger back, and
+  either half alone makes the next run abort.
 
 - **`.gitignore` ignores `*.json`.** Any JSON that must be tracked needs an
   explicit `!path` exception (see `web/package.json`, `web/tsconfig.json`).
