@@ -3,7 +3,7 @@ import type { Row, Azqato } from './types'
 import { INDEX_LABEL, INDEX_NAMES } from './types'
 import { DASH, Dot, RangeBar, RsiGauge, TONE, capB, compactUsd, num, pct, signTone, signedPct, usd } from './format'
 import { inPool } from './filters'
-import { selectionView, type EntryView } from './selection'
+import { pickViews } from './selection'
 import { TIER_LABEL, TIER_TONE, azNetCashMc, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
@@ -141,36 +141,40 @@ function OverallPanel({ row }: { row: Row }) {
   )
 }
 
-// When the screen picked this stock (passed 2+ screens) and what it has done since.
-// "Latest entry" appears only after a drop-out and return; the first entry is
-// never overwritten.
-function SelectionPanel({ row }: { row: Row }) {
-  const v = selectionView(row, new Date())
-  if (!v) return null
-  const entries: [string, EntryView][] = [
-    ['First picked', v.first],
-    ...(v.reentry ? [['Back on the list', v.reentry] as [string, EntryView]] : []),
-  ]
+const LEVEL_LABEL = { 3: 'All 3 screens', 2: '2 screens', 1: '1 screen' } as const
+
+// When the screen first picked this stock at each pass level (exactly 1, 2 or
+// 3 screens) and what it has done since. Every level is listed, so one it has
+// never reached reads as such; the first pick is never overwritten.
+function PicksPanel({ row }: { row: Row }) {
+  const picks = pickViews(row, 0, new Date())
+  if (!picks.length) return null
+  const now = combinedVerdict(row).passCount
   return (
     <div className="mt-3 rounded-2xl bg-surface-1 p-4 ring-1 ring-inset ring-white/[0.07]">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Since selected</div>
-        <div className={`text-xs ${v.selected ? 'text-emerald-300' : 'text-slate-500'}`}>
-          {v.selected ? 'Picked now' : 'Not picked now'}
-        </div>
-      </div>
+      <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">First picked</div>
       <dl className="space-y-1.5">
-        {entries.map(([label, e]) => (
-          <div key={label} className="flex items-baseline justify-between gap-3 text-sm">
-            <dt className="text-slate-400">
-              {label} <span className="text-slate-500">{e.date}</span>
-            </dt>
-            <dd className="tnum text-right text-slate-100">
-              {usd(e.price)}
-              <span className={`ml-2 font-medium ${signTone(e.change)}`}>{signedPct(e.change, 1)}</span>
-            </dd>
-          </div>
-        ))}
+        {([3, 2, 1] as const).map((level) => {
+          const e = picks.find((p) => p.level === level)
+          return (
+            <div key={level} className="flex items-baseline justify-between gap-3 text-sm">
+              <dt className="text-slate-400">
+                {LEVEL_LABEL[level]} {e ? <span className="text-slate-500">{e.date}</span> : null}
+                {level === now ? <span className="ml-2 text-xs text-emerald-300">now</span> : null}
+              </dt>
+              <dd className="tnum text-right text-slate-100">
+                {e ? (
+                  <>
+                    {usd(e.price)}
+                    <span className={`ml-2 font-medium ${signTone(e.change)}`}>{signedPct(e.change, 1)}</span>
+                  </>
+                ) : (
+                  <span className="text-slate-500">Never</span>
+                )}
+              </dd>
+            </div>
+          )
+        })}
       </dl>
     </div>
   )
@@ -288,7 +292,7 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
                   <Card key={v.system} v={v} row={row} />
                 ))}
               </div>
-              <SelectionPanel row={row} />
+              <PicksPanel row={row} />
               <OverallPanel row={row} />
               <FundamentalsPanel row={row} />
             </>

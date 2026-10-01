@@ -125,10 +125,10 @@ export interface Row {
   Shareholder_Yield_Pct?: number | null
   scores?: Scores
 
-  // Selection ledger (selections.py): when this stock first passed 2+ screens
-  // and at what price, plus its latest entry after any drop-out. Null/absent
-  // for a stock never selected.
-  selection?: Selection | null
+  // Selection ledger (selections.py): the run and price at which this stock
+  // first passed exactly 1, 2 and 3 screens, keyed by that count. A level it
+  // never reached is absent; null/absent when it never passed any.
+  picks?: Picks | null
 
   // Tolerate the full set of emitted columns without enumerating every one.
   [key: string]: unknown
@@ -139,11 +139,9 @@ export interface EntryMark {
   price: number | null
 }
 
-export interface Selection {
-  first: EntryMark
-  latest: EntryMark
-  selected: boolean
-}
+export type PickLevel = 1 | 2 | 3
+
+export type Picks = Partial<Record<PickLevel, EntryMark>>
 
 export interface Scores {
   overall: number | null

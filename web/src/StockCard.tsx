@@ -2,7 +2,7 @@ import { memo } from 'react'
 import type { Row } from './types'
 import { DASH, TONE, capB, num, pct, signTone, signedPct, usd, type Tone } from './format'
 import { azPegDisplay, combinedVerdict, verdicts } from './score'
-import { selectionView, type EntryView } from './selection'
+import { pickViews, type PickView } from './selection'
 
 function Stat({ label, value, className = 'text-slate-100' }: { label: string; value: string; className?: string }) {
   return (
@@ -34,10 +34,10 @@ function RangeStrip({ p }: { p: number | null | undefined }) {
   )
 }
 
-function EntryLine({ label, e }: { label: string; e: EntryView }) {
+function PickLine({ e }: { e: PickView }) {
   return (
     <div className="tnum truncate">
-      {label} {e.date} at <span className="text-slate-300">{usd(e.price)}</span>
+      Picked {e.level}/3 {e.date} at <span className="text-slate-300">{usd(e.price)}</span>
       {e.change !== null ? <span className={`ml-1.5 font-medium ${signTone(e.change)}`}>{signedPct(e.change, 1)}</span> : null}
     </div>
   )
@@ -72,11 +72,13 @@ function OverallRing({ score }: { score: number | null | undefined }) {
   )
 }
 
-function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void }) {
+// `minPass` is the visitor's pass floor: the card shows the picks at the levels
+// they filtered on, not the ones they filtered away.
+function StockCard({ row, minPass, onOpen }: { row: Row; minPass: number; onOpen: (ticker: string) => void }) {
   const vs = verdicts(row)
   const c = combinedVerdict(row)
   const az = row.azqato
-  const sel = selectionView(row, new Date())
+  const picks = pickViews(row, minPass, new Date())
 
   return (
     <button
@@ -133,11 +135,11 @@ function StockCard({ row, onOpen }: { row: Row; onOpen: (ticker: string) => void
         <Stat label="Div yield" value={pct(row.DivYield_Pct)} />
       </div>
 
-      {sel ? (
+      {picks.length ? (
         <div className="-mt-1 space-y-0.5 text-[12px] text-slate-500">
-          <EntryLine label="Picked" e={sel.first} />
-          {sel.reentry ? <EntryLine label="Back on" e={sel.reentry} /> : null}
-          {!sel.selected ? <div>Not picked now</div> : null}
+          {picks.map((e) => (
+            <PickLine key={e.level} e={e} />
+          ))}
         </div>
       ) : null}
 

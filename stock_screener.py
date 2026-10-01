@@ -2881,8 +2881,8 @@ def write_json(df: pd.DataFrame) -> None:
     rows = json.loads(df.to_json(orient="records"))
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Selection ledger: record the price of every newly selected (>= 2 screens)
-    # name, then attach each name's history to its row. screen.yml seeds the
+    # Selection ledger: record the price of every name's first run at each
+    # pass level (exactly 1, 2, 3 screens), then attach its picks to its row. screen.yml seeds the
     # previous ledger from the data branch; with none there, this run starts it.
     try:
         ledger = selections.load_ledger(SELECTIONS_PATH)
@@ -2905,8 +2905,7 @@ def write_json(df: pd.DataFrame) -> None:
     )
     log.info(f"Results written to {OUTPUT_PATH} ({len(rows)} rows)")
     selections.save_ledger(SELECTIONS_PATH, ledger)
-    n_sel = sum(1 for e in ledger["tickers"].values() if e["selected"])
-    log.info(f"Selection ledger written to {SELECTIONS_PATH} ({n_sel} selected now, {len(ledger['tickers'])} ever)")
+    log.info(f"Selection ledger written to {SELECTIONS_PATH} ({len(ledger['tickers'])} names ever picked)")
 
     stats = _compute_stats(df)
     STATS_PATH.parent.mkdir(parents=True, exist_ok=True)

@@ -4,16 +4,18 @@ the screener actually published before the ledger existed.
 
 The `data` branch is force-pushed as one flat commit per run, so its history
 is gone from the branch -- but the old commits are still fetchable by SHA.
-These are every run that could be recovered (2026-09-26): the public Events API
-listed the push SHAs back to 2026-08-25, and four more (08-20, both 08-21 runs,
-08-24) survived as unreachable objects in a local clone. Runs from 2026-06-25 to
-2026-08-19 could not be recovered, so a first entry dated 2026-08-20 means the
-stock was already selected on the earliest recovered run.
+These are every run that could be recovered (2026-09-26, extended 2026-10-01
+for the per-level rebuild): the public Events API listed the push SHAs back to
+2026-08-25, and four more (08-20, both 08-21 runs, 08-24) survived as
+unreachable objects in a local clone. Runs from 2026-06-25 to 2026-08-19 could
+not be recovered, so a pick dated 2026-08-20 means the stock was already at
+that level on the earliest recovered run. Pushes that republished an existing
+run (the 2026-09-26 backfill itself) are not runs and are left out.
 
 Replays the runs oldest-first through selections.update_ledger -- the same code
 every screen runs -- and writes the ledger. With --annotate, also merges it
 into a results.json whose generated_at is the last replayed run (the currently
-published dataset), so the site shows entry prices before the next screen.
+published dataset), so the site shows the picks before the next screen.
 
     python backfill_selections.py --out web/public/data/selections.json \
         [--annotate web/public/data/results.json] [--cache /tmp/backfill]
@@ -59,6 +61,9 @@ RUNS = [
     ("2026-09-23T15:30:47Z", "108af8c20599b378bde4a1d55406ecefd2a8c089"),
     ("2026-09-24T15:55:31Z", "5b149766ec1551ab16c70a00c0603a744de7739a"),
     ("2026-09-25T15:59:05Z", "0140f42c5b2605815694d752390efcb1a7b4a500"),
+    ("2026-09-28T18:49:10Z", "74b07b30ed7213d838301b793e485b45c9fc154d"),
+    ("2026-09-29T17:01:13Z", "482828368be8e1fde06e3dbcf6bbdd110a1a40f0"),
+    ("2026-09-30T16:52:24Z", "2f2baef5d9458fcdb4f7c8c0c6db80ad8da30e24"),
 ]
 
 
@@ -86,8 +91,8 @@ def main() -> None:
         if data["generated_at"] != at:
             raise SystemExit(f"{sha}: generated_at {data['generated_at']} != expected {at}")
         ledger = selections.update_ledger(ledger, data["rows"], at)
-        now = sum(1 for e in ledger["tickers"].values() if e["selected"])
-        print(f"{at}  {sha[:8]}  selected now {now:3d}  ever {len(ledger['tickers']):3d}")
+        per_level = [sum(1 for e in ledger["tickers"].values() if str(n) in e) for n in (1, 2, 3)]
+        print(f"{at}  {sha[:8]}  ever picked at 1/2/3 screens {per_level}")
 
     selections.save_ledger(args.out, ledger)
     print(f"wrote {args.out}")

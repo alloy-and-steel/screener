@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { changeSince, entryDate, selectionView } from './selection'
+import { changeSince, entryDate, pickViews } from './selection'
 import type { Row } from './types'
 
 const mark = (at: string, price: number | null) => ({ at, price })
@@ -24,35 +24,23 @@ describe('entryDate', () => {
   })
 })
 
-describe('selectionView', () => {
+describe('pickViews', () => {
   const now = new Date('2026-09-26T12:00:00Z')
-  it('is null for a stock never selected', () => {
-    expect(selectionView({ Ticker: 'X', Price: 5, selection: null } as Row, now)).toBeNull()
-    expect(selectionView({ Ticker: 'X', Price: 5 } as Row, now)).toBeNull()
+  const row = { Ticker: 'X', Price: 90, picks: { '1': mark('2026-08-20T11:00:00Z', 100), '3': mark('2026-09-02T15:00:00Z', 120) } } as Row
+
+  it('is empty for a stock never picked', () => {
+    expect(pickViews({ Ticker: 'X', Price: 5, picks: null } as Row, 0, now)).toEqual([])
+    expect(pickViews({ Ticker: 'X', Price: 5 } as Row, 0, now)).toEqual([])
   })
-  it('shows only the first entry while it has never dropped out', () => {
-    const v = selectionView(
-      {
-        Ticker: 'X',
-        Price: 126,
-        selection: { first: mark('2026-08-20T11:00:00Z', 100), latest: mark('2026-08-20T11:00:00Z', 100), selected: true },
-      } as Row,
-      now,
-    )!
-    expect(v.first).toEqual({ date: 'Aug 20', price: 100, change: expect.closeTo(26) })
-    expect(v.reentry).toBeNull()
-    expect(v.selected).toBe(true)
+  it('lists every level reached, highest first, when the floor is "any"', () => {
+    expect(pickViews(row, 0, now)).toEqual([
+      { level: 3, date: 'Sep 2', price: 120, change: expect.closeTo(-25) },
+      { level: 1, date: 'Aug 20', price: 100, change: expect.closeTo(-10) },
+    ])
   })
-  it('adds the re-entry when the latest entry differs from the first', () => {
-    const v = selectionView(
-      {
-        Ticker: 'X',
-        Price: 90,
-        selection: { first: mark('2026-09-02T15:00:00Z', 120), latest: mark('2026-09-09T15:00:00Z', 100), selected: false },
-      } as Row,
-      now,
-    )!
-    expect(v.reentry).toEqual({ date: 'Sep 9', price: 100, change: expect.closeTo(-10) })
-    expect(v.selected).toBe(false)
+  it('drops the levels below the pass floor the visitor filtered on', () => {
+    expect(pickViews(row, 2, now).map((p) => p.level)).toEqual([3])
+    expect(pickViews(row, 1, now).map((p) => p.level)).toEqual([3, 1])
+    expect(pickViews({ ...row, picks: { '1': mark('2026-08-20T11:00:00Z', 100) } } as Row, 2, now)).toEqual([])
   })
 })

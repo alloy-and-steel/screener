@@ -67,8 +67,8 @@ jobs:
         #      table (the file is gitignored on master, so without this seed the
         #      fallback is a no-op and a Wikipedia outage kills the whole run).
         #   2. Seeds web/public/data/selections.json, the selection ledger
-        #      (selections.py): the first/latest entry price of every stock the
-        #      screen has picked. It lives ONLY here, so a run without the seed
+        #      (selections.py): the first price of every stock the screen has
+        #      picked, per pass level. It lives ONLY here, so a run without the seed
         #      would restart everyone's history from today.
         #   3. Carries prior monthly snapshots forward past the force-push.
         # Absent on the bootstrap run -- no data branch yet, so no fallback.

@@ -193,7 +193,7 @@ export default function App() {
               <>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {shown.slice(0, limit).map((r) => (
-                    <StockCard key={r.Ticker} row={r} onOpen={setOpenTicker} />
+                    <StockCard key={r.Ticker} row={r} minPass={minPass} onOpen={setOpenTicker} />
                   ))}
                 </div>
                 {limit < shown.length ? <div ref={sentinel} className="h-px" aria-hidden /> : null}
