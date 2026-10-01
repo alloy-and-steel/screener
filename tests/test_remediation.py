@@ -273,12 +273,12 @@ def test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes():
     assert _sym(0) in members and _sym(99) not in members, "the cut must follow weight order, not ticker order"
 
 
-def _vanguard_error(payload_fn):
+def _vanguard_error(payload_fn, fetch=None):
     original = screener._HTTP_GET
     try:
         screener._HTTP_GET = payload_fn
         try:
-            screener.fetch_dividend100()
+            (fetch or screener.fetch_dividend100)()
         except ValueError as exc:
             return str(exc)
         raise AssertionError("the pool should have aborted")
@@ -306,6 +306,46 @@ def test_vanguard_pool_rejects_a_ticker_that_is_not_a_listed_symbol():
     entities.insert(0, _holding("2223637D", 150.0))
     message = _vanguard_error(lambda url, **kw: _vanguard_payload(entities))
     assert message.endswith("['2223637D']"), message
+
+
+def _sym4(i):
+    """A letters-only four-letter symbol, distinct for i < 26**3."""
+    return f"U{chr(65 + i // 676)}{chr(65 + i // 26 % 26)}{chr(65 + i % 26)}"
+
+
+def test_total_market_keeps_every_us_listed_holding():
+    """
+    The Total US market pool is every VTI holding with a listed symbol: no
+    top-N cut, and both share classes kept (VTI really holds both), while CVRs,
+    rights and unticketed custody lines are dropped.
+    """
+    entities = [_holding(_sym4(i), 1.0) for i in range(3000)]
+    entities += [_holding("GOOGL", 2.0), _holding("GOOG", 1.9), _holding("BRK/B", 1.2)]
+    entities += [_holding("2223637D", None), _holding("", 0.01), {"ticker": None, "securityLongDescription": "RIGHTS", "marketValuePercentage": "0.00%"}]
+    entities.append(_holding(_sym4(0), 0.5))  # one company on two custody lines
+    seen = []
+
+    def fake_get(url, **kw):
+        seen.append(url)
+        return _vanguard_payload(entities)
+
+    original = screener._HTTP_GET
+    try:
+        screener._HTTP_GET = fake_get
+        members = screener.fetch_total_market()
+    finally:
+        screener._HTTP_GET = original
+
+    assert seen == ["https://investor.vanguard.com/irr/funds/profile/VTI-AdditionalFundData"], seen
+    assert len(members) == 3003, len(members)
+    assert {"GOOGL", "GOOG", "BRK-B"} <= members
+    assert "2223637D" not in members and "" not in members
+
+
+def test_total_market_rejects_a_half_empty_response():
+    entities = [_holding(_sym4(i), 1.0) for i in range(2600)]
+    message = _vanguard_error(lambda url, **kw: _vanguard_payload(entities), screener.fetch_total_market)
+    assert "2600" in message, message
 
 
 def test_vanguard_pool_rejects_a_truncated_holdings_response():
@@ -600,6 +640,8 @@ def run_all():
         test_vanguard_pool_rejects_a_truncated_holdings_response,
         test_vanguard_names_a_payload_shape_it_does_not_recognise,
         test_vanguard_pool_rejects_a_ticker_that_is_not_a_listed_symbol,
+        test_total_market_keeps_every_us_listed_holding,
+        test_total_market_rejects_a_half_empty_response,
         test_every_pool_is_scored_as_its_own_cross_section,
         test_negative_eps_is_retained_as_worst_discount_not_a_fetch_error,
         test_valuation_warning_lists_every_applicable_reason,

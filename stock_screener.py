@@ -748,19 +748,26 @@ def fetch_nasdaq100() -> set:
     raise ValueError("Could not find Nasdaq-100 constituents table on Wikipedia.")
 
 
-# ── Vanguard-ETF-derived pools (azqato's Growth/Value/Dividend 100) ──────────
+# ── Vanguard-ETF-derived pools (azqato's Growth/Value/Dividend 100, Total US) ─
 # Same source his update_etf_constituents.py uses: the holdings endpoint
-# Vanguard's own portfolio-composition component calls, ranked by portfolio
-# weight, top 100 after collapsing dual share classes. The raw count band is a
-# guard so a truncated response can never quietly shrink a pool. The previous
-# /investment-products/etfs/profile/api/ path was retired after 2026-08-08 and
-# now redirects to the site's HTML shell.
+# Vanguard's own portfolio-composition component calls. Growth/Value/Dividend
+# are the top 100 by portfolio weight after collapsing dual share classes; the
+# Total US market is every VTI holding with a listed symbol. Each raw count band
+# is a guard so a truncated response can never quietly shrink a pool. The
+# previous /investment-products/etfs/profile/api/ path was retired after
+# 2026-08-08 and now redirects to the site's HTML shell.
 VANGUARD_HOLDINGS_API = "https://investor.vanguard.com/irr/funds/profile/{fund}-AdditionalFundData"
 VANGUARD_HEADERS = {**WIKI_HEADERS, "Accept": "application/json"}
 VANGUARD_TOP_N = 100
 VANGUARD_RAW_MIN, VANGUARD_RAW_MAX = 110, 500
+# VTI: ~3,500 equity rows; measured 2026-10-01, 3,507 rows of which 3,465
+# carried a listed symbol. Bands are azqato's (wide for reconstitution, narrow
+# enough that a half-empty response aborts).
+TOTAL_MARKET_RAW_MIN, TOTAL_MARKET_RAW_MAX = 2500, 5000
+TOTAL_MARKET_MIN, TOTAL_MARKET_MAX = 2800, 4200
 # A listed symbol in the dash convention; anything else (a CVR's "2223637D")
-# aborts the pool, as azqato's sync does.
+# aborts a top-100 pool and is dropped from the Total US market, as azqato's
+# sync does.
 VANGUARD_SYMBOL_RE = re.compile(r"^[A-Z][A-Z-]{0,5}$")
 # Drop the duplicate share class only when the kept sibling is also present.
 # Keys/values use this repo's dash convention (BRK-B), not Vanguard's slashes.
@@ -775,9 +782,9 @@ DUAL_CLASS_DROP = {
 }
 
 
-def _fetch_vanguard_top_holdings(fund: str) -> set:
-    """Top `VANGUARD_TOP_N` holdings of a Vanguard ETF, by portfolio weight."""
-    resp = _http_get_with_retries(VANGUARD_HOLDINGS_API.format(fund=fund), what=f"Vanguard {fund} holdings", headers=VANGUARD_HEADERS, timeout=30)
+def _fetch_vanguard_holdings(fund: str, raw_min: int, raw_max: int) -> list[tuple[float | None, str]]:
+    """Every equity row of a Vanguard ETF as (weight %, symbol); blank symbols dropped."""
+    resp = _http_get_with_retries(VANGUARD_HOLDINGS_API.format(fund=fund), what=f"Vanguard {fund} holdings", headers=VANGUARD_HEADERS, timeout=90)
     resp.raise_for_status()
     # Vanguard answers both a bot check and a retired path with a 200 text/html
     # app shell; name that plainly instead of letting .json() die on
@@ -789,16 +796,22 @@ def _fetch_vanguard_top_holdings(fund: str) -> set:
         entities = list(resp.json()["holdingDetails"]["equityHoldings"])
     except (KeyError, TypeError) as exc:
         raise ValueError(f"{fund}: Vanguard JSON has no holdingDetails.equityHoldings list ({type(exc).__name__}: {exc}) — the endpoint changed shape") from exc
-    if not (VANGUARD_RAW_MIN <= len(entities) <= VANGUARD_RAW_MAX):
-        raise ValueError(f"{fund}: unexpected raw holdings count {len(entities)} (expected {VANGUARD_RAW_MIN}-{VANGUARD_RAW_MAX})")
+    if not (raw_min <= len(entities) <= raw_max):
+        raise ValueError(f"{fund}: unexpected raw holdings count {len(entities)} (expected {raw_min}-{raw_max})")
 
-    weighted = []
+    holdings = []
     for entity in entities:
-        # Share classes arrive as "BRK/B", weights as "13.61%".
+        # Share classes arrive as "BRK/B", weights as "13.61%" (or null).
         symbol = str(entity.get("ticker") or "").strip().upper().replace(" ", "").replace("/", "-").replace(".", "-")
         weight = _safe_float(str(entity.get("marketValuePercentage") or "").replace("%", ""))
-        if symbol and weight is not None:
-            weighted.append((weight, symbol))
+        if symbol:
+            holdings.append((weight, symbol))
+    return holdings
+
+
+def _fetch_vanguard_top_holdings(fund: str) -> set:
+    """Top `VANGUARD_TOP_N` holdings of a Vanguard ETF, by portfolio weight."""
+    weighted = [(weight, symbol) for weight, symbol in _fetch_vanguard_holdings(fund, VANGUARD_RAW_MIN, VANGUARD_RAW_MAX) if weight is not None]
     weighted.sort(key=lambda pair: -pair[0])
 
     present = {symbol for _, symbol in weighted}
@@ -816,6 +829,20 @@ def _fetch_vanguard_top_holdings(fund: str) -> set:
     if suspicious:
         raise ValueError(f"{fund}: suspicious tickers in the top {VANGUARD_TOP_N}: {suspicious}")
     return set(picked)
+
+
+def fetch_total_market() -> set:
+    """Every US-listed VTI holding — azqato's "Total US market" (his Domestic).
+
+    No top-N cut and no share-class collapse: VTI genuinely holds GOOG and
+    GOOGL, and a whole-market pool that dropped one would be wrong.
+    """
+    log.info("Fetching Total US market (every VTI holding) from Vanguard...")
+    tickers = {symbol for _, symbol in _fetch_vanguard_holdings("VTI", TOTAL_MARKET_RAW_MIN, TOTAL_MARKET_RAW_MAX) if VANGUARD_SYMBOL_RE.match(symbol)}
+    if not (TOTAL_MARKET_MIN <= len(tickers) <= TOTAL_MARKET_MAX):
+        raise ValueError(f"VTI: {len(tickers)} listed holdings (expected {TOTAL_MARKET_MIN}-{TOTAL_MARKET_MAX})")
+    log.info(f"  → {len(tickers)} Total US market tickers")
+    return tickers
 
 
 def fetch_growth100() -> set:
