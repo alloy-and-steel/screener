@@ -131,7 +131,7 @@ What it would add that the screener lacks: SBC-adjusted FCF, share-count trend, 
 margin and profitability **trajectory**. The other rows overlap existing systems:
 revenue growth and cash vs debt are Azqato pillars; FCF yield and a DCF are in Overall.
 Statements the pipeline already fetches (annual `income_stmt`, `cashflow`,
-`balance_sheet` in `get_combined_data`) cover every check on an annual basis, so an
+`balance_sheet` in `get_yf_price_and_history`) cover every check on an annual basis, so an
 annual-basis version needs no new API calls.
 
 ## Verdict
