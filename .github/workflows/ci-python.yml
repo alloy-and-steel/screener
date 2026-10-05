@@ -51,7 +51,7 @@ jobs:
         env:
           FRED_API_KEY: ci-placeholder
           FINNHUB_API_KEY: ci-placeholder
-        run: python -c "import azqato, monitor, stock_screener"
+        run: python -c "import azqato, monitor, selections, stock_screener, wealthmatica"
 
       - name: Run offline regression tests
         # tests/test_*.py are pure/offline (no network, no live API keys) --

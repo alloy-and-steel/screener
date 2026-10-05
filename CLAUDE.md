@@ -2,12 +2,12 @@
 
 ## What this is
 
-A three-system stock screener over seven pools — the S&P 500, Dow 30, Nasdaq-100,
+A four-system stock screener over seven pools — the S&P 500, Dow 30, Nasdaq-100,
 and (from azqato) Growth 100 / Value 100 / Dividend 100, the top-100 holdings by
 weight of VUG / VTV / VIG, and Total US, every US-listed VTI holding of $1B+
 market cap — merged into ONE deduplicated universe (~2,000 names),
 plus a 4th **informational** composite score. A Python job fetches fundamentals and
-scores every name through **three independent screens** (the pass/fail gate);
+scores every name through **four independent screens** (the pass/fail gate);
 a static React SPA renders the results. Deployed to GitHub Pages on a weekday
 schedule — a public, shareable URL, no account required.
 
@@ -21,7 +21,7 @@ scoring/data logic was hand-ported into this fork (not a `git merge` — the two
 trees only share 6 file paths and the frontends are incompatible by design;
 this fork kept its own Vite/React `web/`, `azqato.py`, and decoupled
 `data`-branch CI). Upstream's `OverallScore` was wired in as an **additional,
-non-gating** layer to preserve this fork's "three independent systems,
+non-gating** layer to preserve this fork's "independent systems,
 disagreement is the signal" design — see the `Overall` bullet below.
 
 Synced with upstream through `e71db99` (2026-08-10); re-checked through
@@ -68,7 +68,7 @@ reweighting (v3.37.0), and the v4.0.0 vanilla-HTML redesign. His **ETFs**
 screened here: ETFs are scored by a wholly different technicals-only model with
 no EPS for Lynch/Graham to value, and International is local-exchange listings
 (`005930.KS`, `7203.T`) that the Finnhub free tier doesn't cover — two of this
-fork's three systems would have nothing to score them with, so they could never
+fork's systems would have nothing to score them with, so they could never
 clear the gate. His **Growth/Value/Dividend 100** pools ARE screened (see
 `INDEX_FETCHERS`), and so is his **Domestic** universe (all ~3,465 US
 holdings of VTI) as `TotalUS`, floored at $1B market cap (~1,950 names). Azqato
@@ -82,7 +82,7 @@ weekday cron leaves Friday's data legitimately ~3 days old on Monday morning.
 To re-check: `git clone --filter=blob:none https://github.com/Azqato/stocks`
 then `git log --oneline -- screener.js scripts/fetch_screener_data.py`.
 
-The three screens (decoupled on purpose — disagreement is the signal):
+The four screens (decoupled on purpose — disagreement is the signal):
 
 - **Azqato** — pure, no-AI RELATIVE percentile model (`azqato.py`), a port of
   the live azqato screener's scoring v3 (azqato.github.io/stocks/screener.js).
@@ -94,8 +94,8 @@ The three screens (decoupled on purpose — disagreement is the signal):
   missing data = hard zero. Score 0-100 -> rank tiers (S = top 10%, A = next
   10%, B = 20-50%, C = 50-75%, F = rest; perfect 100 = S+). Tiers are computed
   in ONE cross-sectional pass in `run_screener` after all tickers fetch — they
-  are relative, so per-ticker code can't produce them. Pass (for the 3-system
-  gate) = tier A or better. RSI(14) + 52-week position are scorecard display
+  are relative, so per-ticker code can't produce them. Pass (for the gate) =
+  tier A or better. RSI(14) + 52-week position are scorecard display
   only, not scored. **Because the model is relative, the peer set IS part of
   the score**: azqato's own site loads one pool at a time, so the same name can
   sit two tiers apart there. `run_screener` therefore also re-scores each curated pool (not Total US)
@@ -106,16 +106,24 @@ The three screens (decoupled on purpose — disagreement is the signal):
   tier) between the two, so never conflate them.
 - **Lynch** — growth at a reasonable price (PEG / fair-value bands).
 - **Graham** — rate-adjusted intrinsic value + 8 defensive balance-sheet checks.
+- **Wealthmatica** — `wealthmatica.py` (pure, absolute, per ticker): nine trend
+  checks on the last 2-3 ANNUAL statements already fetched (revenue growth,
+  re-acceleration, FCF, FCF − SBC, share count, gross/operating margin, EPS,
+  cash vs debt), distilled from the wealthmatica.substack.com reports — he
+  publishes no thresholds, so ours are `[ASSUMED]` constants there. A check
+  whose inputs are absent is N/A, not a fail (banks: no gross profit /
+  operating income; WMT/VZ: no SBC row). Pass = >= 6 checks apply AND passed
+  >= ceil(7/9 x applicable); fewer than 6 -> verdict `None`. The frontend reads
+  the boolean only. Research + test run: `docs/research/wealthmatica.md`.
 
-The UI is a card grid (no table); by default it shows only names that clear
-**all three**; relax the filter to see 2/1/any. Tapping a card opens its full
+The UI is a card grid (no table); by default it shows names that clear **3 of
+4** (`DEFAULT_PREFS`); the filter offers all 4 / 3+ / 2+ / 1+ / any. Tapping a card opens its full
 scorecard (per-system verdicts + drivers, RSI gauge, 52-week-range bar) in a
 sheet addressed by the URL hash (`#AAPL`).
 
 **Overall (informational, not gated)** — a 4th, absolute 0-100 composite
 (`overall_score()` in `stock_screener.py`), ported from upstream's v2.0
-methodology expansion. Does NOT feed `combinedVerdict`/`passesAll`
-(`web/src/score.ts` is unchanged) — shown as the ring on each card and a
+methodology expansion. Does NOT feed `combinedVerdict`/`passesAll` — shown as the ring on each card and a
 Scorecard panel only. Four renormalized-over-present pillars:
 **Value 35%** (Lynch/Graham discount + FCF/earnings/shareholder yield +
 distance from 52w/5y low + DCF discount), **Quality 30%** (Graham
@@ -167,8 +175,8 @@ Screen and publish are SEPARATE workflows, decoupled through a dedicated
   shallow-clone `origin/data` and seed the previous `results.json` (so
   `get_universe`'s constituent fallback has a last-known roster; the file is
   gitignored on `master`, so without the seed the fallback is a no-op) and the
-  selection ledger `selections.json` ->
-  run the screener -> `web/public/data/results.json` + `selections.json` +
+  selection ledger `picks.json` ->
+  run the screener -> `web/public/data/results.json` + `picks.json` +
   `stats.json` (universe
   aggregate stats: score distribution, sector breakdown, coverage — for future
   monitoring, no dedicated UI page yet) -> force-push those files to the
@@ -205,8 +213,9 @@ directly -- Screen completion is the link.
 `process_ticker` does `row.update({f"Graham_{k}": v ...})` over an
 already-prefixed dict. The frontend reads those exact keys (`web/src/score.ts`,
 `format.tsx`, `filters.ts`, `StockCard.tsx`, `Scorecard.tsx`). Don't "fix" the prefix without updating the frontend in the same diff.
-Each row also carries `picks` (`{"1"|"2"|"3": {at, price}}`, levels never
-reached absent, null if never picked) merged in by `write_json` from the ledger.
+Each row also carries `picks4` (`{"1"|"2"|"3"|"4": {at, price}}`, levels never
+reached absent, null if never picked) merged in by `write_json` from the ledger,
+and `wealthmatica` (`{checks: {key: {value, pass}}, passed, applicable, pass}`).
 
 ## Layout
 
@@ -232,27 +241,27 @@ reached absent, null if never picked) merged in by `write_json` from the ledger.
   piotroski`, `_compute_altman_z`, the `_compute_fcff_*`/`_estimate_screen_
   wacc` FCFF/WACC stack), and `_validate_output_dataframe`/`_compute_stats`.
 - `azqato.py` — `wilder_rsi`, `pct_of_52w_range`, `azqato_profile` (pure).
-- `selections.py` — the selection ledger (pure): a stock is **picked at level
-  N** the first run it passes EXACTLY N screens (N = 1, 2, 3); each level keeps
-  that first run + price only, never overwritten. Pass gates mirror
-  `web/src/score.ts` (a test diffs them). `backfill_selections.py` rebuilds it
-  by replaying the 30 recoverable published runs (2026-08-20 to 2026-09-30,
-  SHAs inside).
+- `wealthmatica.py` — `wealthmatica_profile` (pure); `stock_screener.
+  _wealthmatica_from_statements` extracts its inputs from the yfinance frames.
+- `selections.py` — the selection ledger (pure, v3): a stock is **picked at
+  level N** the first run it passes EXACTLY N screens (N = 1..4); each level
+  keeps that first run + price only, never overwritten. Pass gates mirror
+  `web/src/score.ts` (a test diffs them).
 - `monitor.py` — falsifier / drift checks.
 - `tests/test_*.py` — offline regression suite (vanilla `assert`, no pytest,
   no network) covering the OverallScore engine, Phase 6 factors, Piotroski/
   Altman, the FCFF DCF stack, the output-validation guard, the selection
-  ledger, and the KO
+  ledger, the Wealthmatica checklist, and the KO
   Lynch/Graham formula fixture. Run individually (`python tests/test_X.py`)
   or via the CI/pre-flight loop (`for f in tests/test_*.py; do python "$f"; done`).
-- `web/src/` — SPA. `score.ts` (verdicts — Azqato/Lynch/Graham gate only,
+- `web/src/` — SPA. `score.ts` (verdicts — the four-system gate,
   Overall is deliberately NOT here), `filters.ts` (filter + sort — missing
   values sort last in both directions), `freshness.ts` (data age, stale rule,
   next cron run — mirrors `screen.yml`'s cron), `useDataset.ts` (load + half-
   hourly background check for newer `results.json`), `prefs.ts` (last pass floor / pool / sort, kept in
   `localStorage`; the query is not saved), `selection.ts` (picks per level /
   move since; the card shows the levels at or above the pass floor, the
-  scorecard all three), `StockCard.tsx`, `FilterBar.tsx`, `Header.tsx` (freshness chip), `Toasts.tsx` (new-version /
+  scorecard all four), `StockCard.tsx`, `FilterBar.tsx`, `Header.tsx` (freshness chip), `Toasts.tsx` (new-version /
   new-data prompts), `Scorecard.tsx` (incl. `OverallPanel`), `format.tsx`,
   `MethodologyDialog.tsx`, `App.tsx`. Pure logic has `*.test.ts` beside it.
   PWA icons in `web/public/` are generated by `web/scripts/make-icons.py`.
@@ -325,19 +334,18 @@ After that: the weekday cron (`0 11 * * 1-5`) refreshes data and auto-deploys (v
   `cache: 'no-cache'` — a `?v=` cache-buster defeats the offline copy. A new
   deploy waits for the user's "Update" tap (`registerType: 'prompt'`).
 
-- **The selection ledger exists only on the `data` branch.** `screen.yml`
-  fails if the branch exists without `selections.json`, and `write_json` aborts
-  on one it can't read -- either way, rather than re-stamping every current
-  pick with today's price. Runs before 2026-08-20 are unrecoverable, so history
-  starts there. Entry prices are nominal (not split-adjusted): a split after
-  the pick shows as a false drop in the "since picked" move.
-  Changing the ledger's shape means: bump `LEDGER_VERSION`, rename the row
-  field (an old cached app shell reads the new `results.json`), extend
-  `backfill_selections.RUNS` (data-branch push SHAs from the public Events
-  API), replay with `--annotate`, then push the rebuilt ledger + results to
-  `data` and land the code back to back while no Screen run is queued or in
-  progress -- a run on the old code force-pushes the old ledger back, and
-  either half alone makes the next run abort.
+- **The selection ledger exists only on the `data` branch** as `picks.json`
+  (v3, four screens). `screen.yml` fails if the branch has neither `picks.json`
+  nor the archived three-screen `selections.json` (v2, 2026-08-20 to launch,
+  carried forward untouched, never read; its presence alone lets the first v3
+  run start fresh). `write_json` aborts on a ledger it can't read -- either
+  way, rather than re-stamping every current pick with today's price. Entry
+  prices are nominal (not split-adjusted): a split after the pick shows as a
+  false drop in the "since picked" move. Changing the ledger's shape means:
+  bump `LEDGER_VERSION`, rename the file AND the row field (`selections.
+  ROW_FIELD`; an old cached app shell reads the new `results.json`), and teach
+  `screen.yml`'s seed step the old file name. Past runs can't be re-scored
+  (statements aren't saved), so a new shape starts its history at launch.
 
 - **`.gitignore` ignores `*.json`.** Any JSON that must be tracked needs an
   explicit `!path` exception (see `web/package.json`, `web/tsconfig.json`).

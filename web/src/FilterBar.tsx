@@ -1,10 +1,11 @@
 import { SORTS, type SortKey } from './filters'
 import { INDEX_LABEL, INDEX_NAMES, type IndexName } from './types'
 
-export type PassCounts = Record<0 | 1 | 2 | 3, number>
+export type PassCounts = Record<0 | 1 | 2 | 3 | 4, number>
 
-const LEVELS: { level: 0 | 1 | 2 | 3; label: string; spoken: string }[] = [
-  { level: 3, label: 'All 3', spoken: 'Passes all 3 screens' },
+const LEVELS: { level: 0 | 1 | 2 | 3 | 4; label: string; spoken: string }[] = [
+  { level: 4, label: 'All 4', spoken: 'Passes all 4 screens' },
+  { level: 3, label: '3+', spoken: 'Passes 3 or more' },
   { level: 2, label: '2+', spoken: 'Passes 2 or more' },
   { level: 1, label: '1+', spoken: 'Passes 1 or more' },
   { level: 0, label: 'Any', spoken: 'Any' },
@@ -114,7 +115,7 @@ export default function FilterBar(p: FilterBarProps) {
       <div
         role="group"
         aria-label="Screens passed"
-        className="grid h-12 grid-cols-4 gap-0.5 rounded-xl bg-white/[0.04] p-0.5 ring-1 ring-inset ring-white/10 lg:w-80"
+        className="grid h-12 grid-cols-5 gap-0.5 rounded-xl bg-white/[0.04] p-0.5 ring-1 ring-inset ring-white/10 lg:w-96"
       >
         {LEVELS.map((l) => {
           const on = p.minPass === l.level

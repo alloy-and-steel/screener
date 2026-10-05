@@ -1,5 +1,5 @@
 // Flat, minimalist mark: three tapering bars — a filter/funnel that screens
-// down to the names passing all three systems. Uses currentColor so it themes.
+// down to the names passing all four systems. Uses currentColor so it themes.
 export function Logo({ className = 'h-5 w-5' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>

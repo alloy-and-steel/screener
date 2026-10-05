@@ -6,7 +6,7 @@ import Scorecard from './Scorecard'
 import MethodologyDialog from './MethodologyDialog'
 import Toasts from './Toasts'
 import { filterRows, sortRows, type SortKey } from './filters'
-import { combinedVerdict } from './score'
+import { combinedVerdict, passesAll } from './score'
 import { useDataset } from './useDataset'
 import { loadPrefs, savePrefs } from './prefs'
 import { INDEX_LABEL, type IndexName, type Row } from './types'
@@ -50,18 +50,18 @@ function useHashTicker(): [string | null, (t: string | null) => void] {
 // One line of context above the list. The per-screen pass counts that used
 // to sit here as tiles pushed the first card below the fold on a phone.
 function Summary({ rows, pool }: { rows: Row[]; pool: IndexName | null }) {
-  const all = useMemo(() => rows.filter((r) => combinedVerdict(r).passCount === 3).length, [rows])
+  const all = useMemo(() => rows.filter(passesAll).length, [rows])
   return (
     <h1 className="text-balance pb-3 pt-4 text-[17px] font-semibold leading-snug tracking-tight text-slate-100 sm:pt-6 sm:text-2xl">
       <span className="tnum text-emerald-300">{all}</span> of <span className="tnum">{rows.length}</span> stocks
-      {pool ? ` in ${INDEX_LABEL[pool]}` : ''} pass all three screens
+      {pool ? ` in ${INDEX_LABEL[pool]}` : ''} pass all four screens
     </h1>
   )
 }
 
 export default function App() {
   const { load, reload, pending, applyPending, dismissPending, check, checking, lastChecked, checkFailed } = useDataset()
-  // First visit opens on the all-three short list; after that, the last view.
+  // First visit opens on the 3-of-4 list; after that, the last view.
   const [initial] = useState(loadPrefs)
   const [minPass, setMinPass] = useState(initial.minPass)
   const [pool, setPool] = useState<IndexName | null>(initial.pool)
@@ -82,7 +82,8 @@ export default function App() {
 
   const counts = useMemo<PassCounts>(() => {
     const pc = candidates.map((r) => combinedVerdict(r).passCount)
-    return { 3: pc.filter((n) => n >= 3).length, 2: pc.filter((n) => n >= 2).length, 1: pc.filter((n) => n >= 1).length, 0: pc.length }
+    const atLeast = (k: number) => pc.filter((n) => n >= k).length
+    return { 4: atLeast(4), 3: atLeast(3), 2: atLeast(2), 1: atLeast(1), 0: pc.length }
   }, [candidates])
 
   const shown = useMemo(
@@ -115,7 +116,7 @@ export default function App() {
     if (hit) setOpenTicker(hit.Ticker)
   }
 
-  const looser = ([2, 1, 0] as const).find((l) => l < minPass && counts[l] > 0)
+  const looser = ([3, 2, 1, 0] as const).find((l) => l < minPass && counts[l] > 0)
 
   return (
     <div className="min-h-full">

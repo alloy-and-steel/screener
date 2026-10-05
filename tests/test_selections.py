@@ -162,7 +162,7 @@ def test_gates_match_the_frontend():
     assert ts_set("LYNCH_BUY") == selections.LYNCH_BUY
     assert ts_set("GRAHAM_BUY") == selections.GRAHAM_BUY
     # Wealthmatica's thresholds live only in wealthmatica.py; both sides read its boolean.
-    assert "row.wealthmatica?.pass === true" in ts
+    assert "const wm = row.wealthmatica" in ts and "wm.pass === true" in ts
 
 
 def _write_json_in(tmp, df):

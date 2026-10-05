@@ -102,8 +102,8 @@ function StockCard({ row, minPass, onOpen }: { row: Row; minPass: number; onOpen
         <OverallRing score={row.OverallScore} />
       </div>
 
-      {/* The three independent verdicts */}
-      <div className="grid grid-cols-3 gap-1.5">
+      {/* The four independent verdicts — 2x2: four abreast leaves no room for "Strong Buy" on a phone */}
+      <div className="grid grid-cols-2 gap-1.5">
         {vs.map((v) => {
           const chip = v.pillColors ?? TONE[v.tone]
           return (
@@ -147,7 +147,7 @@ function StockCard({ row, minPass, onOpen }: { row: Row; minPass: number; onOpen
         <div className="min-w-0 flex-1">
           <RangeStrip p={az?.pos_52w_pct} />
         </div>
-        <span className={`tnum shrink-0 text-[11px] font-semibold ${TONE[c.tone].text}`}>{c.passCount}/3 screens</span>
+        <span className={`tnum shrink-0 text-[11px] font-semibold ${TONE[c.tone].text}`}>{c.passCount}/{vs.length} screens</span>
       </div>
     </button>
   )

@@ -103,9 +103,13 @@ export interface Row {
   Indexes_?: never
   azqato?: Azqato
 
+  // The Wealthmatica checklist (wealthmatica.py) — the 4th gating system.
+  // Absent on error rows and on datasets published before it existed.
+  wealthmatica?: Wealthmatica
+
   // ── OverallScore (ported v2.0 methodology) — informational 4-pillar
-  // composite. Does NOT participate in the Azqato/Lynch/Graham pass gate
-  // (score.ts's verdicts()/combinedVerdict()/passesAll() are unchanged).
+  // composite. Does NOT participate in the pass gate (score.ts's
+  // verdicts()/combinedVerdict()/passesAll() never read it).
   OverallScore?: number | null
   Sector?: string | null
   Trap_Reasons?: string | null
@@ -128,9 +132,10 @@ export interface Row {
   scores?: Scores
 
   // Selection ledger (selections.py): the run and price at which this stock
-  // first passed exactly 1, 2 and 3 screens, keyed by that count. A level it
-  // never reached is absent; null/absent when it never passed any.
-  picks?: Picks | null
+  // first passed exactly 1, 2, 3 and 4 screens, keyed by that count. A level it
+  // never reached is absent; null/absent when it never passed any. (The
+  // three-screen ledger's `picks` field is retired and never read.)
+  picks4?: Picks | null
 
   // Tolerate the full set of emitted columns without enumerating every one.
   [key: string]: unknown
@@ -141,10 +146,38 @@ export interface EntryMark {
   price: number | null
 }
 
-export type PickLevel = 1 | 2 | 3
+export type PickLevel = 1 | 2 | 3 | 4
 
 // Keyed by the level as a string: that is how the JSON carries it.
 export type Picks = Partial<Record<`${PickLevel}`, EntryMark>>
+
+// The nine checks, in display order (wealthmatica.CHECKS).
+export const WEALTHMATICA_CHECKS = [
+  'revGrowth',
+  'revAccel',
+  'fcf',
+  'fcfSbc',
+  'shareChange',
+  'grossMargin',
+  'opMargin',
+  'eps',
+  'cashDebt',
+] as const
+export type WealthmaticaCheckKey = (typeof WEALTHMATICA_CHECKS)[number]
+
+// pass null = N/A: the statements don't carry that line (a bank has no gross
+// profit). N/A is neither a pass nor a fail.
+export interface WealthmaticaCheck {
+  value: number | null
+  pass: boolean | null
+}
+
+export interface Wealthmatica {
+  checks: Record<WealthmaticaCheckKey, WealthmaticaCheck>
+  passed: number
+  applicable: number
+  pass: boolean | null // null when too few checks apply to judge
+}
 
 export interface Scores {
   overall: number | null

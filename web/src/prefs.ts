@@ -27,7 +27,7 @@ export function parsePrefs(raw: string | null): Prefs {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return DEFAULT_PREFS
   const o = v as Record<string, unknown>
   return {
-    minPass: [0, 1, 2, 3].includes(o.minPass as number) ? (o.minPass as number) : DEFAULT_PREFS.minPass,
+    minPass: [0, 1, 2, 3, 4].includes(o.minPass as number) ? (o.minPass as number) : DEFAULT_PREFS.minPass,
     pool: INDEX_NAMES.includes(o.pool as IndexName) ? (o.pool as IndexName) : DEFAULT_PREFS.pool,
     sort: typeof o.sort === 'string' && Object.hasOwn(SORTS, o.sort) ? (o.sort as SortKey) : DEFAULT_PREFS.sort,
   }

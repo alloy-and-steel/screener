@@ -1,6 +1,6 @@
-// When the screener first picked a stock at each pass level (exactly 1, 2 or
-// all 3 screens) and what it cost then. The history itself is kept by
-// selections.py on the data branch and arrives on each row as `picks`; this
+// When the screener first picked a stock at each pass level (exactly 1, 2, 3
+// or all 4 screens) and what it cost then. The history itself is kept by
+// selections.py on the data branch and arrives on each row as `picks4`; this
 // only shapes it for display.
 
 import type { PickLevel, Row } from './types'
@@ -24,15 +24,15 @@ export function entryDate(at: string, now: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }), timeZone: 'UTC' })
 }
 
-const LEVELS: PickLevel[] = [3, 2, 1]
+export const LEVELS: PickLevel[] = [4, 3, 2, 1]
 
-export const LEVEL_LABEL: Record<PickLevel, string> = { 3: 'all 3 screens', 2: '2 screens', 1: '1 screen' }
+export const LEVEL_LABEL: Record<PickLevel, string> = { 4: 'all 4 screens', 3: '3 screens', 2: '2 screens', 1: '1 screen' }
 
 // The picks at or above `minPass` (the visitor's pass floor; 0 = any), highest
 // level first. Below the floor is left out: those are levels the visitor has
 // filtered away.
 export function pickViews(row: Row, minPass: number, now: Date): PickView[] {
-  const picks = row.picks
+  const picks = row.picks4
   if (!picks) return []
   return LEVELS.filter((l) => l >= minPass).flatMap((level) => {
     const m = picks[`${level}`]
