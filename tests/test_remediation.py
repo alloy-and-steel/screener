@@ -36,6 +36,7 @@ def _guard_frame(tickers, scores, errors, finnhub_ok=None):
             "DCF_WACC_Pct": [9.0 if ok else None for ok in active],
             "DCF_Terminal_Growth_Pct": [2.0 if ok else None for ok in active],
             "DCF_Terminal_Value_Pct": [70.0 if ok else None for ok in active],
+            "wealthmatica": [{"pass": False, "applicable": 9} if ok else None for ok in active],
         }
     )
 
@@ -174,6 +175,18 @@ def test_output_guard_rejects_misordered_dcf_range():
         assert False, "Expected a misordered DCF range to be rejected"
     except ValueError as exc:
         assert "misordered ranges" in str(exc)
+
+
+def test_output_guard_rejects_a_statements_outage():
+    # Every row came back without enough statement lines for a Wealthmatica
+    # verdict: publishing would fail every name on the 4th screen at once.
+    frame = _guard_frame([f"T{i}" for i in range(120)], [50.0] * 120, [None] * 120)
+    frame["wealthmatica"] = [{"pass": None, "applicable": 1}] * 120
+    try:
+        screener._validate_output_dataframe(frame)
+        assert False, "Expected a statements outage to be rejected"
+    except ValueError as exc:
+        assert "Wealthmatica verdict" in str(exc)
 
 
 def test_nasdaq_fetch_uses_component_list_page():
@@ -634,6 +647,7 @@ def run_all():
         test_output_guard_rejects_blank_tickers,
         test_output_guard_rejects_provider_wide_degradation,
         test_output_guard_rejects_misordered_dcf_range,
+        test_output_guard_rejects_a_statements_outage,
         test_nasdaq_fetch_uses_component_list_page,
         test_dow_fetch_uses_component_list_page,
         test_vanguard_pool_takes_top_100_by_weight_and_drops_dual_classes,

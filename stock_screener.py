@@ -37,6 +37,7 @@ from scipy.optimize import brentq
 
 from azqato import azqato_score_all, pct_of_52w_range, wilder_rsi
 import selections
+from wealthmatica import wealthmatica_profile
 
 # Load .env when running locally; no-op in GitHub Actions (env vars already set)
 load_dotenv()
@@ -1140,6 +1141,53 @@ def _extract_total_debt_prev(balance_sheet) -> float | None:
     if long_term is None and current is None:
         return None
     return (long_term or 0.0) + (current or 0.0)
+
+
+# Wealthmatica checklist rows. Operating income, not EBIT: EBIT adds back
+# non-operating items, and the check is about the operating margin trend.
+OPERATING_INCOME_LABELS = ["Operating Income", "Total Operating Income As Reported"]
+EPS_DILUTED_LABELS = ["Diluted EPS", "Basic EPS"]
+FCF_LABELS = ["Free Cash Flow"]
+SBC_LABELS = ["Stock Based Compensation"]
+WEALTHMATICA_YEARS = 3  # two growth rates need three years
+
+
+def _yf_series(df, labels, n: int = WEALTHMATICA_YEARS) -> list | None:
+    """The first matching row's newest `n` annual values (None per missing year), or None if no row matches."""
+    if df is None or df.empty:
+        return None
+    for label in labels:
+        if label in df.index:
+            return [_safe_float(v) for v in df.loc[label].iloc[:n]]
+    return None
+
+
+def _fcf_series(cf) -> list | None:
+    """Reported free cash flow, else operating cash flow + capex (capex is negative in yfinance) year by year.
+    A year missing either side stays None -- capex is never assumed to be zero."""
+    reported = _yf_series(cf, FCF_LABELS)
+    if reported is not None:
+        return reported
+    ocf, capex = _yf_series(cf, OCF_LABELS), _yf_series(cf, CAPEX_LABELS)
+    if ocf is None or capex is None:
+        return None
+    return [o + c if o is not None and c is not None else None for o, c in zip(ocf, capex)]
+
+
+def _wealthmatica_from_statements(inc, cf, bs, cash, debt) -> dict:
+    """The Wealthmatica checklist on the annual statements get_yf_price_and_history already fetched.
+    cash/debt are the Yahoo info totals the Azqato cash-vs-debt metric reads."""
+    return wealthmatica_profile(
+        revenue=_yf_series(inc, REVENUE_LABELS),
+        gross_profit=_yf_series(inc, GROSS_PROFIT_LABELS),
+        operating_income=_yf_series(inc, OPERATING_INCOME_LABELS),
+        eps=_yf_series(inc, EPS_DILUTED_LABELS),
+        fcf=_fcf_series(cf),
+        sbc=_yf_series(cf, SBC_LABELS),
+        shares=_yf_series(bs, SHARES_LABELS),
+        cash=cash,
+        debt=debt,
+    )
 
 
 def _effective_tax_rate(income_statement) -> float:
@@ -2444,6 +2492,12 @@ def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None =
         "pos_52w_pct": pct_of_52w_range(price, fund.get("low_52w"), fund.get("high_52w")),
     }
 
+    # ── Wealthmatica checklist (4th gating system) — absolute, per ticker ──
+    row["wealthmatica"] = _wealthmatica_from_statements(
+        fund.get("income_stmt_df"), fund.get("cashflow_df"), fund.get("balance_sheet_df"),
+        fund.get("az_cash"), fund.get("az_debt"),
+    )
+
     # ── Growth stability — fraction of years with positive EPS ───────
     # None when fewer than 3 years available (genuinely unknown, not zero).
     if len(valid_eps) >= 3:
@@ -2769,7 +2823,7 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float
 
 OUTPUT_PATH = Path("web/public/data/results.json")
 STATS_PATH = Path("web/public/data/stats.json")
-SELECTIONS_PATH = Path("web/public/data/selections.json")
+SELECTIONS_PATH = Path("web/public/data/picks.json")  # selections.py ledger v3 (selections.json was v2)
 SNAPSHOTS_DIR = Path("web/public/data/snapshots")
 SNAPSHOTS_INDEX = SNAPSHOTS_DIR / "index.json"
 
@@ -2777,6 +2831,7 @@ MIN_VALID_ROWS = 100  # abort the publish if fewer real (non-error) rows than th
 MIN_VALID_FRACTION = 0.60  # ... or if fewer than this fraction of rows are valid
 MIN_FINNHUB_VALID_FRACTION = 0.60  # ... or if fewer than this fraction have live Finnhub data
 MIN_DCF_ROWS = 100  # ... or if fewer than this many rows carry a complete FCFF DCF
+MIN_WEALTHMATICA_ROWS = 100  # ... or if fewer than this many rows carry a Wealthmatica verdict (a statements outage)
 
 # [ASSUMED] — no empirical anchor; low_safety_count flags rows the Safety
 # pillar considers distressed, surfaced in stats.json for monitoring.
@@ -2852,6 +2907,10 @@ def _compute_stats(df: pd.DataFrame) -> dict:
     ):
         col = df[col_name] if col_name in df.columns else None
         coverage_stats[key] = int(col.notna().sum()) if col is not None else 0
+    wm_col = df["wealthmatica"] if "wealthmatica" in df.columns else None
+    wm_verdicts = [wm.get("pass") for wm in wm_col if isinstance(wm, dict)] if wm_col is not None else []
+    coverage_stats["tickers_with_wealthmatica_verdict"] = sum(1 for v in wm_verdicts if v is not None)
+    coverage_stats["wealthmatica_pass_count"] = sum(1 for v in wm_verdicts if v is True)
 
     return {
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -2875,6 +2934,7 @@ def _validate_output_dataframe(df: pd.DataFrame) -> dict:
         "Ticker", "Price", "OverallScore", "Error", "Provider_Finnhub_OK",
         "DCF_Intrinsic_Value", "DCF_Value_Low", "DCF_Value_High",
         "DCF_WACC_Pct", "DCF_Terminal_Growth_Pct", "DCF_Terminal_Value_Pct",
+        "wealthmatica",
     }
     missing_columns = sorted(required_columns - set(df.columns))
     if missing_columns:
@@ -2925,6 +2985,16 @@ def _validate_output_dataframe(df: pd.DataFrame) -> dict:
     if invalid_terminal_count:
         raise ValueError(f"FCFF DCF output contains {invalid_terminal_count} invalid terminal-value shares")
 
+    # A verdict needs enough statement lines (wealthmatica.MIN_APPLICABLE). A
+    # statements outage leaves every row without one, which would fail the
+    # whole universe on the 4th screen and wipe out "passes 4 of 4".
+    wealthmatica_rows = int(sum(
+        1 for err, wm in zip(error_col, df["wealthmatica"])
+        if pd.isna(err) and isinstance(wm, dict) and wm.get("pass") is not None
+    ))
+    if wealthmatica_rows < MIN_WEALTHMATICA_ROWS:
+        raise ValueError(f"Only {wealthmatica_rows} rows carry a Wealthmatica verdict; minimum is {MIN_WEALTHMATICA_ROWS}")
+
     return {
         "total_rows": total_rows,
         "valid_rows": valid_rows,
@@ -2932,6 +3002,7 @@ def _validate_output_dataframe(df: pd.DataFrame) -> dict:
         "finnhub_rows": finnhub_rows,
         "finnhub_fraction": finnhub_fraction,
         "dcf_rows": dcf_count,
+        "wealthmatica_rows": wealthmatica_rows,
     }
 
 
@@ -2958,7 +3029,7 @@ def write_json(df: pd.DataFrame) -> None:
     log.info(
         f"Output validation passed: {validation['valid_rows']}/{validation['total_rows']} valid scored rows "
         f"({validation['valid_fraction']:.1%}); Finnhub {validation['finnhub_fraction']:.1%}; "
-        f"FCFF DCF {validation['dcf_rows']} rows"
+        f"FCFF DCF {validation['dcf_rows']} rows; Wealthmatica verdicts {validation['wealthmatica_rows']} rows"
     )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
