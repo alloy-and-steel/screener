@@ -24,7 +24,7 @@ export default defineConfig({
       manifest: {
         name: 'Screener3000',
         short_name: 'Screener',
-        description: 'Three independent stock screens — Azqato, Lynch, Graham — over the S&P 500, Dow, Nasdaq-100 and more.',
+        description: 'Four independent stock screens — Azqato, Lynch, Graham, Wealthmatica — over the S&P 500, Dow, Nasdaq-100 and more.',
         theme_color: '#0b0d10',
         background_color: '#0b0d10',
         display: 'standalone',

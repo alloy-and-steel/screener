@@ -146,3 +146,10 @@ annual-basis version needs no new API calls.
   bump and a backfill replay (CLAUDE.md gotcha).
 - **Informational cost:** as an informational scorecard panel, like Overall, it is cheap
   and adds the trajectory signals above.
+
+## Outcome
+
+Built 2026-10-05 as a 4th **gating** system (user's call over the panel): 7 of 9 on annual
+statements, no growth gate, N/A checks skipped. Plan: `docs/plans/wealthmatica-fourth-system.md`.
+On the annual basis the picks split the same way as above: ZETA, PATH and APP pass; VOYG, KEEL
+and KO fail. Of the 20 stocks passing all three systems on 2026-10-02, 7 also pass the 4th.

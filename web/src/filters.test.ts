@@ -10,7 +10,9 @@ function row(t: string, extra: Partial<Row> = {}): Row {
 const az = (score: number | null, tier: 'sp' | 's' | 'a' | 'b' | 'c' | 'f' | null) =>
   ({ score, tier, passes: 0, total: 6, parts: {}, pctiles: {} }) as unknown as Row['azqato']
 
-// Passes all three: tier A + Lynch Buy + Graham Buy.
+// Passes all four: tier A + Lynch Buy + Graham Buy + Wealthmatica pass.
+const WM_PASS = { checks: {}, passed: 7, applicable: 9, pass: true } as unknown as Row['wealthmatica']
+const ALL4 = { azqato: az(80, 'a'), Lynch_Lynch_Status: 'Buy', Graham_Graham_Status: 'Buy', wealthmatica: WM_PASS }
 const ALL3 = { azqato: az(80, 'a'), Lynch_Lynch_Status: 'Buy', Graham_Graham_Status: 'Buy' }
 
 describe('sortRows', () => {
@@ -29,10 +31,11 @@ describe('sortRows', () => {
   it('defaults to screens passed, then Azqato score', () => {
     const rows = [
       row('ONE', { azqato: az(95, 's') }),
-      row('ALL_LO', { ...ALL3, azqato: az(81, 'a') }),
-      row('ALL_HI', { ...ALL3, azqato: az(99, 's') }),
+      row('THREE', { ...ALL3, azqato: az(99, 's') }),
+      row('ALL_LO', { ...ALL4, azqato: az(81, 'a') }),
+      row('ALL_HI', { ...ALL4, azqato: az(99, 's') }),
     ]
-    expect(sortRows(rows, 'best').map((r) => r.Ticker)).toEqual(['ALL_HI', 'ALL_LO', 'ONE'])
+    expect(sortRows(rows, 'best').map((r) => r.Ticker)).toEqual(['ALL_HI', 'ALL_LO', 'THREE', 'ONE'])
   })
 
   it('does not mutate its input', () => {
@@ -44,14 +47,14 @@ describe('sortRows', () => {
 
 describe('filterRows', () => {
   const rows = [
-    row('AAPL', { ...ALL3, Indexes: 'S&P500, Dow30, Nasdaq100', Sector: 'Technology' }),
+    row('AAPL', { ...ALL4, Indexes: 'S&P500, Dow30, Nasdaq100', Sector: 'Technology' }),
     row('KO', { Indexes: 'S&P500, Dow30, Dividend100', Sector: 'Consumer Defensive' }),
     row('BAD', { Error: 'No price' }),
   ]
 
   it('drops error rows and applies the pass floor', () => {
     expect(filterRows(rows, { minPass: 0, pool: null, query: '' }).map((r) => r.Ticker)).toEqual(['AAPL', 'KO'])
-    expect(filterRows(rows, { minPass: 3, pool: null, query: '' }).map((r) => r.Ticker)).toEqual(['AAPL'])
+    expect(filterRows(rows, { minPass: 4, pool: null, query: '' }).map((r) => r.Ticker)).toEqual(['AAPL'])
   })
 
   it('matches pools by exact membership token, not substring', () => {

@@ -1,8 +1,8 @@
 """
 Selection ledger -- the price a stock had when the screener picked it.
 
-A stock is PICKED AT LEVEL N on a run when it passes exactly N of the three
-independent screens (the same gates as web/src/score.ts), N = 1, 2 or 3. The
+A stock is PICKED AT LEVEL N on a run when it passes exactly N of the four
+independent screens (the same gates as web/src/score.ts), N = 1, 2, 3 or 4. The
 ledger keeps, per ticker and level, the run (generated_at) and price of the
 first run it sat at that level. A pick is written once and never overwritten:
 dropping to another level, out of the screen, or out of the universe changes
@@ -12,8 +12,10 @@ fetch records nothing.
 
 The ledger is carried run to run on the `data` branch next to results.json
 (screen.yml seeds it and publishes it) and is merged into each results row as
-`picks` for the frontend. backfill_selections.py rebuilt it from the published
-datasets that could still be recovered.
+`picks4` for the frontend. History starts at the Wealthmatica launch: past runs
+can't be re-scored on a 4th screen, so the 3-screen ledger that ran from
+2026-08-20 (version 2, `selections.json`, row field `picks`) is kept on the data
+branch untouched and no longer read.
 
 Pure: no I/O, no network. The small load/save helpers are the only file access.
 """
@@ -24,14 +26,19 @@ import copy
 import json
 from pathlib import Path
 
-# Mirrors web/src/score.ts (AZQATO_PASS_TIERS, LYNCH_BUY, GRAHAM_BUY).
+# Mirrors web/src/score.ts (AZQATO_PASS_TIERS, LYNCH_BUY, GRAHAM_BUY, and the
+# Wealthmatica verdict, whose thresholds live only in wealthmatica.py).
 AZQATO_PASS_TIERS = frozenset({"sp", "s", "a"})
 LYNCH_BUY = frozenset({"Strong Buy", "Buy"})
 GRAHAM_BUY = frozenset({"Deep Buy", "Buy"})
 
-# 1 was a single first/latest entry per stock at >= 2 screens. It can't be
-# split into per-level picks, so load_ledger refuses it.
-LEDGER_VERSION = 2
+# 1 was a single first/latest entry per stock at >= 2 screens; 2 was levels of
+# three screens. Neither maps onto levels of four, so load_ledger refuses both.
+LEDGER_VERSION = 3
+
+# The row field the ledger is merged into. Renamed with each shape change so an
+# app shell cached before it never reads picks it would misinterpret.
+ROW_FIELD = "picks4"
 
 
 def screens_passed(row: dict) -> int:
@@ -42,6 +49,7 @@ def screens_passed(row: dict) -> int:
         (az.get("tier") in AZQATO_PASS_TIERS)
         + (row.get("Lynch_Lynch_Status") in LYNCH_BUY)
         + (row.get("Graham_Graham_Status") in GRAHAM_BUY)
+        + ((row.get("wealthmatica") or {}).get("pass") is True)
     )
 
 
@@ -69,11 +77,11 @@ def update_ledger(ledger: dict, rows: list[dict], generated_at: str) -> dict:
 
 
 def annotate_rows(rows: list[dict], ledger: dict) -> None:
-    """Attach each row's picks as `picks` (None if never picked)."""
+    """Attach each row's picks as ROW_FIELD (None if never picked)."""
     tickers = ledger["tickers"]
     for r in rows:
         entry = tickers.get(r["Ticker"])
-        r["picks"] = copy.deepcopy(entry) if entry else None
+        r[ROW_FIELD] = copy.deepcopy(entry) if entry else None
 
 
 def load_ledger(path: Path) -> dict | None:

@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_PREFS, parsePrefs } from './prefs'
 
 describe('parsePrefs', () => {
-  it('opens on the all-three short list when nothing is saved', () => {
+  it('opens on the 3-of-4 list when nothing is saved', () => {
     expect(parsePrefs(null)).toEqual(DEFAULT_PREFS)
     expect(DEFAULT_PREFS).toEqual({ minPass: 3, pool: null, sort: 'best' })
   })
 
   it('restores a saved filter, pool and sort', () => {
+    expect(parsePrefs(JSON.stringify({ minPass: 4, pool: null, sort: 'best' })).minPass).toBe(4)
     expect(parsePrefs(JSON.stringify({ minPass: 1, pool: 'Dow30', sort: 'peg' }))).toEqual({ minPass: 1, pool: 'Dow30', sort: 'peg' })
   })
 

@@ -4,7 +4,7 @@ import { INDEX_LABEL, INDEX_NAMES, type IndexName, type Row } from './types'
 import { azPegDisplay, combinedVerdict } from './score'
 
 export interface Filter {
-  minPass: number // 3 = all three screens, 0 = everything
+  minPass: number // screens passed at least (4 = all four), 0 = everything
   pool: IndexName | null // null = the whole merged universe
   query: string // ticker or sector substring
 }

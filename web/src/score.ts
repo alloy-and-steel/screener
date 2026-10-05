@@ -1,14 +1,15 @@
-// Three INDEPENDENT scoring systems — Azqato, Lynch, Graham — each with its own
-// suggestion + drivers. No blended/combined number (decoupled on purpose).
-// `combinedVerdict` only counts how many of the three a name clears.
+// Four INDEPENDENT scoring systems — Azqato, Lynch, Graham, Wealthmatica — each
+// with its own suggestion + drivers. No blended/combined number (decoupled on
+// purpose). `combinedVerdict` only counts how many of the four a name clears.
 
-import type { Azqato, AzqatoTier, Row } from './types'
-import { num, pct, ptsTone, ratio, signalTone, type Tone } from './format'
+import type { Azqato, AzqatoTier, Row, WealthmaticaCheckKey } from './types'
+import { WEALTHMATICA_CHECKS } from './types'
+import { DASH, boolTone, compactUsd, num, pct, ptsTone, ratio, signalTone, signedPct, type Tone } from './format'
 
 const LYNCH_BUY = new Set(['Strong Buy', 'Buy'])
 const GRAHAM_BUY = new Set(['Deep Buy', 'Buy'])
 
-// Azqato tiers are ranks (see types.ts). "Pass" for the three-system gate =
+// Azqato tiers are ranks (see types.ts). "Pass" for the four-system gate =
 // tier A or better — the top ~20% of the scored universe.
 export const TIER_LABEL: Record<AzqatoTier, string> = { sp: 'S+', s: 'S', a: 'A', b: 'B', c: 'C', f: 'F' }
 export const TIER_TONE: Record<AzqatoTier, Tone> = { sp: 'green', s: 'green', a: 'green', b: 'yellow', c: 'yellow', f: 'red' }
@@ -74,14 +75,16 @@ export interface Driver {
   tone?: Tone // optional pass/fail dot
 }
 
+export type SystemName = 'Azqato' | 'Lynch' | 'Graham' | 'Wealthmatica'
+
 export interface Verdict {
-  system: 'Azqato' | 'Lynch' | 'Graham'
+  system: SystemName
   question: string // what this system answers, plain language
   label: string // the suggestion, e.g. "Buy" / "S+" / "Avoid"
   tagline: string // one-line plain-english read
   tone: Tone
   pillColors?: TierColors // azqato tier palette; Lynch/Graham use the tone
-  pass: boolean // counts toward "passes all 3"
+  pass: boolean // counts toward "passes all 4"
   drivers: Driver[]
 }
 
@@ -157,6 +160,45 @@ export function grahamVerdict(row: Row): Verdict {
   }
 }
 
+const pts = (v: number | null): string => (v === null ? DASH : `${v > 0 ? '+' : ''}${v.toFixed(1)} pts`)
+
+const WEALTHMATICA_DRIVER: Record<WealthmaticaCheckKey, { label: string; fmt: (v: number | null) => string }> = {
+  revGrowth: { label: 'Revenue growth', fmt: (v) => signedPct(v, 1) },
+  revAccel: { label: 'Growth vs prior year', fmt: pts },
+  fcf: { label: 'FCF margin', fmt: (v) => pct(v) },
+  fcfSbc: { label: 'FCF − stock comp', fmt: (v) => pct(v) },
+  shareChange: { label: 'Share count', fmt: (v) => signedPct(v, 1) },
+  grossMargin: { label: 'Gross margin', fmt: pts },
+  opMargin: { label: 'Operating margin', fmt: pts },
+  eps: { label: 'EPS', fmt: (v) => num(v) },
+  cashDebt: { label: 'Cash − debt', fmt: (v) => (v === null ? DASH : `${v < 0 ? '−' : ''}$${compactUsd(Math.abs(v))}`) },
+}
+
+// Wealthmatica's checklist: the pass/fail (and its thresholds) is computed in
+// wealthmatica.py; this only presents it. An N/A check (inputs absent) shows a
+// dash and no tone — it is not a fail.
+export function wealthmaticaVerdict(row: Row): Verdict {
+  const wm = row.wealthmatica
+  const base = { system: 'Wealthmatica', question: 'Growth-quality checklist' } as const
+  if (!wm || wm.pass === null || wm.pass === undefined) {
+    return { ...base, label: NA_LABEL, tagline: 'Too few statement lines to judge', tone: 'slate', pass: false, drivers: [] }
+  }
+  const pass = wm.pass === true
+  return {
+    ...base,
+    label: pass ? 'Pass' : 'Fail',
+    tagline: pass ? 'Growing, cash-generating, not diluting' : 'Fails the growth-quality checklist',
+    tone: pass ? 'green' : 'red',
+    pass,
+    // The passed/applicable count rides on the verdict line (verdictLines).
+    drivers: WEALTHMATICA_CHECKS.map((k) => {
+      const c = wm.checks[k]
+      const d = WEALTHMATICA_DRIVER[k]
+      return { label: d.label, value: d.fmt(c?.value ?? null), tone: boolTone(c?.pass) }
+    }),
+  }
+}
+
 function pegTone(v: unknown): Tone {
   if (typeof v !== 'number') return 'slate'
   return v < 1 ? 'green' : v <= 2 ? 'yellow' : 'red'
@@ -190,7 +232,13 @@ function gradeLine(name: string, field: string, status: string | null | undefine
 // The verdict(s) a system produces. Azqato is a single rank tier; Lynch and
 // Graham each have TWO facets (Lynch: two valuation methods; Graham: valuation
 // + defensive safety).
-export function verdictLines(system: 'Azqato' | 'Lynch' | 'Graham', row: Row): VerdictLine[] {
+export function verdictLines(system: SystemName, row: Row): VerdictLine[] {
+  if (system === 'Wealthmatica') {
+    const v = wealthmaticaVerdict(row)
+    const wm = row.wealthmatica
+    const count = v.label !== NA_LABEL && wm ? ` · ${wm.passed}/${wm.applicable}` : ''
+    return [{ name: 'Checklist', label: `${v.label}${count}`, tone: v.tone }]
+  }
   if (system === 'Azqato') {
     const az = row.azqato
     const scored = az != null && az.score != null && az.tier != null
@@ -222,7 +270,7 @@ export function verdictLines(system: 'Azqato' | 'Lynch' | 'Graham', row: Row): V
 }
 
 export function verdicts(row: Row): Verdict[] {
-  return [azqatoVerdict(row), lynchVerdict(row), grahamVerdict(row)]
+  return [azqatoVerdict(row), lynchVerdict(row), grahamVerdict(row), wealthmaticaVerdict(row)]
 }
 
 export interface Combined {
@@ -230,16 +278,16 @@ export interface Combined {
   tone: Tone
 }
 
-// How many of the three independent systems a name clears.
+// How many of the four independent systems a name clears.
 export function combinedVerdict(row: Row): Combined {
   const vs = verdicts(row)
   const passCount = vs.filter((v) => v.pass).length
-  const tone: Tone = passCount === 3 ? 'green' : passCount >= 1 ? 'yellow' : 'red'
+  const tone: Tone = passCount === vs.length ? 'green' : passCount >= 1 ? 'yellow' : 'red'
   return { passCount, tone }
 }
 
-// Default screener list: a name must clear ALL THREE independent systems.
+// "Passes all": a name clears ALL FOUR independent systems.
 export function passesAll(row: Row): boolean {
   if (row.Error) return false
-  return azqatoVerdict(row).pass && lynchVerdict(row).pass && grahamVerdict(row).pass
+  return verdicts(row).every((v) => v.pass)
 }

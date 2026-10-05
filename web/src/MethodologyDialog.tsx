@@ -45,10 +45,10 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
 
         <div className="px-6 py-5">
           <p className="mb-5 text-[13px] leading-relaxed text-slate-300">
-            Screener3000 runs <strong className="text-slate-100">three independent value/growth screens</strong> on one merged universe
+            Screener3000 runs <strong className="text-slate-100">four independent value/growth screens</strong> on one merged universe
             &mdash; the S&amp;P 500, Dow 30, Nasdaq-100, the top 100 holdings of VUG, VTV and VIG (Growth / Value / Dividend 100), and
-            every other US stock of $1B+ market cap in VTI (Total US) &mdash; then shows where they agree and where they don&rsquo;t. The default list shows only names that clear{' '}
-            <strong className="text-slate-100">all three</strong>. Each system answers a different question, and they often disagree &mdash;
+            every other US stock of $1B+ market cap in VTI (Total US) &mdash; then shows where they agree and where they don&rsquo;t. The default list shows names that clear{' '}
+            <strong className="text-slate-100">at least three of the four</strong>. Each system answers a different question, and they often disagree &mdash;
             that disagreement is the signal.
           </p>
 
@@ -84,9 +84,20 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
             10-year EPS criteria need a full decade of statements, which the free data source rarely supplies, so few names clear them.
           </Block>
 
+          <Block title="Wealthmatica — growth-quality checklist" dot>
+            The financial checklist the Wealthmatica newsletter runs in every stock report, made mechanical. Nine checks on the last two
+            to three annual statements, each about the <em>direction</em> of the business: revenue growth &ge; 15%; growth speeding up
+            (or &ge; 25%); free cash flow positive and rising; free cash flow still positive after stock-based compensation; share count up
+            no more than 2% a year; gross margin down no more than 1 point; operating margin up; EPS rising (or a loss narrowing); cash at
+            least equal to debt. A stock <strong className="text-slate-100">passes</strong> with 7 of the 9. A check the statements
+            can&rsquo;t answer &mdash; a bank reports no gross margin &mdash; is skipped rather than failed, and the bar scales to the checks
+            that apply (5 of 6, 6 of 7, 7 of 8); with fewer than 6 it is N/A. The newsletter publishes no cut-offs, so these thresholds
+            are this screener&rsquo;s own.
+          </Block>
+
           <Block title="Overall — informational 4-pillar composite">
-            A separate, absolute 0&ndash;100 score shown alongside the three systems above &mdash; it does{' '}
-            <strong className="text-slate-100">not</strong> count toward the <em>Pass</em> filter or the N/3 chip.{' '}
+            A separate, absolute 0&ndash;100 score shown alongside the four systems above &mdash; it does{' '}
+            <strong className="text-slate-100">not</strong> count toward the <em>Pass</em> filter or the N/4 chip.{' '}
             <strong className="text-slate-100">Value 35%</strong> (Lynch/Graham discount, FCF/earnings/shareholder yield, distance from the
             52-week and 5-year low, DCF discount), <strong className="text-slate-100">Quality 30%</strong> (Graham defensive score,
             debt/equity, current ratio, ROIC), <strong className="text-slate-100">Growth 20%</strong> (growth rate and its stability across
@@ -97,16 +108,16 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
           </Block>
 
           <Block title="Reading the screen">
-            Each card shows the three verdicts side by side (a green-tinted tile is a pass), the informational Overall score in the ring,
+            Each card shows the four verdicts (a green-tinted tile is a pass), the informational Overall score in the ring,
             and the headline numbers: PEG, forward PEG, forward EPS growth, the Graham and Lynch discounts to fair value, dividend yield and
             where the price sits in its 52-week range. Tap a card (or type a ticker and press Enter) for the full scorecard &mdash; every
-            verdict, its drivers, an RSI gauge, the per-pool Azqato ranks and the raw fundamentals behind them. Relax the <em>All 3</em>{' '}
-            filter to see names that clear 2, 1, or any; narrow to one pool with the pool picker (<em>All pools</em>). The dot at the top
+            verdict, its drivers, an RSI gauge, the per-pool Azqato ranks and the raw fundamentals behind them. Tighten the filter to{' '}
+            <em>All 4</em>, or relax it to see names that clear 2, 1, or any; narrow to one pool with the pool picker (<em>All pools</em>). The dot at the top
             shows how old the data is; the app checks for a new screen in the background and offers it when one lands, and keeps working
-            offline once installed. A stock is <em>picked</em> at each level the first time it clears exactly 1, 2 or all 3 screens: its
-            card shows the date and price of each pick at the levels you are filtering on, and the move since; the scorecard lists all
-            three. A later pick never replaces an earlier one. That history starts at 20 Aug 2026, the earliest screen run that could be
-            recovered.
+            offline once installed. A stock is <em>picked</em> at each level the first time it clears exactly 1, 2, 3 or all 4 screens:
+            its card shows the date and price of each pick at the levels you are filtering on, and the move since; the scorecard lists all
+            four. A later pick never replaces an earlier one. That history starts with the first four-screen run in October 2026; picks
+            from the earlier three-screen version are not carried over, because a level of three screens meant something different.
           </Block>
 
           <p className="mt-5 border-t border-white/[0.06] pt-4 text-[12px] leading-relaxed text-slate-500">

@@ -3,7 +3,7 @@ import type { Row, Azqato } from './types'
 import { INDEX_LABEL, INDEX_NAMES } from './types'
 import { DASH, Dot, RangeBar, RsiGauge, TONE, capB, compactUsd, num, pct, signTone, signedPct, usd } from './format'
 import { poolLabels } from './filters'
-import { LEVEL_LABEL, pickViews } from './selection'
+import { LEVELS, LEVEL_LABEL, pickViews } from './selection'
 import { TIER_LABEL, TIER_TONE, azNetCashMc, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
@@ -77,7 +77,7 @@ function Card({ v, row }: { v: Verdict; row: Row }) {
         <div className="text-xs text-slate-500">{v.question}</div>
       </div>
 
-      {/* Verdict(s) — Azqato is a single rank tier; Lynch & Graham each have two */}
+      {/* Verdict(s) — Azqato and Wealthmatica have one line; Lynch & Graham each have two */}
       <div className="space-y-2 lg:min-h-[52px]">
         {lines.map((line) => (
           <div key={line.name} className="flex items-baseline justify-between gap-3">
@@ -101,7 +101,7 @@ function Card({ v, row }: { v: Verdict; row: Row }) {
 }
 
 // Informational 4-pillar composite (ported v2.0 methodology) — NOT part of the
-// Azqato/Lynch/Graham pass gate above. Shown as separate context, not a 4th verdict.
+// four-system pass gate above. Shown as separate context, not a verdict.
 function OverallPanel({ row }: { row: Row }) {
   const scores = row.scores
   if (row.OverallScore == null && !scores) return null
@@ -141,8 +141,8 @@ function OverallPanel({ row }: { row: Row }) {
   )
 }
 
-// When the screen first picked this stock at each pass level (exactly 1, 2 or
-// 3 screens) and what it has done since. Every level is listed, so one it has
+// When the screen first picked this stock at each pass level (exactly 1, 2, 3
+// or 4 screens) and what it has done since. Every level is listed, so one it has
 // never reached reads as such; the first pick is never overwritten.
 function PicksPanel({ row }: { row: Row }) {
   const picks = pickViews(row, 0, new Date())
@@ -152,7 +152,7 @@ function PicksPanel({ row }: { row: Row }) {
     <div className="mt-3 rounded-2xl bg-surface-1 p-4 ring-1 ring-inset ring-white/[0.07]">
       <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">First picked</div>
       <dl className="space-y-1.5">
-        {([3, 2, 1] as const).map((level) => {
+        {LEVELS.map((level) => {
           const e = picks.find((p) => p.level === level)
           return (
             <div key={level} className="flex items-baseline justify-between gap-3 text-sm">
@@ -246,7 +246,7 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
             </a>
             {!row.Error && (
               <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 ring-1 ring-inset ${ct.bg} ${ct.ring}`}>
-                <span className={`tnum text-xs font-semibold ${ct.text}`}>{c.passCount}/3 screens</span>
+                <span className={`tnum text-xs font-semibold ${ct.text}`}>{c.passCount}/{verdicts(row).length} screens</span>
               </span>
             )}
             <button
@@ -285,7 +285,7 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
                   universe, and the Graham defensive checks still run.
                 </p>
               ) : null}
-              <div className="grid gap-3 lg:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {verdicts(row).map((v) => (
                   <Card key={v.system} v={v} row={row} />
                 ))}
