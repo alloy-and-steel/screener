@@ -116,7 +116,7 @@ The four screens (decoupled on purpose — disagreement is the signal):
   >= ceil(7/9 x applicable); fewer than 6 -> verdict `None`. The frontend reads
   the boolean only. Research + test run: `docs/research/wealthmatica.md`.
 
-The UI is a card grid (no table); by default it shows names that clear **3 of
+The UI is a card grid (no table); by default it shows names that clear **all
 4** (`DEFAULT_PREFS`); the filter offers all 4 / 3+ / 2+ / 1+ / any. Tapping a card opens its full
 scorecard (per-system verdicts + drivers, RSI gauge, 52-week-range bar) in a
 sheet addressed by the URL hash (`#AAPL`).

@@ -48,7 +48,7 @@ export default function MethodologyDialog({ onClose }: { onClose: () => void }) 
             Screener3000 runs <strong className="text-slate-100">four independent value/growth screens</strong> on one merged universe
             &mdash; the S&amp;P 500, Dow 30, Nasdaq-100, the top 100 holdings of VUG, VTV and VIG (Growth / Value / Dividend 100), and
             every other US stock of $1B+ market cap in VTI (Total US) &mdash; then shows where they agree and where they don&rsquo;t. The default list shows names that clear{' '}
-            <strong className="text-slate-100">at least three of the four</strong>. Each system answers a different question, and they often disagree &mdash;
+            <strong className="text-slate-100">all four</strong>. Each system answers a different question, and they often disagree &mdash;
             that disagreement is the signal.
           </p>
 

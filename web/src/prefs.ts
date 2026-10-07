@@ -5,7 +5,10 @@
 import { SORTS, type SortKey } from './filters'
 import { INDEX_NAMES, type IndexName } from './types'
 
-export const PREFS_KEY = 'screener:view:v1'
+// v2 (2026-10-07): the default floor moved from 3 to 4. Every past visit
+// saved its view on load, so a v1 `minPass: 3` can't be told apart from a
+// choice; a new key lets everyone land on the new default once.
+export const PREFS_KEY = 'screener:view:v2'
 
 export interface Prefs {
   minPass: number
@@ -13,7 +16,7 @@ export interface Prefs {
   sort: SortKey
 }
 
-export const DEFAULT_PREFS: Prefs = { minPass: 3, pool: null, sort: 'best' }
+export const DEFAULT_PREFS: Prefs = { minPass: 4, pool: null, sort: 'best' }
 
 // Anything unrecognised (an old key, a hand-edited value, a pool or sort that
 // has since been removed) falls back to the default for that field alone.

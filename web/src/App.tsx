@@ -61,7 +61,7 @@ function Summary({ rows, pool }: { rows: Row[]; pool: IndexName | null }) {
 
 export default function App() {
   const { load, reload, pending, applyPending, dismissPending, check, checking, lastChecked, checkFailed } = useDataset()
-  // First visit opens on the 3-of-4 list; after that, the last view.
+  // First visit opens on the pass-all-4 list; after that, the last view.
   const [initial] = useState(loadPrefs)
   const [minPass, setMinPass] = useState(initial.minPass)
   const [pool, setPool] = useState<IndexName | null>(initial.pool)

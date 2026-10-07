@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_PREFS, parsePrefs } from './prefs'
 
 describe('parsePrefs', () => {
-  it('opens on the 3-of-4 list when nothing is saved', () => {
+  it('opens on the pass-all-4 list when nothing is saved', () => {
     expect(parsePrefs(null)).toEqual(DEFAULT_PREFS)
-    expect(DEFAULT_PREFS).toEqual({ minPass: 3, pool: null, sort: 'best' })
+    expect(DEFAULT_PREFS).toEqual({ minPass: 4, pool: null, sort: 'best' })
   })
 
   it('restores a saved filter, pool and sort', () => {
@@ -13,7 +13,7 @@ describe('parsePrefs', () => {
   })
 
   it('falls back field by field on anything it does not recognise', () => {
-    expect(parsePrefs(JSON.stringify({ minPass: 7, pool: 'FTSE', sort: 'peg' }))).toEqual({ minPass: 3, pool: null, sort: 'peg' })
+    expect(parsePrefs(JSON.stringify({ minPass: 7, pool: 'FTSE', sort: 'peg' }))).toEqual({ minPass: 4, pool: null, sort: 'peg' })
     expect(parsePrefs(JSON.stringify({ sort: 'toString' }))).toEqual(DEFAULT_PREFS)
     expect(parsePrefs('{not json')).toEqual(DEFAULT_PREFS)
     expect(parsePrefs('[1,2]')).toEqual(DEFAULT_PREFS)
