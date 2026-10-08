@@ -153,3 +153,40 @@ Built 2026-10-05 as a 4th **gating** system (user's call over the panel): 7 of 9
 statements, no growth gate, N/A checks skipped. Plan: `docs/plans/wealthmatica-fourth-system.md`.
 On the annual basis the picks split the same way as above: ZETA, PATH and APP pass; VOYG, KEEL
 and KO fail. Of the 20 stocks passing all three systems on 2026-10-02, 7 also pass the 4th.
+
+## Rule vs. the posts (2026-10-08)
+
+The built rule (`wealthmatica.py`) was re-checked against every post. There are still 14,
+the newest from 2026-10-02, so there are no new picks. `zeta-global-2030-financial-model`
+is still paywalled. Numbers that appear only in his chart images could not be read. Every
+quote below is verbatim.
+
+| Check | Verdict | Evidence |
+|---|---|---|
+| C1 rev growth ≥ 15% | direction yes, number ours | PATH, his slowest pick: "+6% YoY" → +14% → "16% YoY growth in Q3 FY26" (`uipath-inc-stock-report-and-analysis`) |
+| C2 re-acceleration | his main signal; the ≥ 25% bypass is ours | "fifth consecutive quarter of acceleration" (`zeta-global-q2-2026-projections`) |
+| C3 FCF > 0 and growing | the growth half is contradicted | PATH: "Although FCF has plateaued over reason quarters, a reaccelerate is entirely possible." He stays bullish |
+| C4 FCF − SBC > 0 | he judges the trend, not the level | "SBC as a percentage of FCF is now at record lows of 6.23%" (`applovin-the-ad-tech-channel-cmos`); "SBC has dropped more than 20%" (ZETA) |
+| C5 shares ≤ +2%/yr | contradicted by his own top pick | ZETA: "Outstanding shares have shown a consistent upward trend over the past five years", yet rated "Strong Buy, Accumulation" (`zeta-global-stock-report-and-analysis`). VOYG is modelled from 59.3M to "68.9 million by 2030", about 3.8% a year |
+| C6 GM down ≤ 1 pt | stability yes, the number is ours | he excuses a dip that has a stated cause: VOYG "the decline in gross margin in Q1 was due to a line of business tied old contracts" |
+| C7 op margin up | direction yes, strictness no | "Companies that consistently improve operation margin are attractive" (PATH); for APP he expects "a normalization down to the low-mid 50%'s" and is still bullish |
+| C8 EPS rising / loss narrowing | supported, including the loss case | "losses decreasing by over 72% in the last year" (ZETA) |
+| C9 cash ≥ debt | liked, not required | ZETA's "$1 billion credit facility. It is a line of credit, not dilution" (`zeta-global-q2-2026-projections`); the APP post never mentions debt |
+
+Findings:
+
+- **No aggregate rule.** No post states a threshold, a count of boxes to tick, or a
+  deal-breaker. The 7-of-9 gate is ours. In practice his one must-have is high or
+  re-accelerating revenue growth plus a story. He tolerates dilution, net debt, margin
+  compression and losses alongside it.
+- **The basis differs.** Every heading is "(TTM)", and he judges on quarterly YoY figures.
+  Our annual basis hides PATH's re-acceleration and fails it on C1. Prior-TTM coverage
+  limits are listed under "Data limits" above.
+- **C5's 2% cap is stricter than he is.** It fails ZETA, the stock he holds most of.
+- **Omitted:** expense-growth moderation ("this is ideal", ZETA), net revenue retention
+  ("the ultimate health check"), organic vs. reported growth, and forward estimates. Of
+  these, only expense growth is computable from the statements we already fetch.
+
+The rule is a defensible distillation of his checklist headings. It is not his selection
+rule, because he has none. The checks his own posts contradict are C3's growth half,
+C5's 2% cap and C9 as a hard check.
