@@ -142,17 +142,15 @@ export type PickLevel = 1 | 2 | 3 | 4
 // Keyed by the level as a string: that is how the JSON carries it.
 export type Picks = Partial<Record<`${PickLevel}`, EntryMark>>
 
-// The nine checks, in display order (wealthmatica.CHECKS).
+// The seven checks, in display order (wealthmatica.CHECKS).
 export const WEALTHMATICA_CHECKS = [
   'revGrowth',
   'revAccel',
   'fcf',
   'fcfSbc',
-  'shareChange',
   'grossMargin',
   'opMargin',
   'eps',
-  'cashDebt',
 ] as const
 export type WealthmaticaCheckKey = (typeof WEALTHMATICA_CHECKS)[number]
 

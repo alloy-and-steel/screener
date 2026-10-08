@@ -107,15 +107,17 @@ The four screens (decoupled on purpose — disagreement is the signal):
   tier) between the two, so never conflate them.
 - **Lynch** — growth at a reasonable price (PEG / fair-value bands).
 - **Graham** — rate-adjusted intrinsic value + 8 defensive balance-sheet checks.
-- **Wealthmatica** — `wealthmatica.py` (pure, absolute, per ticker): nine trend
+- **Wealthmatica** — `wealthmatica.py` (pure, absolute, per ticker): seven trend
   checks on the last 2-3 ANNUAL statements already fetched (revenue growth,
-  re-acceleration, FCF, FCF − SBC, share count, gross/operating margin, EPS,
-  cash vs debt), distilled from the wealthmatica.substack.com reports — he
-  publishes no thresholds, so ours are `[ASSUMED]` constants there. A check
-  whose inputs are absent is N/A, not a fail (banks: no gross profit /
-  operating income; WMT/VZ: no SBC row). Pass = >= 6 checks apply AND passed
-  >= ceil(7/9 x applicable); fewer than 6 -> verdict `None`. The frontend reads
-  the boolean only. Research + test run: `docs/research/wealthmatica.md`.
+  re-acceleration, FCF > 0, FCF − SBC, gross/operating margin, EPS),
+  distilled from the wealthmatica.substack.com reports — he publishes no
+  thresholds, so ours are `[ASSUMED]` constants there. Share count and cash vs
+  debt are deliberately NOT checks (his own picks contradict them; audit in
+  the research doc). A check whose inputs are absent is N/A, not a fail
+  (banks: no gross profit / operating income; WMT/VZ: no SBC row). Pass = >= 5
+  checks apply AND passed >= ceil(3/4 x applicable), i.e. 6 of 7; fewer than
+  5 -> verdict `None`. The frontend reads the boolean only. Research + test
+  run: `docs/research/wealthmatica.md`.
 
 The UI is a card grid (no table); by default it shows names that clear **all
 4** (`DEFAULT_PREFS`); the filter offers all 4 / 3+ / 2+ / 1+ / any. Tapping a card opens its full

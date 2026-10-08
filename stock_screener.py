@@ -1174,9 +1174,8 @@ def _fcf_series(cf) -> list | None:
     return [o + c if o is not None and c is not None else None for o, c in zip(ocf, capex)]
 
 
-def _wealthmatica_from_statements(inc, cf, bs, cash, debt) -> dict:
-    """The Wealthmatica checklist on the annual statements get_yf_price_and_history already fetched.
-    cash/debt are the Yahoo info totals the Azqato cash-vs-debt metric reads."""
+def _wealthmatica_from_statements(inc, cf) -> dict:
+    """The Wealthmatica checklist on the annual statements get_yf_price_and_history already fetched."""
     return wealthmatica_profile(
         revenue=_yf_series(inc, REVENUE_LABELS),
         gross_profit=_yf_series(inc, GROSS_PROFIT_LABELS),
@@ -1184,9 +1183,6 @@ def _wealthmatica_from_statements(inc, cf, bs, cash, debt) -> dict:
         eps=_yf_series(inc, EPS_DILUTED_LABELS),
         fcf=_fcf_series(cf),
         sbc=_yf_series(cf, SBC_LABELS),
-        shares=_yf_series(bs, SHARES_LABELS),
-        cash=cash,
-        debt=debt,
     )
 
 
@@ -2493,10 +2489,7 @@ def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None =
     }
 
     # ── Wealthmatica checklist (4th gating system) — absolute, per ticker ──
-    row["wealthmatica"] = _wealthmatica_from_statements(
-        fund.get("income_stmt_df"), fund.get("cashflow_df"), fund.get("balance_sheet_df"),
-        fund.get("az_cash"), fund.get("az_debt"),
-    )
+    row["wealthmatica"] = _wealthmatica_from_statements(fund.get("income_stmt_df"), fund.get("cashflow_df"))
 
     # ── Growth stability — fraction of years with positive EPS ───────
     # None when fewer than 3 years available (genuinely unknown, not zero).

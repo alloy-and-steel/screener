@@ -11,7 +11,7 @@ const az = (score: number | null, tier: 'sp' | 's' | 'a' | 'b' | 'c' | 'f' | nul
   ({ score, tier, passes: 0, total: 6, parts: {}, pctiles: {} }) as unknown as Row['azqato']
 
 // Passes all four: tier A + Lynch Buy + Graham Buy + Wealthmatica pass.
-const WM_PASS = { checks: {}, passed: 7, applicable: 9, pass: true } as unknown as Row['wealthmatica']
+const WM_PASS = { checks: {}, passed: 6, applicable: 7, pass: true } as unknown as Row['wealthmatica']
 const ALL4 = { azqato: az(80, 'a'), Lynch_Lynch_Status: 'Buy', Graham_Graham_Status: 'Buy', wealthmatica: WM_PASS }
 const ALL3 = { azqato: az(80, 'a'), Lynch_Lynch_Status: 'Buy', Graham_Graham_Status: 'Buy' }
 

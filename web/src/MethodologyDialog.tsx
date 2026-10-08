@@ -60,14 +60,14 @@ function BodyEn() {
       </Block>
 
       <Block title="Wealthmatica — growth-quality checklist" dot>
-        The financial checklist the Wealthmatica newsletter runs in every stock report, made mechanical. Nine checks on the last two
+        The financial checklist the Wealthmatica newsletter runs in every stock report, made mechanical. Seven checks on the last two
         to three annual statements, each about the <em>direction</em> of the business: revenue growth &ge; 15%; growth speeding up
-        (or &ge; 25%); free cash flow positive and rising; free cash flow still positive after stock-based compensation; share count up
-        no more than 2% a year; gross margin down no more than 1 point; operating margin up; EPS rising (or a loss narrowing); cash at
-        least equal to debt. A stock <strong className="text-slate-100">passes</strong> with 7 of the 9. A check the statements
-        can&rsquo;t answer &mdash; a bank reports no gross margin &mdash; is skipped rather than failed, and the bar scales to the checks
-        that apply (5 of 6, 6 of 7, 7 of 8); with fewer than 6 it is N/A. The newsletter publishes no cut-offs, so these thresholds
-        are this screener&rsquo;s own.
+        (or &ge; 25%); free cash flow positive; free cash flow still positive after stock-based compensation; gross margin down no
+        more than 1 point; operating margin up; EPS rising (or a loss narrowing). A stock{' '}
+        <strong className="text-slate-100">passes</strong> with 6 of the 7. A check the statements can&rsquo;t answer &mdash; a bank
+        reports no gross or operating margin &mdash; is skipped rather than failed, and the bar scales to the checks that apply (5 of
+        6, 4 of 5); with fewer than 5 it is N/A. Share count and debt are not checked: the newsletter rated a stock with a rising share
+        count a strong buy, and welcomed a credit line. It publishes no cut-offs, so these thresholds are this screener&rsquo;s own.
       </Block>
 
       <Block title="Overall — informational 4-pillar composite">
@@ -145,12 +145,12 @@ function BodyZh() {
       </Block>
 
       <Block title="Wealthmatica — 成長品質檢查表" dot>
-        Wealthmatica 電子報在每篇個股報告中都會檢視的財務檢查表，在此改為機械化判定。根據最近兩到三年的年度財報做九項檢查，
-        每項都著眼於企業的<em>趨勢方向</em>：營收成長 &ge; 15%；成長加速（或 &ge; 25%）；自由現金流為正且上升；扣除股票酬勞後自由現金流仍為正；
-        股數每年增加不超過 2%；毛利率下降不超過 1 個百分點；營業利益率上升；EPS 上升（或虧損收斂）；現金至少等於債務。九項中通過 7 項即
-        <strong className="text-slate-100">通過</strong>。財報無法回答的檢查 &mdash; 例如銀行沒有毛利率 &mdash;
-        會略過而非判為未通過，門檻依適用的檢查數等比調整（6 項中 5 項、7 項中 6 項、8 項中 7 項）；適用少於 6 項則為
-        N/A。電子報並未公布門檻，以上數值為本篩選器自訂。
+        Wealthmatica 電子報在每篇個股報告中都會檢視的財務檢查表，在此改為機械化判定。根據最近兩到三年的年度財報做七項檢查，
+        每項都著眼於企業的<em>趨勢方向</em>：營收成長 &ge; 15%；成長加速（或 &ge; 25%）；自由現金流為正；扣除股票酬勞後自由現金流仍為正；
+        毛利率下降不超過 1 個百分點；營業利益率上升；EPS 上升（或虧損收斂）。七項中通過 6 項即
+        <strong className="text-slate-100">通過</strong>。財報無法回答的檢查 &mdash; 例如銀行沒有毛利率與營業利益率 &mdash;
+        會略過而非判為未通過，門檻依適用的檢查數等比調整（6 項中 5 項、5 項中 4 項）；適用少於 5 項則為 N/A。股數與債務不列入檢查：
+        電子報曾在股數持續增加時仍給予強力買進評等，也歡迎公司取得信用額度。電子報並未公布門檻，以上數值為本篩選器自訂。
       </Block>
 
       <Block title="綜合 — 僅供參考的四支柱綜合分數">

@@ -1,5 +1,7 @@
 # Wealthmatica as the 4th gating system
 
+> Superseded 2026-10-08: the rule is now seven checks (no share count, no cash vs debt; FCF only has to be positive), 6 of 7 scaled at 3/4, with at least 5 applicable. See `wealthmatica.py` and the research doc's "Rule changed" section. The plan below is kept as built on 2026-10-05.
+
 ## Context
 Systematize Wealthmatica's recurring financial checklist (research: [docs/research/wealthmatica.md](../research/wealthmatica.md)) into a 4th pass/fail system alongside Azqato / Lynch / Graham. User decisions (2026-10-05): pass = 7 of 9 checks, no growth gate; judge only on the checks that apply; fresh 4-level pick ledger, old 3-level one archived (not shown); default card view = passes 3 of 4.
 

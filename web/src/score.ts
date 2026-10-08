@@ -4,7 +4,7 @@
 
 import type { Azqato, AzqatoTier, Row, WealthmaticaCheckKey } from './types'
 import { WEALTHMATICA_CHECKS } from './types'
-import { DASH, boolTone, compactUsd, num, pct, ptsTone, ratio, signalTone, signedPct, type Tone } from './format'
+import { DASH, boolTone, num, pct, ptsTone, ratio, signalTone, signedPct, type Tone } from './format'
 import { statusLabel, type Messages } from './messages'
 
 const LYNCH_BUY = new Set(['Strong Buy', 'Buy'])
@@ -166,7 +166,6 @@ function wealthmaticaFormat(k: WealthmaticaCheckKey, v: number | null, m: Messag
   if (v === null) return DASH
   switch (k) {
     case 'revGrowth':
-    case 'shareChange':
       return signedPct(v, 1)
     case 'revAccel':
     case 'grossMargin':
@@ -177,8 +176,6 @@ function wealthmaticaFormat(k: WealthmaticaCheckKey, v: number | null, m: Messag
       return pct(v)
     case 'eps':
       return num(v)
-    case 'cashDebt':
-      return `${v < 0 ? '−' : ''}$${compactUsd(Math.abs(v), m.lang)}`
   }
 }
 

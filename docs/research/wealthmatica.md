@@ -190,3 +190,17 @@ Findings:
 The rule is a defensible distillation of his checklist headings. It is not his selection
 rule, because he has none. The checks his own posts contradict are C3's growth half,
 C5's 2% cap and C9 as a hard check.
+
+### Rule changed (2026-10-08)
+
+Owner's call, from the findings above. Share count and cash vs. debt are no longer checks,
+and FCF only has to be positive. That leaves seven checks. The pass bar is 6 of 7, scaled
+at 3/4 to the checks that apply, and a verdict needs at least 5 of them. Replayed on the
+2026-10-07 dataset, from the check values it already carried: 553 names pass Wealthmatica
+(was 437), 8 pass all four (was 7), and 129 have no verdict (was 69). The new N/A names
+are mostly banks that also lack a stock-comp row, such as JPM. On live statements, ZETA,
+PATH and APP still pass, and VOYG, KEEL and KO still fail.
+
+Picks in the selection ledger (`picks.json`) from before 2026-10-08 were made under the
+old 7-of-9 rule. Its shape is unchanged, so it was not versioned. Names that pass for the
+first time under the new rule are stamped from that run onward.

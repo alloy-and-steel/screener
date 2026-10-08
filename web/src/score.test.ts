@@ -10,21 +10,19 @@ const az = (tier: 'a' | 'c') => ({ score: 50, tier, passes: 0, total: 6, parts: 
 
 const check = (value: number | null, pass: boolean | null) => ({ value, pass })
 
-// A bank-like row: three checks N/A, 5 of the 6 that apply pass (5 needed).
+// A bank-like row: both margins N/A, 4 of the 5 that apply pass (4 needed).
 const WM: Wealthmatica = {
   checks: {
     revGrowth: check(18.2, true),
-    revAccel: check(3.1, true),
+    revAccel: check(-3.1, false),
     fcf: check(12.0, true),
-    fcfSbc: check(null, null),
-    shareChange: check(-1.5, true),
+    fcfSbc: check(8.0, true),
     grossMargin: check(null, null),
     opMargin: check(null, null),
     eps: check(4.2, true),
-    cashDebt: check(-2.0e9, false),
   },
-  passed: 5,
-  applicable: 6,
+  passed: 4,
+  applicable: 5,
   pass: true,
 }
 
@@ -35,25 +33,27 @@ describe('wealthmaticaVerdict', () => {
     const v = wealthmaticaVerdict({ Ticker: 'X', wealthmatica: WM } as Row, EN)
     expect(v.pass).toBe(true)
     expect(v.label).toBe('Pass')
-    expect(verdictLines('Wealthmatica', { Ticker: 'X', wealthmatica: WM } as Row, EN)[0].label).toBe('Pass · 5/6')
+    expect(verdictLines('Wealthmatica', { Ticker: 'X', wealthmatica: WM } as Row, EN)[0].label).toBe('Pass · 4/5')
     expect(v.drivers.map((d) => d.label)).toEqual([
       'Revenue growth',
       'Growth vs prior year',
       'FCF margin',
       'FCF − stock comp',
-      'Share count',
       'Gross margin',
       'Operating margin',
       'EPS',
-      'Cash − debt',
     ])
   })
 
   it('marks an N/A check with a dash and no tone, never as a fail', () => {
     const v = wealthmaticaVerdict({ Ticker: 'X', wealthmatica: WM } as Row, EN)
-    const sbc = v.drivers.find((d) => d.label === 'FCF − stock comp')
-    expect(sbc).toEqual({ label: 'FCF − stock comp', value: '—', tone: 'slate' })
-    expect(v.drivers.find((d) => d.label === 'Cash − debt')).toEqual({ label: 'Cash − debt', value: '−$2.00B', tone: 'red' })
+    const gm = v.drivers.find((d) => d.label === 'Gross margin')
+    expect(gm).toEqual({ label: 'Gross margin', value: '—', tone: 'slate' })
+    expect(v.drivers.find((d) => d.label === 'Growth vs prior year')).toEqual({
+      label: 'Growth vs prior year',
+      value: '-3.1 pts',
+      tone: 'red',
+    })
   })
 
   it('fails on a failing verdict, and is N/A with no verdict or no block', () => {
@@ -68,9 +68,9 @@ describe('wealthmaticaVerdict', () => {
 describe('in Chinese', () => {
   it('translates the grade and the drivers, not the verdict', () => {
     const r = { Ticker: 'X', wealthmatica: WM, Lynch_Lynch_Status: 'Strong Buy' } as Row
-    expect(verdictLines('Wealthmatica', r, ZH)[0].label).toBe('通過 · 5/6')
+    expect(verdictLines('Wealthmatica', r, ZH)[0].label).toBe('通過 · 4/5')
     expect(verdictLines('Lynch', r, ZH)[0].label).toBe('強力買進')
-    expect(wealthmaticaVerdict(r, ZH).drivers.at(-1)).toEqual({ label: '現金 − 債務', value: '−$20億', tone: 'red' })
+    expect(wealthmaticaVerdict(r, ZH).drivers[0]).toEqual({ label: '營收成長', value: '+18.2%', tone: 'green' })
     expect(combinedVerdict(r).passCount).toBe(2)
   })
 
