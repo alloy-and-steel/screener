@@ -168,7 +168,7 @@ function FairPricePanel({ row }: { row: Row }) {
       </div>
       <dl className="space-y-1.5">
         <div className="flex items-baseline justify-between gap-3 text-sm">
-          <dt className="text-slate-400">{m.today}</dt>
+          <dt className="text-slate-400">{m.todayPrice}</dt>
           <dd className="tnum text-slate-100">{usd(row.Price)}</dd>
         </div>
         {fairPrices(row).map((f) => (
@@ -179,11 +179,12 @@ function FairPricePanel({ row }: { row: Row }) {
             <dd className="tnum text-right text-slate-100">
               {usd(f.value)}
               {f.vsPrice !== null ? <span className={`ml-2 font-medium ${signTone(f.vsPrice)}`}>{signedPct(f.vsPrice, 0)}</span> : null}
-              {f.range ? <div className="text-xs text-slate-500">{m.dcfRange(usd(f.range[0]), usd(f.range[1]))}</div> : null}
+              {f.range ? <div className="text-xs text-slate-500">{m.dcfRange(usd(f.range.low), usd(f.range.high))}</div> : null}
             </dd>
           </div>
         ))}
       </dl>
+      <p className="mt-2 text-xs text-slate-500">{m.fairVsToday}</p>
     </div>
   )
 }

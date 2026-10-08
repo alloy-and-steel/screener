@@ -12,12 +12,12 @@ export interface FairPrice {
   method: FairMethod
   value: number | null
   vsPrice: number | null // percent from today's price to the fair price
-  range: [number, number] | null
+  range: { low: number; high: number } | null
 }
 
 const val = (v: number | null | undefined): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
-function entry(method: FairMethod, v: number | null | undefined, price: number | null | undefined, range: FairPrice['range'] = null): FairPrice {
+function estimate(method: FairMethod, v: number | null | undefined, price: number | null | undefined, range: FairPrice['range'] = null): FairPrice {
   const value = val(v)
   return { method, value, vsPrice: value === null ? null : changeSince(price, value), range: value === null ? null : range }
 }
@@ -26,8 +26,8 @@ export function fairPrices(row: Row): FairPrice[] {
   const lo = val(row.DCF_Value_Low)
   const hi = val(row.DCF_Value_High)
   return [
-    entry('Lynch', row.Lynch_FV_GplusD, row.Price),
-    entry('Graham', row.Graham_Graham_FV, row.Price),
-    entry('DCF', row.DCF_Intrinsic_Value, row.Price, lo !== null && hi !== null ? [lo, hi] : null),
+    estimate('Lynch', row.Lynch_FV_GplusD, row.Price),
+    estimate('Graham', row.Graham_Graham_FV, row.Price),
+    estimate('DCF', row.DCF_Intrinsic_Value, row.Price, lo !== null && hi !== null ? { low: lo, high: hi } : null),
   ]
 }

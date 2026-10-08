@@ -263,7 +263,8 @@ and `wealthmatica` (`{checks: {key: {value, pass}}, passed, applicable, pass}`).
   `localStorage`; the query is not saved), `selection.ts` (picks per level /
   move since; the card shows the levels at or above the pass floor, the
   scorecard all four), `StockCard.tsx`, `FilterBar.tsx`, `Header.tsx` (freshness chip, language toggle), `Toasts.tsx` (new-version /
-  new-data prompts), `Scorecard.tsx` (incl. `OverallPanel`), `format.tsx`,
+  new-data prompts), `Scorecard.tsx` (incl. `OverallPanel`), `fairPrice.ts` (Lynch/Graham/DCF
+  fair prices beside today's — never blended, the spread is the signal), `format.tsx`,
   `MethodologyDialog.tsx`, `App.tsx`, `i18n.tsx` (language: saved choice, else
   the browser's), `messages.tsx` (every UI string, `en` + `zh-TW`),
   `dataText.ts` (translates the English the backend writes into rows). Pure

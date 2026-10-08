@@ -21,7 +21,7 @@ describe('fairPrices', () => {
       ['Graham', 120.27],
       ['DCF', 87.26],
     ])
-    expect(fp[2].range).toEqual([70.02, 104.98])
+    expect(fp[2].range).toEqual({ low: 70.02, high: 104.98 })
     expect(fp[0].range).toBeNull()
   })
 
