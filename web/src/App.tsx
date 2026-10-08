@@ -9,7 +9,8 @@ import { filterRows, sortRows, type SortKey } from './filters'
 import { combinedVerdict, passesAll } from './score'
 import { useDataset } from './useDataset'
 import { loadPrefs, savePrefs } from './prefs'
-import { INDEX_LABEL, type IndexName, type Row } from './types'
+import { useI18n } from './i18n'
+import type { IndexName, Row } from './types'
 
 // Cards render in pages as the list is scrolled — ~2,000 cards at once is a
 // noticeable stall on a phone, and nobody reads past the first screenful.
@@ -50,17 +51,18 @@ function useHashTicker(): [string | null, (t: string | null) => void] {
 // One line of context above the list. The per-screen pass counts that used
 // to sit here as tiles pushed the first card below the fold on a phone.
 function Summary({ rows, pool }: { rows: Row[]; pool: IndexName | null }) {
+  const { m } = useI18n()
   const all = useMemo(() => rows.filter(passesAll).length, [rows])
   return (
     <h1 className="text-balance pb-3 pt-4 text-[17px] font-semibold leading-snug tracking-tight text-slate-100 sm:pt-6 sm:text-2xl">
-      <span className="tnum text-emerald-300">{all}</span> of <span className="tnum">{rows.length}</span> stocks
-      {pool ? ` in ${INDEX_LABEL[pool]}` : ''} pass all four screens
+      {m.summary(<span className="tnum text-emerald-300">{all}</span>, <span className="tnum">{rows.length}</span>, pool ? m.poolLabel[pool] : null)}
     </h1>
   )
 }
 
 export default function App() {
   const { load, reload, pending, applyPending, dismissPending, check, checking, lastChecked, checkFailed } = useDataset()
+  const { m } = useI18n()
   // First visit opens on the pass-all-4 list; after that, the last view.
   const [initial] = useState(loadPrefs)
   const [minPass, setMinPass] = useState(initial.minPass)
@@ -132,13 +134,13 @@ export default function App() {
       <main className="mx-auto max-w-7xl px-4 pb-24 sm:px-6">
         {load.status === 'error' ? (
           <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
-            <p className="text-rose-300">Couldn&rsquo;t load the screen: {load.message}</p>
+            <p className="text-rose-300">{m.loadFailed(load.message)}</p>
             <button
               type="button"
               onClick={reload}
               className="h-11 rounded-full bg-emerald-400 px-5 text-sm font-semibold text-emerald-950 hover:bg-emerald-300"
             >
-              Try again
+              {m.tryAgain}
             </button>
           </div>
         ) : (
@@ -170,14 +172,14 @@ export default function App() {
               </div>
             ) : shown.length === 0 ? (
               <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-center">
-                <p className="text-slate-300">No stocks match{query.trim() ? ` “${query.trim()}”` : ''}.</p>
+                <p className="text-slate-300">{m.noMatch(query.trim())}</p>
                 {query.trim() ? (
                   <button
                     type="button"
                     onClick={() => setQuery('')}
                     className="h-11 rounded-full bg-white/[0.06] px-5 text-sm text-slate-100 ring-1 ring-inset ring-white/10 hover:bg-white/10"
                   >
-                    Clear search
+                    {m.clearSearch}
                   </button>
                 ) : null}
                 {looser !== undefined ? (
@@ -186,7 +188,7 @@ export default function App() {
                     onClick={() => setMinPass(looser)}
                     className="h-11 rounded-full bg-white/[0.06] px-5 text-sm text-slate-100 ring-1 ring-inset ring-white/10 hover:bg-white/10"
                   >
-                    Show {looser === 0 ? 'every name' : `${looser}+ screens`} ({counts[looser]})
+                    {m.showLooser(looser, counts[looser])}
                   </button>
                 ) : null}
               </div>
@@ -199,7 +201,7 @@ export default function App() {
                 </div>
                 {limit < shown.length ? <div ref={sentinel} className="h-px" aria-hidden /> : null}
                 <p className="mt-8 text-center text-xs text-slate-600">
-                  {shown.length} of {counts[0]} shown · Educational use only — not financial advice.
+                  {m.footer(shown.length, counts[0])}
                 </p>
               </>
             )}

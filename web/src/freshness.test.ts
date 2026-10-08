@@ -1,19 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import { freshness, isNewerDataset, nextScreenRun, relativeAge } from './freshness'
+import { ageOf, freshness, isNewerDataset, nextScreenRun } from './freshness'
+import { MESSAGES } from './messages'
 
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
 
-describe('relativeAge', () => {
+const say = (lang: 'en' | 'zh-TW', ms: number) => {
+  const a = ageOf(ms)
+  return MESSAGES[lang].age(a.unit, a.n)
+}
+
+describe('relative age', () => {
   it('rounds down into the largest whole unit', () => {
-    expect(relativeAge(20_000)).toBe('just now')
-    expect(relativeAge(5 * 60_000)).toBe('5 min ago')
-    expect(relativeAge(3 * HOUR + 59 * 60_000)).toBe('3 hr ago')
-    expect(relativeAge(DAY)).toBe('1 day ago')
-    expect(relativeAge(9 * DAY)).toBe('9 days ago')
+    expect(say('en', 20_000)).toBe('just now')
+    expect(say('en', 5 * 60_000)).toBe('5 min ago')
+    expect(say('en', 3 * HOUR + 59 * 60_000)).toBe('3 hr ago')
+    expect(say('en', DAY)).toBe('1 day ago')
+    expect(say('en', 9 * DAY)).toBe('9 days ago')
+  })
+  it('says the same in Chinese', () => {
+    expect(say('zh-TW', 20_000)).toBe('剛剛')
+    expect(say('zh-TW', 5 * 60_000)).toBe('5 分鐘前')
+    expect(say('zh-TW', 3 * HOUR + 59 * 60_000)).toBe('3 小時前')
+    expect(say('zh-TW', 9 * DAY)).toBe('9 天前')
   })
   it('never claims a future timestamp is old', () => {
-    expect(relativeAge(-5 * 60_000)).toBe('just now')
+    expect(say('en', -5 * 60_000)).toBe('just now')
   })
 })
 
@@ -28,7 +40,7 @@ describe('freshness', () => {
   it("does not flag Friday's data as stale on Monday morning", () => {
     const f = freshness('2026-09-25T15:59:05Z', now)!
     expect(f.stale).toBe(false)
-    expect(f.relative).toBe('2 days ago')
+    expect(say('en', f.ageMs)).toBe('2 days ago')
   })
 
   it('flags data older than a week (five missed weekday runs)', () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { freshness, nextScreenRun, relativeAge } from './freshness'
+import { ageOf, freshness, nextScreenRun } from './freshness'
+import { useI18n } from './i18n'
 import { useNow, useOnline } from './useDataset'
 import { Logo } from './Logo'
 
@@ -18,6 +19,11 @@ interface HeaderProps {
 // the pipeline has missed a week of runs, grey with an offline note when the
 // numbers came from the service worker's cached copy.
 function FreshnessChip({ generatedAt, checking, lastChecked, checkFailed, onCheck }: Omit<HeaderProps, 'onMethodology'>) {
+  const { m } = useI18n()
+  const age = (ms: number) => {
+    const a = ageOf(ms)
+    return m.age(a.unit, a.n)
+  }
   const now = useNow()
   const online = useOnline()
   const [open, setOpen] = useState(false)
@@ -53,35 +59,33 @@ function FreshnessChip({ generatedAt, checking, lastChecked, checkFailed, onChec
         className={`flex h-11 items-center gap-2 rounded-full bg-white/[0.04] pl-3.5 pr-4 text-[14px] ring-1 ring-inset ring-white/10 transition hover:bg-white/[0.08] ${text}`}
       >
         <span className={`size-2 shrink-0 rounded-full ${online ? tone : 'bg-slate-500'}`} aria-hidden />
-        {!online ? 'Offline · ' : ''}
-        {f ? `Updated ${f.relative}` : 'Data date unknown'}
-        {f?.stale ? <span className="font-semibold">· stale</span> : null}
+        {!online ? m.offline : ''}
+        {f ? m.updated(age(f.ageMs)) : m.dateUnknown}
+        {f?.stale ? <span className="font-semibold">{m.stale}</span> : null}
       </button>
 
       {open ? (
         <div className="absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-white/10 bg-surface-2/95 p-4 text-sm shadow-2xl shadow-black/50 backdrop-blur-xl">
           <dl className="space-y-2">
             <div className="flex justify-between gap-3">
-              <dt className="text-slate-400">Screened</dt>
-              <dd className="tnum text-right text-slate-100">{f ? f.generatedAt.toLocaleString(undefined, DATE_TIME) : '—'}</dd>
+              <dt className="text-slate-400">{m.screened}</dt>
+              <dd className="tnum text-right text-slate-100">{f ? f.generatedAt.toLocaleString(m.lang, DATE_TIME) : '—'}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-slate-400">Next screen</dt>
-              <dd className="tnum text-right text-slate-100">{nextScreenRun(now).toLocaleString(undefined, DATE_TIME)}</dd>
+              <dt className="text-slate-400">{m.nextScreen}</dt>
+              <dd className="tnum text-right text-slate-100">{nextScreenRun(now).toLocaleString(m.lang, DATE_TIME)}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-slate-400">Last checked</dt>
+              <dt className="text-slate-400">{m.lastChecked}</dt>
               <dd className={`tnum text-right ${checkFailed ? 'text-amber-300' : 'text-slate-100'}`}>
-                {checkFailed ? 'failed · ' : ''}
-                {lastChecked ? relativeAge(now.getTime() - lastChecked.getTime()) : '—'}
+                {checkFailed ? m.checkFailed : ''}
+                {lastChecked ? age(now.getTime() - lastChecked.getTime()) : '—'}
               </dd>
             </div>
           </dl>
           <p className="mt-3 text-xs leading-relaxed text-slate-500">
-            {f?.stale
-              ? 'Over a week old — the daily screen has not published since. Treat prices and verdicts with care.'
-              : 'Screens run every weekday morning (US); new data appears here once the run finishes.'}
-            {!online ? ' You are offline, so this is the last copy saved on this device.' : ''}
+            {f?.stale ? m.staleNote : m.freshNote}
+            {!online ? m.offlineNote : ''}
           </p>
           <button
             type="button"
@@ -89,7 +93,7 @@ function FreshnessChip({ generatedAt, checking, lastChecked, checkFailed, onChec
             disabled={checking || !online}
             className="mt-3 h-11 w-full rounded-xl bg-white/[0.06] text-[14px] font-medium text-slate-100 ring-1 ring-inset ring-white/10 transition hover:bg-white/10 disabled:opacity-50"
           >
-            {checking ? 'Checking…' : 'Check for new data'}
+            {checking ? m.checking : m.checkNow}
           </button>
         </div>
       ) : null}
@@ -98,6 +102,7 @@ function FreshnessChip({ generatedAt, checking, lastChecked, checkFailed, onChec
 }
 
 export default function Header(props: HeaderProps) {
+  const { m, setLang } = useI18n()
   return (
     <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-canvas/75 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6">
@@ -106,6 +111,16 @@ export default function Header(props: HeaderProps) {
           <span className="hidden text-[15px] font-semibold tracking-tight text-slate-50 min-[400px]:inline">Screener3000</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setLang(m.switchTo.lang)}
+            lang={m.switchTo.lang}
+            aria-label={m.switchTo.aria}
+            title={m.switchTo.aria}
+            className="grid h-11 shrink-0 place-items-center rounded-full bg-white/[0.04] px-3 text-[13px] font-medium text-slate-300 ring-1 ring-inset ring-white/10 transition hover:bg-white/[0.08] hover:text-slate-50"
+          >
+            {m.switchTo.label}
+          </button>
           <FreshnessChip
             generatedAt={props.generatedAt}
             checking={props.checking}
@@ -116,8 +131,8 @@ export default function Header(props: HeaderProps) {
           <button
             type="button"
             onClick={props.onMethodology}
-            aria-label="How the screens work"
-            title="How the screens work"
+            aria-label={m.howItWorks}
+            title={m.howItWorks}
             className="grid size-11 shrink-0 place-items-center rounded-full bg-white/[0.04] text-slate-300 ring-1 ring-inset ring-white/10 transition hover:bg-white/[0.08] hover:text-slate-50"
           >
             <svg viewBox="0 0 20 20" className="size-4" fill="currentColor" aria-hidden>

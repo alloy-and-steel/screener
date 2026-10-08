@@ -5,6 +5,7 @@
 import type { Azqato, AzqatoTier, Row, WealthmaticaCheckKey } from './types'
 import { WEALTHMATICA_CHECKS } from './types'
 import { DASH, boolTone, compactUsd, num, pct, ptsTone, ratio, signalTone, signedPct, type Tone } from './format'
+import { statusLabel, type Messages } from './messages'
 
 const LYNCH_BUY = new Set(['Strong Buy', 'Buy'])
 const GRAHAM_BUY = new Set(['Deep Buy', 'Buy'])
@@ -31,15 +32,6 @@ export const TIER_STYLE: Record<AzqatoTier, TierColors> = {
   b: { text: 'text-[#e3b341]', bg: 'bg-[#e3b341]/15', ring: 'ring-[#e3b341]/30', fill: 'bg-[#e3b341]' },
   c: { text: 'text-[#ffa198]', bg: 'bg-[#ffa198]/15', ring: 'ring-[#ffa198]/30', fill: 'bg-[#ffa198]' },
   f: { text: 'text-[#f85149]', bg: 'bg-[#f85149]/15', ring: 'ring-[#f85149]/30', fill: 'bg-[#f85149]' },
-}
-
-const TIER_TAGLINE: Record<AzqatoTier, string> = {
-  sp: 'Perfect score — tops every scored metric',
-  s: 'Top 10% of the screened universe',
-  a: 'Top 20% of the screened universe',
-  b: 'Upper half of the screened universe',
-  c: 'Below the median',
-  f: 'Bottom quarter of the screened universe',
 }
 
 // For unprofitable companies (negative forward P/E) Yahoo's positive PEG is
@@ -88,113 +80,128 @@ export interface Verdict {
   drivers: Driver[]
 }
 
-export function azqatoVerdict(row: Row): Verdict {
+// The four pass gates, apart from the labels: counting passes for ~2,000
+// rows needs no language.
+function azqatoPass(row: Row): boolean {
+  const tier = row.azqato?.score != null ? row.azqato.tier : null
+  return tier != null && AZQATO_PASS_TIERS.has(tier)
+}
+function lynchPass(row: Row): boolean {
+  return LYNCH_BUY.has(row.Lynch_Lynch_Status as string)
+}
+function grahamPass(row: Row): boolean {
+  return GRAHAM_BUY.has(row.Graham_Graham_Status as string)
+}
+function wealthmaticaPass(row: Row): boolean {
+  const wm = row.wealthmatica
+  return !!wm && wm.pass === true
+}
+const PASSES = [azqatoPass, lynchPass, grahamPass, wealthmaticaPass]
+
+export function azqatoVerdict(row: Row, m: Messages): Verdict {
   const az = row.azqato
+  const base = { system: 'Azqato', question: m.question.Azqato } as const
   // `== null` also catches a stale published dataset (pre-tier shape, no
   // score/tier keys) — it renders N/A until the next Screen run, never crashes.
   if (!az || az.score == null || az.tier == null) {
-    return {
-      system: 'Azqato',
-      question: 'Growth rank vs the field',
-      label: NA_LABEL,
-      tagline: 'No data',
-      tone: 'slate',
-      pass: false,
-      drivers: [],
-    }
+    return { ...base, label: NA_LABEL, tagline: m.noData, tone: 'slate', pass: false, drivers: [] }
   }
   return {
-    system: 'Azqato',
-    question: 'Growth rank vs the field',
+    ...base,
     label: TIER_LABEL[az.tier],
-    tagline: TIER_TAGLINE[az.tier],
+    tagline: m.tierTagline[az.tier],
     tone: TIER_TONE[az.tier],
     pillColors: TIER_STYLE[az.tier],
-    pass: AZQATO_PASS_TIERS.has(az.tier),
+    pass: azqatoPass(row),
     drivers: [
-      { label: 'Score', value: `${az.score}/100` },
-      { label: 'Strong metrics', value: `${az.passes}/${az.total}` },
-      { label: 'Revenue growth TTM', value: pct(az.revTTM), tone: ptsTone(az.parts.revTTM) },
-      { label: 'Revenue growth FWD', value: pct(az.revFwd), tone: ptsTone(az.parts.revFwd) },
-      { label: 'EPS growth TTM', value: pct(az.epsTTM), tone: ptsTone(az.parts.epsTTM) },
-      { label: 'EPS growth FWD', value: pct(az.epsFwd), tone: ptsTone(az.parts.epsFwd) },
-      { label: 'PEG FWD', value: num(azPegDisplay(az)), tone: ptsTone(az.parts.pegFwd) },
-      { label: 'Cash vs debt', value: ratio(azCashDebt(az)), tone: ptsTone(az.parts.cashDebt) },
+      { label: m.az.score, value: `${az.score}/100` },
+      { label: m.az.strong, value: `${az.passes}/${az.total}` },
+      { label: m.az.revTTM, value: pct(az.revTTM), tone: ptsTone(az.parts.revTTM) },
+      { label: m.az.revFwd, value: pct(az.revFwd), tone: ptsTone(az.parts.revFwd) },
+      { label: m.az.epsTTM, value: pct(az.epsTTM), tone: ptsTone(az.parts.epsTTM) },
+      { label: m.az.epsFwd, value: pct(az.epsFwd), tone: ptsTone(az.parts.epsFwd) },
+      { label: m.az.pegFwd, value: num(azPegDisplay(az)), tone: ptsTone(az.parts.pegFwd) },
+      { label: m.az.cashDebt, value: ratio(azCashDebt(az)), tone: ptsTone(az.parts.cashDebt) },
     ],
   }
 }
 
-export function lynchVerdict(row: Row): Verdict {
+export function lynchVerdict(row: Row, m: Messages): Verdict {
   const status = (row.Lynch_Lynch_Status as string | null | undefined) ?? null
   const tone = status ? signalTone('Lynch_Lynch_Status', status) : 'slate'
   return {
     system: 'Lynch',
-    question: 'Growth at a reasonable price',
-    label: status ?? NA_LABEL,
-    tagline: lynchTagline(tone),
+    question: m.question.Lynch,
+    label: statusLabel(m, status ?? NA_LABEL),
+    tagline: tone === 'slate' ? m.notValued : m.lynchTagline[tone],
     tone,
-    pass: status ? LYNCH_BUY.has(status) : false,
+    pass: lynchPass(row),
     drivers: [
-      { label: 'P/E', value: num(row.Lynch_PE) },
-      { label: 'PEG', value: num(row.Lynch_PEG), tone: pegTone(row.Lynch_PEG) },
-      { label: 'Buy price', value: num(row.Lynch_Lynch_BuyPrice) },
-      { label: 'Discount', value: pct(row.Lynch_Lynch_Discount_Pct) },
+      { label: m.lynch.pe, value: num(row.Lynch_PE) },
+      { label: m.lynch.peg, value: num(row.Lynch_PEG), tone: pegTone(row.Lynch_PEG) },
+      { label: m.lynch.buyPrice, value: num(row.Lynch_Lynch_BuyPrice) },
+      { label: m.lynch.discount, value: pct(row.Lynch_Lynch_Discount_Pct) },
     ],
   }
 }
 
-export function grahamVerdict(row: Row): Verdict {
+export function grahamVerdict(row: Row, m: Messages): Verdict {
   const status = (row.Graham_Graham_Status as string | null | undefined) ?? null
   const tone = status ? signalTone('Graham_Graham_Status', status) : 'slate'
   return {
     system: 'Graham',
-    question: 'Intrinsic value + balance-sheet safety',
-    label: status ?? NA_LABEL,
-    tagline: grahamTagline(tone),
+    question: m.question.Graham,
+    label: statusLabel(m, status ?? NA_LABEL),
+    tagline: tone === 'slate' ? m.notValued : m.grahamTagline[tone],
     tone,
-    pass: status ? GRAHAM_BUY.has(status) : false,
+    pass: grahamPass(row),
     drivers: [
-      { label: 'Fair value', value: num(row.Graham_Graham_FV) },
-      { label: 'Discount', value: pct(row.Graham_Graham_Discount_Pct) },
+      { label: m.graham.fairValue, value: num(row.Graham_Graham_FV) },
+      { label: m.graham.discount, value: pct(row.Graham_Graham_Discount_Pct) },
     ],
   }
 }
 
-const pts = (v: number | null): string => (v === null ? DASH : `${v > 0 ? '+' : ''}${v.toFixed(1)} pts`)
-
-const WEALTHMATICA_DRIVER: Record<WealthmaticaCheckKey, { label: string; fmt: (v: number | null) => string }> = {
-  revGrowth: { label: 'Revenue growth', fmt: (v) => signedPct(v, 1) },
-  revAccel: { label: 'Growth vs prior year', fmt: pts },
-  fcf: { label: 'FCF margin', fmt: (v) => pct(v) },
-  fcfSbc: { label: 'FCF − stock comp', fmt: (v) => pct(v) },
-  shareChange: { label: 'Share count', fmt: (v) => signedPct(v, 1) },
-  grossMargin: { label: 'Gross margin', fmt: pts },
-  opMargin: { label: 'Operating margin', fmt: pts },
-  eps: { label: 'EPS', fmt: (v) => num(v) },
-  cashDebt: { label: 'Cash − debt', fmt: (v) => (v === null ? DASH : `${v < 0 ? '−' : ''}$${compactUsd(Math.abs(v))}`) },
+function wealthmaticaFormat(k: WealthmaticaCheckKey, v: number | null, m: Messages): string {
+  if (v === null) return DASH
+  switch (k) {
+    case 'revGrowth':
+    case 'shareChange':
+      return signedPct(v, 1)
+    case 'revAccel':
+    case 'grossMargin':
+    case 'opMargin':
+      return m.pts(`${v > 0 ? '+' : ''}${v.toFixed(1)}`)
+    case 'fcf':
+    case 'fcfSbc':
+      return pct(v)
+    case 'eps':
+      return num(v)
+    case 'cashDebt':
+      return `${v < 0 ? '−' : ''}$${compactUsd(Math.abs(v), m.lang)}`
+  }
 }
 
 // Wealthmatica's checklist: the pass/fail (and its thresholds) is computed in
 // wealthmatica.py; this only presents it. An N/A check (inputs absent) shows a
 // dash and no tone — it is not a fail.
-export function wealthmaticaVerdict(row: Row): Verdict {
+export function wealthmaticaVerdict(row: Row, m: Messages): Verdict {
   const wm = row.wealthmatica
-  const base = { system: 'Wealthmatica', question: 'Growth-quality checklist' } as const
+  const base = { system: 'Wealthmatica', question: m.question.Wealthmatica } as const
   if (!wm || wm.pass === null || wm.pass === undefined) {
-    return { ...base, label: NA_LABEL, tagline: 'Too few statement lines to judge', tone: 'slate', pass: false, drivers: [] }
+    return { ...base, label: NA_LABEL, tagline: m.wmTooFew, tone: 'slate', pass: false, drivers: [] }
   }
-  const pass = wm.pass === true
+  const pass = wealthmaticaPass(row)
   return {
     ...base,
-    label: pass ? 'Pass' : 'Fail',
-    tagline: pass ? 'Growing, cash-generating, not diluting' : 'Fails the growth-quality checklist',
+    label: statusLabel(m, pass ? 'Pass' : 'Fail'),
+    tagline: pass ? m.wmPass : m.wmFail,
     tone: pass ? 'green' : 'red',
     pass,
     // The passed/applicable count rides on the verdict line (verdictLines).
     drivers: WEALTHMATICA_CHECKS.map((k) => {
       const c = wm.checks[k]
-      const d = WEALTHMATICA_DRIVER[k]
-      return { label: d.label, value: d.fmt(c?.value ?? null), tone: boolTone(c?.pass) }
+      return { label: m.wm[k], value: wealthmaticaFormat(k, c?.value ?? null, m), tone: boolTone(c?.pass) }
     }),
   }
 }
@@ -204,16 +211,6 @@ function pegTone(v: unknown): Tone {
   return v < 1 ? 'green' : v <= 2 ? 'yellow' : 'red'
 }
 
-function lynchTagline(t: Tone): string {
-  if (t === 'slate') return 'Not valued — needs positive growth'
-  return t === 'green' ? 'Reasonably priced for its growth' : t === 'yellow' ? 'Fairly priced' : 'Expensive for its growth'
-}
-
-function grahamTagline(t: Tone): string {
-  if (t === 'slate') return 'Not valued — needs positive growth'
-  return t === 'green' ? 'Below intrinsic value' : t === 'yellow' ? 'Near fair value' : 'Above intrinsic value'
-}
-
 export interface VerdictLine {
   name: string
   label: string
@@ -221,10 +218,10 @@ export interface VerdictLine {
   colors?: TierColors // azqato tier palette; graded lines use the tone
 }
 
-function gradeLine(name: string, field: string, status: string | null | undefined): VerdictLine {
+function gradeLine(name: string, field: string, status: string | null | undefined, m: Messages): VerdictLine {
   return {
     name,
-    label: status ?? NA_LABEL,
+    label: statusLabel(m, status ?? NA_LABEL),
     tone: status ? signalTone(field, status) : 'slate',
   }
 }
@@ -232,19 +229,19 @@ function gradeLine(name: string, field: string, status: string | null | undefine
 // The verdict(s) a system produces. Azqato is a single rank tier; Lynch and
 // Graham each have TWO facets (Lynch: two valuation methods; Graham: valuation
 // + defensive safety).
-export function verdictLines(system: SystemName, row: Row): VerdictLine[] {
+export function verdictLines(system: SystemName, row: Row, m: Messages): VerdictLine[] {
   if (system === 'Wealthmatica') {
-    const v = wealthmaticaVerdict(row)
+    const v = wealthmaticaVerdict(row, m)
     const wm = row.wealthmatica
     const count = v.label !== NA_LABEL && wm ? ` · ${wm.passed}/${wm.applicable}` : ''
-    return [{ name: 'Checklist', label: `${v.label}${count}`, tone: v.tone }]
+    return [{ name: m.line.checklist, label: `${v.label}${count}`, tone: v.tone }]
   }
   if (system === 'Azqato') {
     const az = row.azqato
     const scored = az != null && az.score != null && az.tier != null
     return [
       {
-        name: 'Tier',
+        name: m.line.tier,
         label: scored ? TIER_LABEL[az.tier!] : NA_LABEL,
         tone: scored ? TIER_TONE[az.tier!] : 'slate',
         colors: scored ? TIER_STYLE[az.tier!] : undefined,
@@ -253,25 +250,27 @@ export function verdictLines(system: SystemName, row: Row): VerdictLine[] {
   }
   if (system === 'Lynch') {
     return [
-      gradeLine('Value (G+D)', 'Lynch_Lynch_Status', row.Lynch_Lynch_Status as string | null | undefined),
-      gradeLine('PEG price band', 'Lynch_Lynch_PEG_Band', row.Lynch_Lynch_PEG_Band as string | null | undefined),
+      gradeLine(m.line.lynchValue, 'Lynch_Lynch_Status', row.Lynch_Lynch_Status as string | null | undefined, m),
+      gradeLine(m.line.pegBand, 'Lynch_Lynch_PEG_Band', row.Lynch_Lynch_PEG_Band as string | null | undefined, m),
     ]
   }
   const def = row.DefensiveScore
   return [
-    gradeLine('Valuation', 'Graham_Graham_Status', row.Graham_Graham_Status as string | null | undefined),
+    gradeLine(m.line.valuation, 'Graham_Graham_Status', row.Graham_Graham_Status as string | null | undefined, m),
     {
-      name: 'Defensive',
+      name: m.line.defensive,
       // The meter that used to carry the 0-8 score is gone; the count rides on the label.
-      label: row.DefensiveLabel ? `${row.DefensiveLabel as string}${typeof def === 'number' ? ` · ${def}/8` : ''}` : NA_LABEL,
+      label: row.DefensiveLabel ? `${statusLabel(m, row.DefensiveLabel as string)}${typeof def === 'number' ? ` · ${def}/8` : ''}` : NA_LABEL,
       tone: row.DefensiveLabel ? signalTone('DefensiveLabel', row.DefensiveLabel as string) : 'slate',
     },
   ]
 }
 
-export function verdicts(row: Row): Verdict[] {
-  return [azqatoVerdict(row), lynchVerdict(row), grahamVerdict(row), wealthmaticaVerdict(row)]
+export function verdicts(row: Row, m: Messages): Verdict[] {
+  return [azqatoVerdict(row, m), lynchVerdict(row, m), grahamVerdict(row, m), wealthmaticaVerdict(row, m)]
 }
+
+export const SYSTEM_COUNT = PASSES.length
 
 export interface Combined {
   passCount: number
@@ -280,14 +279,13 @@ export interface Combined {
 
 // How many of the four independent systems a name clears.
 export function combinedVerdict(row: Row): Combined {
-  const vs = verdicts(row)
-  const passCount = vs.filter((v) => v.pass).length
-  const tone: Tone = passCount === vs.length ? 'green' : passCount >= 1 ? 'yellow' : 'red'
+  const passCount = PASSES.filter((p) => p(row)).length
+  const tone: Tone = passCount === PASSES.length ? 'green' : passCount >= 1 ? 'yellow' : 'red'
   return { passCount, tone }
 }
 
 // "Passes all": a name clears ALL FOUR independent systems.
 export function passesAll(row: Row): boolean {
   if (row.Error) return false
-  return verdicts(row).every((v) => v.pass)
+  return PASSES.every((p) => p(row))
 }

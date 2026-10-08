@@ -19,16 +19,17 @@ const SCREEN_DAYS_UTC = new Set([1, 2, 3, 4, 5])
 export interface Freshness {
   generatedAt: Date
   ageMs: number
-  relative: string
   stale: boolean
 }
 
-export function relativeAge(ms: number): string {
-  if (ms < MINUTE) return 'just now'
-  if (ms < HOUR) return `${Math.floor(ms / MINUTE)} min ago`
-  if (ms < DAY) return `${Math.floor(ms / HOUR)} hr ago`
-  const d = Math.floor(ms / DAY)
-  return `${d} day${d === 1 ? '' : 's'} ago`
+export type AgeUnit = 'now' | 'min' | 'hr' | 'day'
+
+// An age in the largest whole unit; each language words it (messages.tsx).
+export function ageOf(ms: number): { unit: AgeUnit; n: number } {
+  if (ms < MINUTE) return { unit: 'now', n: 0 }
+  if (ms < HOUR) return { unit: 'min', n: Math.floor(ms / MINUTE) }
+  if (ms < DAY) return { unit: 'hr', n: Math.floor(ms / HOUR) }
+  return { unit: 'day', n: Math.floor(ms / DAY) }
 }
 
 function parse(iso: string | undefined): Date | null {
@@ -41,7 +42,7 @@ export function freshness(generatedAt: string | undefined, now: Date): Freshness
   const dt = parse(generatedAt)
   if (!dt) return null
   const ageMs = now.getTime() - dt.getTime()
-  return { generatedAt: dt, ageMs, relative: relativeAge(ageMs), stale: ageMs > STALE_AFTER_MS }
+  return { generatedAt: dt, ageMs, stale: ageMs > STALE_AFTER_MS }
 }
 
 // When the cron next STARTS a screen. Fresh data lands once that run and the

@@ -1,10 +1,12 @@
 import { useRegisterSW } from 'virtual:pwa-register/react'
+import { useI18n } from './i18n'
 
 // Look for a new deploy hourly and whenever the app is brought back to the
 // front — an installed PWA can stay open for days without a navigation.
 const SW_CHECK_MS = 60 * 60_000
 
 function Toast({ children, onDismiss }: { children: React.ReactNode; onDismiss?: () => void }) {
+  const { m } = useI18n()
   return (
     <div
       role="status"
@@ -15,7 +17,7 @@ function Toast({ children, onDismiss }: { children: React.ReactNode; onDismiss?:
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Dismiss"
+          aria-label={m.dismiss}
           className="grid size-11 place-items-center rounded-full text-slate-400 hover:bg-white/10 hover:text-slate-100"
         >
           ✕
@@ -44,6 +46,7 @@ interface ToastsProps {
 }
 
 export default function Toasts({ pendingAt, onLoadPending, onDismissPending }: ToastsProps) {
+  const { m } = useI18n()
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
@@ -62,7 +65,7 @@ export default function Toasts({ pendingAt, onLoadPending, onDismissPending }: T
   })
 
   const pendingLabel = pendingAt
-    ? new Date(pendingAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+    ? new Date(pendingAt).toLocaleString(m.lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
     : ''
 
   return (
@@ -70,18 +73,16 @@ export default function Toasts({ pendingAt, onLoadPending, onDismissPending }: T
       {needRefresh ? (
         <Toast onDismiss={() => setNeedRefresh(false)}>
           <div className="flex items-center justify-between gap-3">
-            <span>A new version of the app is ready.</span>
-            <Action onClick={() => void updateServiceWorker(true)}>Update</Action>
+            <span>{m.newVersion}</span>
+            <Action onClick={() => void updateServiceWorker(true)}>{m.update}</Action>
           </div>
         </Toast>
       ) : null}
       {pendingAt ? (
         <Toast onDismiss={onDismissPending}>
           <div className="flex items-center justify-between gap-3">
-            <span>
-              Fresh data from <span className="font-semibold">{pendingLabel}</span>
-            </span>
-            <Action onClick={onLoadPending}>Load</Action>
+            <span>{m.freshData(<span className="font-semibold">{pendingLabel}</span>)}</span>
+            <Action onClick={onLoadPending}>{m.load}</Action>
           </div>
         </Toast>
       ) : null}

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { Lang } from './i18n'
 
 export const DASH = '—' // em dash for missing/null values
 
@@ -16,9 +17,15 @@ export function pct(v: unknown, decimals = 1): string {
   return typeof v === 'number' ? `${v.toFixed(decimals)}%` : String(v)
 }
 
-// Compact magnitude (TradingView K/M/B convention) — input is a raw dollar value.
-export function compactUsd(v: unknown): string {
+// Chinese counts in 萬 / 億 / 兆 (1e4 / 1e8 / 1e12); three significant digits
+// matches the English forms' precision.
+const ZH_COMPACT = new Intl.NumberFormat('zh-TW', { notation: 'compact', maximumSignificantDigits: 3 })
+
+// Compact magnitude (TradingView K/M/B convention; 萬/億/兆 in Chinese) — input
+// is a raw dollar value.
+export function compactUsd(v: unknown, lang: Lang): string {
   if (isMissing(v) || typeof v !== 'number') return DASH
+  if (lang === 'zh-TW') return ZH_COMPACT.format(v)
   const abs = Math.abs(v)
   if (abs >= 1e12) return `${(v / 1e12).toFixed(2)}T`
   if (abs >= 1e9) return `${(v / 1e9).toFixed(2)}B`
@@ -45,9 +52,10 @@ export function usd(v: unknown): string {
   return `$${v.toFixed(2)}`
 }
 
-// Market cap given in billions -> "$268B" / "$4.92T".
-export function capB(b: unknown): string {
+// Market cap given in billions -> "$268B" / "$4.92T" ("$2680億" / "$4.92兆").
+export function capB(b: unknown, lang: Lang): string {
   if (isMissing(b) || typeof b !== 'number') return DASH
+  if (lang === 'zh-TW') return `$${ZH_COMPACT.format(b * 1e9)}`
   return b >= 1000 ? `$${(b / 1000).toFixed(2)}T` : `$${b.toFixed(b >= 100 ? 0 : 1)}B`
 }
 

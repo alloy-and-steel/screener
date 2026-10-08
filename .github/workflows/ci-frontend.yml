@@ -11,10 +11,12 @@ on:
     branches: [master]
     paths:
       - "web/**"
+      - "stock_screener.py"   # dataText.test.ts checks every phrase it emits has a translation
       - ".github/workflows/ci-frontend.yml"
   pull_request:
     paths:
       - "web/**"
+      - "stock_screener.py"   # dataText.test.ts checks every phrase it emits has a translation
       - ".github/workflows/ci-frontend.yml"
 
 permissions:

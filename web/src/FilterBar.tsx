@@ -1,15 +1,10 @@
 import { SORTS, type SortKey } from './filters'
-import { INDEX_LABEL, INDEX_NAMES, type IndexName } from './types'
+import { useI18n } from './i18n'
+import { INDEX_NAMES, type IndexName } from './types'
 
 export type PassCounts = Record<0 | 1 | 2 | 3 | 4, number>
 
-const LEVELS: { level: 0 | 1 | 2 | 3 | 4; label: string; spoken: string }[] = [
-  { level: 4, label: 'All 4', spoken: 'Passes all 4 screens' },
-  { level: 3, label: '3+', spoken: 'Passes 3 or more' },
-  { level: 2, label: '2+', spoken: 'Passes 2 or more' },
-  { level: 1, label: '1+', spoken: 'Passes 1 or more' },
-  { level: 0, label: 'Any', spoken: 'Any' },
-]
+const LEVELS = [4, 3, 2, 1, 0] as const
 
 interface FilterBarProps {
   minPass: number
@@ -78,12 +73,13 @@ function Picker<T extends string>({
 }
 
 const ALL_POOLS = 'all'
-const POOL_OPTIONS = [{ value: ALL_POOLS, label: 'All pools' }, ...INDEX_NAMES.map((n) => ({ value: n as string, label: INDEX_LABEL[n] }))]
-const SORT_OPTIONS = (Object.keys(SORTS) as SortKey[]).map((k) => ({ value: k, label: SORTS[k].label }))
 
 // Scrolls with the page on phones (a sticky bar ate a quarter of the screen);
 // sticks under the header from tablet width up, where there is room.
 export default function FilterBar(p: FilterBarProps) {
+  const { m } = useI18n()
+  const poolOptions = [{ value: ALL_POOLS, label: m.allPools }, ...INDEX_NAMES.map((n) => ({ value: n as string, label: m.poolLabel[n] }))]
+  const sortOptions = (Object.keys(SORTS) as SortKey[]).map((k) => ({ value: k, label: m.sortLabel[k] }))
   return (
     <div className="-mx-4 flex flex-col gap-2 border-b border-white/[0.06] bg-canvas/85 px-4 py-3 backdrop-blur-xl sm:sticky sm:top-14 sm:z-20 sm:-mx-6 sm:px-6 lg:flex-row lg:items-center">
       <label className="relative min-w-0 lg:flex-1">
@@ -103,8 +99,8 @@ export default function FilterBar(p: FilterBarProps) {
           onKeyDown={(e) => {
             if (e.key === 'Enter') p.onSubmit()
           }}
-          placeholder="Ticker or sector"
-          aria-label="Search by ticker or sector"
+          placeholder={m.searchPlaceholder}
+          aria-label={m.searchLabel}
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
@@ -114,24 +110,24 @@ export default function FilterBar(p: FilterBarProps) {
 
       <div
         role="group"
-        aria-label="Screens passed"
+        aria-label={m.screensPassed}
         className="grid h-12 grid-cols-5 gap-0.5 rounded-xl bg-white/[0.04] p-0.5 ring-1 ring-inset ring-white/10 lg:w-96"
       >
-        {LEVELS.map((l) => {
-          const on = p.minPass === l.level
+        {LEVELS.map((level) => {
+          const on = p.minPass === level
           return (
             <button
-              key={l.level}
+              key={level}
               type="button"
               aria-pressed={on}
-              aria-label={`${l.spoken}: ${p.counts[l.level]} stocks`}
-              onClick={() => p.onMinPass(l.level)}
+              aria-label={m.passLevelCount(m.passLevelsSpoken[level], p.counts[level])}
+              onClick={() => p.onMinPass(level)}
               className={`flex items-center justify-center gap-1 rounded-lg text-[14px] font-medium transition-colors ${
                 on ? 'bg-slate-50 text-slate-950' : 'text-slate-300'
               }`}
             >
-              {l.label}
-              <span className="tnum text-[12px] text-slate-500">{p.counts[l.level]}</span>
+              {m.passLevels[level]}
+              <span className="tnum text-[12px] text-slate-500">{p.counts[level]}</span>
             </button>
           )
         })}
@@ -139,12 +135,12 @@ export default function FilterBar(p: FilterBarProps) {
 
       <div className="grid grid-cols-2 gap-2 lg:w-[26rem]">
         <Picker
-          label="Pool"
+          label={m.pool}
           value={p.pool ?? ALL_POOLS}
-          options={POOL_OPTIONS}
+          options={poolOptions}
           onChange={(v) => p.onPool(v === ALL_POOLS ? null : (v as IndexName))}
         />
-        <Picker label="Sort" icon={SORT_ICON} value={p.sort} options={SORT_OPTIONS} onChange={p.onSort} />
+        <Picker label={m.sort} icon={SORT_ICON} value={p.sort} options={sortOptions} onChange={p.onSort} />
       </div>
     </div>
   )

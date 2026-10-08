@@ -2,7 +2,9 @@ import { memo } from 'react'
 import type { Row } from './types'
 import { DASH, TONE, capB, num, pct, signTone, signedPct, usd, type Tone } from './format'
 import { azPegDisplay, combinedVerdict, verdicts } from './score'
-import { LEVEL_LABEL, pickViews, type PickView } from './selection'
+import { pickViews, type PickView } from './selection'
+import { sectorLabel } from './dataText'
+import { useI18n } from './i18n'
 
 function Stat({ label, value, className = 'text-slate-100' }: { label: string; value: string; className?: string }) {
   return (
@@ -16,12 +18,18 @@ function Stat({ label, value, className = 'text-slate-100' }: { label: string; v
 // Where today's price sits in the 52-week range; the lower quarter is azqato's
 // favourable-entry band (timing context, not scored).
 function RangeStrip({ p }: { p: number | null | undefined }) {
-  if (typeof p !== 'number' || !Number.isFinite(p)) return <div className="text-[11px] text-slate-500">52-wk {DASH}</div>
+  const { m } = useI18n()
+  if (typeof p !== 'number' || !Number.isFinite(p))
+    return (
+      <div className="text-[11px] text-slate-500">
+        {m.wk52} {DASH}
+      </div>
+    )
   const tone: Tone = p <= 25 ? 'green' : p >= 75 ? 'red' : 'slate'
   const x = Math.max(0, Math.min(100, p))
   return (
-    <div className="flex items-center gap-2.5 text-[11px] text-slate-500" title="Position in the 52-week range">
-      <span className="shrink-0">52-wk</span>
+    <div className="flex items-center gap-2.5 text-[11px] text-slate-500" title={m.wk52Title}>
+      <span className="shrink-0">{m.wk52}</span>
       <span className="relative h-1 flex-1 rounded-full bg-white/[0.07]">
         <span className="absolute inset-y-0 left-0 rounded-full bg-white/[0.12]" style={{ width: `${x}%` }} />
         <span
@@ -35,9 +43,10 @@ function RangeStrip({ p }: { p: number | null | undefined }) {
 }
 
 function PickLine({ e }: { e: PickView }) {
+  const { m } = useI18n()
   return (
     <div className="tnum truncate">
-      Picked on {LEVEL_LABEL[e.level]} {e.date} at <span className="text-slate-300">{usd(e.price)}</span>
+      {m.pickedLine(e.level, e.date, <span className="text-slate-300">{usd(e.price)}</span>)}
       {e.change !== null ? <span className={`ml-1.5 font-medium ${signTone(e.change)}`}>{signedPct(e.change, 1)}</span> : null}
     </div>
   )
@@ -46,12 +55,13 @@ function PickLine({ e }: { e: PickView }) {
 // Overall is informational (not part of the pass gate), so it is drawn as a
 // quiet ring rather than a verdict chip.
 function OverallRing({ score }: { score: number | null | undefined }) {
+  const { m } = useI18n()
   const has = typeof score === 'number' && Number.isFinite(score)
   const r = 15
   const c = 2 * Math.PI * r
   const frac = has ? Math.max(0, Math.min(100, score)) / 100 : 0
   return (
-    <div className="relative grid size-11 shrink-0 place-items-center" title="Overall score (informational, not part of the pass gate)">
+    <div className="relative grid size-11 shrink-0 place-items-center" title={m.overallTitle}>
       <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90">
         <circle cx="18" cy="18" r={r} fill="none" strokeWidth="3" className="stroke-white/[0.07]" />
         {has ? (
@@ -75,10 +85,11 @@ function OverallRing({ score }: { score: number | null | undefined }) {
 // `minPass` is the visitor's pass floor: the card shows the picks at the levels
 // they filtered on, not the ones they filtered away.
 function StockCard({ row, minPass, onOpen }: { row: Row; minPass: number; onOpen: (ticker: string) => void }) {
-  const vs = verdicts(row)
+  const { m, lang } = useI18n()
+  const vs = verdicts(row, m)
   const c = combinedVerdict(row)
   const az = row.azqato
-  const picks = pickViews(row, minPass, new Date())
+  const picks = pickViews(row, minPass, new Date(), lang)
 
   return (
     <button
@@ -91,12 +102,12 @@ function StockCard({ row, minPass, onOpen }: { row: Row; minPass: number; onOpen
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className="font-mono text-lg font-bold tracking-tight text-slate-50">{row.Ticker}</span>
-            <span className="truncate text-xs text-slate-500">{row.Sector ?? ''}</span>
+            <span className="truncate text-xs text-slate-500">{row.Sector ? sectorLabel(row.Sector, lang) : ''}</span>
           </div>
           <div className="tnum mt-0.5 text-[13px] text-slate-400">
             <span className="text-slate-200">{usd(row.Price)}</span>
             <span className="mx-1.5 text-slate-600">·</span>
-            {capB(row.MarketCap_B)}
+            {capB(row.MarketCap_B, lang)}
           </div>
         </div>
         <OverallRing score={row.OverallScore} />
@@ -109,7 +120,7 @@ function StockCard({ row, minPass, onOpen }: { row: Row; minPass: number; onOpen
           return (
             <div
               key={v.system}
-              aria-label={`${v.system}: ${v.label}${v.pass ? ', passes' : ''}`}
+              aria-label={m.verdictAria(v.system, v.label, v.pass)}
               className={`flex flex-col items-start gap-1 rounded-xl px-2.5 py-2 ${
                 v.pass ? 'bg-emerald-400/[0.07]' : 'bg-white/[0.025]'
               }`}
@@ -127,12 +138,12 @@ function StockCard({ row, minPass, onOpen }: { row: Row; minPass: number; onOpen
 
       {/* Headline statistics */}
       <div className="grid grid-cols-3 gap-x-3 gap-y-2.5">
-        <Stat label="PEG" value={num(row.Lynch_PEG)} />
-        <Stat label="Fwd PEG" value={az ? num(azPegDisplay(az)) : DASH} />
-        <Stat label="Fwd EPS" value={signedPct(az?.epsFwd)} className={signTone(az?.epsFwd)} />
-        <Stat label="Graham disc" value={signedPct(row.Graham_Graham_Discount_Pct)} className={signTone(row.Graham_Graham_Discount_Pct)} />
-        <Stat label="Lynch disc" value={signedPct(row.Lynch_Lynch_Discount_Pct)} className={signTone(row.Lynch_Lynch_Discount_Pct)} />
-        <Stat label="Div yield" value={pct(row.DivYield_Pct)} />
+        <Stat label={m.stat.peg} value={num(row.Lynch_PEG)} />
+        <Stat label={m.stat.pegFwd} value={az ? num(azPegDisplay(az)) : DASH} />
+        <Stat label={m.stat.epsFwd} value={signedPct(az?.epsFwd)} className={signTone(az?.epsFwd)} />
+        <Stat label={m.stat.grahamDisc} value={signedPct(row.Graham_Graham_Discount_Pct)} className={signTone(row.Graham_Graham_Discount_Pct)} />
+        <Stat label={m.stat.lynchDisc} value={signedPct(row.Lynch_Lynch_Discount_Pct)} className={signTone(row.Lynch_Lynch_Discount_Pct)} />
+        <Stat label={m.stat.divYield} value={pct(row.DivYield_Pct)} />
       </div>
 
       {picks.length ? (
@@ -147,7 +158,7 @@ function StockCard({ row, minPass, onOpen }: { row: Row; minPass: number; onOpen
         <div className="min-w-0 flex-1">
           <RangeStrip p={az?.pos_52w_pct} />
         </div>
-        <span className={`tnum shrink-0 text-[11px] font-semibold ${TONE[c.tone].text}`}>{c.passCount}/{vs.length} screens</span>
+        <span className={`tnum shrink-0 text-[11px] font-semibold ${TONE[c.tone].text}`}>{m.screensCount(c.passCount, vs.length)}</span>
       </div>
     </button>
   )

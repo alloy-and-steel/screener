@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterRows, poolLabels, sortRows } from './filters'
+import { filterRows, poolNames, sortRows } from './filters'
 import type { Row } from './types'
 
 // Minimal rows: only the fields the filters/sorts read.
@@ -66,12 +66,17 @@ describe('filterRows', () => {
     expect(filterRows(rows, { minPass: 0, pool: null, query: 'aap' }).map((r) => r.Ticker)).toEqual(['AAPL'])
     expect(filterRows(rows, { minPass: 0, pool: null, query: 'defens' }).map((r) => r.Ticker)).toEqual(['KO'])
   })
+
+  it('finds a sector by its Chinese name too', () => {
+    expect(filterRows(rows, { minPass: 0, pool: null, query: '科技' }).map((r) => r.Ticker)).toEqual(['AAPL'])
+    expect(filterRows(rows, { minPass: 0, pool: null, query: '必需' }).map((r) => r.Ticker)).toEqual(['KO'])
+  })
 })
 
-describe('poolLabels', () => {
+describe('poolNames', () => {
   it('names Total US only for a stock that no curated pool holds', () => {
-    expect(poolLabels(row('AAPL', { Indexes: 'S&P500, Nasdaq100, TotalUS' }))).toEqual(['S&P 500', 'Nasdaq 100'])
-    expect(poolLabels(row('SMID', { Indexes: 'TotalUS' }))).toEqual(['Total US $1B+'])
-    expect(poolLabels(row('NONE', { Indexes: null }))).toEqual([])
+    expect(poolNames(row('AAPL', { Indexes: 'S&P500, Nasdaq100, TotalUS' }))).toEqual(['S&P500', 'Nasdaq100'])
+    expect(poolNames(row('SMID', { Indexes: 'TotalUS' }))).toEqual(['TotalUS'])
+    expect(poolNames(row('NONE', { Indexes: null }))).toEqual([])
   })
 })

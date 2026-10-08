@@ -27,16 +27,6 @@ export type AzqatoMetricKey =
 export const INDEX_NAMES = ['S&P500', 'Dow30', 'Nasdaq100', 'Growth100', 'Value100', 'Dividend100', 'TotalUS'] as const
 export type IndexName = (typeof INDEX_NAMES)[number]
 
-export const INDEX_LABEL: Record<IndexName, string> = {
-  'S&P500': 'S&P 500',
-  Dow30: 'Dow 30',
-  Nasdaq100: 'Nasdaq 100',
-  Growth100: 'Growth 100',
-  Value100: 'Value 100',
-  Dividend100: 'Dividend 100',
-  TotalUS: 'Total US $1B+',
-}
-
 export interface Azqato {
   score: number | null // 0-100; null when no metric was evaluable
   tier: AzqatoTier | null
