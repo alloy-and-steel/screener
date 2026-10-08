@@ -10,7 +10,7 @@ describe('dataNote', () => {
   it('translates each "; "-joined phrase, numbers included', () => {
     expect(dataNote('Non-positive EPS; Non-positive growth (-3.4%)', 'zh-TW')).toBe('EPS 非正值；成長率非正值（-3.4%）')
     expect(dataNote('WACC guardrail applied (5.10% to 7.25%)', 'zh-TW')).toBe('WACC 已套用下限（5.10% 調至 7.25%）')
-    expect(dataNote('Missing total debt, base FCFF', 'zh-TW')).toBe('缺少總負債、基期 FCFF')
+    expect(dataNote('Missing total debt, base FCFF', 'zh-TW')).toBe('缺少總債務、基期 FCFF')
   })
 
   it('leaves a phrase it does not know in English rather than dropping it', () => {

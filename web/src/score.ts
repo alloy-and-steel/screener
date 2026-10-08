@@ -104,7 +104,7 @@ export function azqatoVerdict(row: Row, m: Messages): Verdict {
   // `== null` also catches a stale published dataset (pre-tier shape, no
   // score/tier keys) — it renders N/A until the next Screen run, never crashes.
   if (!az || az.score == null || az.tier == null) {
-    return { ...base, label: NA_LABEL, tagline: m.noData, tone: 'slate', pass: false, drivers: [] }
+    return { ...base, label: statusLabel(m, NA_LABEL), tagline: m.noData, tone: 'slate', pass: false, drivers: [] }
   }
   return {
     ...base,
@@ -189,7 +189,7 @@ export function wealthmaticaVerdict(row: Row, m: Messages): Verdict {
   const wm = row.wealthmatica
   const base = { system: 'Wealthmatica', question: m.question.Wealthmatica } as const
   if (!wm || wm.pass === null || wm.pass === undefined) {
-    return { ...base, label: NA_LABEL, tagline: m.wmTooFew, tone: 'slate', pass: false, drivers: [] }
+    return { ...base, label: statusLabel(m, NA_LABEL), tagline: m.wmTooFew, tone: 'slate', pass: false, drivers: [] }
   }
   const pass = wealthmaticaPass(row)
   return {
@@ -233,7 +233,7 @@ export function verdictLines(system: SystemName, row: Row, m: Messages): Verdict
   if (system === 'Wealthmatica') {
     const v = wealthmaticaVerdict(row, m)
     const wm = row.wealthmatica
-    const count = v.label !== NA_LABEL && wm ? ` · ${wm.passed}/${wm.applicable}` : ''
+    const count = wm && wm.pass != null ? ` · ${wm.passed}/${wm.applicable}` : ''
     return [{ name: m.line.checklist, label: `${v.label}${count}`, tone: v.tone }]
   }
   if (system === 'Azqato') {
@@ -242,7 +242,7 @@ export function verdictLines(system: SystemName, row: Row, m: Messages): Verdict
     return [
       {
         name: m.line.tier,
-        label: scored ? TIER_LABEL[az.tier!] : NA_LABEL,
+        label: scored ? TIER_LABEL[az.tier!] : statusLabel(m, NA_LABEL),
         tone: scored ? TIER_TONE[az.tier!] : 'slate',
         colors: scored ? TIER_STYLE[az.tier!] : undefined,
       },
@@ -260,7 +260,7 @@ export function verdictLines(system: SystemName, row: Row, m: Messages): Verdict
     {
       name: m.line.defensive,
       // The meter that used to carry the 0-8 score is gone; the count rides on the label.
-      label: row.DefensiveLabel ? `${statusLabel(m, row.DefensiveLabel as string)}${typeof def === 'number' ? ` · ${def}/8` : ''}` : NA_LABEL,
+      label: row.DefensiveLabel ? `${statusLabel(m, row.DefensiveLabel as string)}${typeof def === 'number' ? ` · ${def}/8` : ''}` : statusLabel(m, NA_LABEL),
       tone: row.DefensiveLabel ? signalTone('DefensiveLabel', row.DefensiveLabel as string) : 'slate',
     },
   ]
@@ -270,7 +270,6 @@ export function verdicts(row: Row, m: Messages): Verdict[] {
   return [azqatoVerdict(row, m), lynchVerdict(row, m), grahamVerdict(row, m), wealthmaticaVerdict(row, m)]
 }
 
-export const SYSTEM_COUNT = PASSES.length
 
 export interface Combined {
   passCount: number

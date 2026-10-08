@@ -65,7 +65,7 @@ export default function Toasts({ pendingAt, onLoadPending, onDismissPending }: T
   })
 
   const pendingLabel = pendingAt
-    ? new Date(pendingAt).toLocaleString(m.lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+    ? new Date(pendingAt).toLocaleString(m.locale, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
     : ''
 
   return (

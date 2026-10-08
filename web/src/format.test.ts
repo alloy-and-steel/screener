@@ -11,7 +11,7 @@ describe('money magnitudes', () => {
     expect(compactUsd(2.0e9, 'en')).toBe('2.00B')
   })
 
-  it('uses 億 and 兆 in Chinese, at the same precision', () => {
+  it('uses 億 and 兆 in Chinese, to three significant digits', () => {
     expect(capB(4920, 'zh-TW')).toBe('$4.92兆')
     expect(capB(268, 'zh-TW')).toBe('$2680億')
     expect(capB(1.23, 'zh-TW')).toBe('$12.3億')

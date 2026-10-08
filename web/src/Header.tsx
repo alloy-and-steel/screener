@@ -69,11 +69,11 @@ function FreshnessChip({ generatedAt, checking, lastChecked, checkFailed, onChec
           <dl className="space-y-2">
             <div className="flex justify-between gap-3">
               <dt className="text-slate-400">{m.screened}</dt>
-              <dd className="tnum text-right text-slate-100">{f ? f.generatedAt.toLocaleString(m.lang, DATE_TIME) : '—'}</dd>
+              <dd className="tnum text-right text-slate-100">{f ? f.generatedAt.toLocaleString(m.locale, DATE_TIME) : '—'}</dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-slate-400">{m.nextScreen}</dt>
-              <dd className="tnum text-right text-slate-100">{nextScreenRun(now).toLocaleString(m.lang, DATE_TIME)}</dd>
+              <dd className="tnum text-right text-slate-100">{nextScreenRun(now).toLocaleString(m.locale, DATE_TIME)}</dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-slate-400">{m.lastChecked}</dt>

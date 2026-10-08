@@ -11,6 +11,8 @@ import type { AgeUnit } from './freshness'
 
 const en = {
   lang: 'en' as Lang,
+  // Dates and times: English mode keeps the browser's own date style.
+  locale: undefined as string | undefined,
 
   // App
   summary: (all: ReactNode, total: ReactNode, pool: string | null): ReactNode => (
@@ -201,16 +203,17 @@ const en = {
 }
 
 const LEVEL_EN: Record<PickLevel, string> = { 4: 'all 4 screens', 3: '3 screens', 2: '2 screens', 1: '1 screen' }
-const LEVEL_ZH: Record<PickLevel, string> = { 4: '全部 4 項', 3: '3 項', 2: '2 項', 1: '1 項' }
+const LEVEL_ZH: Record<PickLevel, string> = { 4: '通過全部 4 項', 3: '通過 3 項', 2: '通過 2 項', 1: '通過 1 項' }
 
 export type Messages = typeof en
 
 const zhTW: Messages = {
   lang: 'zh-TW',
+  locale: 'zh-TW',
 
   summary: (all, total, pool) => (
     <>
-      {pool ? `${pool} ` : ''}
+      {pool ? `${pool} 的 ` : ''}
       {total} 檔股票中，{all} 檔通過全部四項篩選
     </>
   ),
@@ -281,7 +284,7 @@ const zhTW: Messages = {
   wk52Title: '在 52 週區間中的位置',
   pickedLine: (level, date, price) => (
     <>
-      {LEVEL_ZH[level]}入選 {date}，{price}
+      {date} {LEVEL_ZH[level]}入選 · {price}
     </>
   ),
   overallTitle: '綜合分數（僅供參考，不計入篩選門檻）',
@@ -320,7 +323,7 @@ const zhTW: Messages = {
     lynchScore: 'Lynch 分數',
     peFwd: '預估本益比',
     cash: '現金',
-    debt: '負債',
+    debt: '債務',
     netCashCap: '淨現金／市值',
   },
 
@@ -348,20 +351,20 @@ const zhTW: Messages = {
     epsTTM: 'EPS 成長（近四季）',
     epsFwd: 'EPS 成長（預估）',
     pegFwd: '預估 PEG',
-    cashDebt: '現金對負債',
+    cashDebt: '現金對債務',
   },
   lynch: { pe: '本益比', peg: 'PEG', buyPrice: '買進價', discount: '折價' },
   graham: { fairValue: '合理價值', discount: '折價' },
   wm: {
     revGrowth: '營收成長',
     revAccel: '成長率較前一年',
-    fcf: '自由現金流率',
+    fcf: '自由現金流利潤率',
     fcfSbc: '自由現金流 − 股票酬勞',
     shareChange: '股數變化',
     grossMargin: '毛利率',
     opMargin: '營業利益率',
     eps: 'EPS',
-    cashDebt: '現金 − 負債',
+    cashDebt: '現金 − 債務',
   },
   pts: (s) => `${s} 個百分點`,
   wmPass: '持續成長、產生現金、未稀釋股權',
@@ -385,7 +388,8 @@ const zhTW: Messages = {
     Watch: '觀察',
     Avoid: '避開',
     Pass: '通過',
-    Borderline: '邊緣',
+    Borderline: '臨界',
+    'N/A': '不適用',
     Fail: '未通過',
     Cheap: '便宜',
     Reasonable: '合理',

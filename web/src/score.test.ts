@@ -70,8 +70,14 @@ describe('in Chinese', () => {
     const r = { Ticker: 'X', wealthmatica: WM, Lynch_Lynch_Status: 'Strong Buy' } as Row
     expect(verdictLines('Wealthmatica', r, ZH)[0].label).toBe('通過 · 5/6')
     expect(verdictLines('Lynch', r, ZH)[0].label).toBe('強力買進')
-    expect(wealthmaticaVerdict(r, ZH).drivers.at(-1)).toEqual({ label: '現金 − 負債', value: '−$20億', tone: 'red' })
+    expect(wealthmaticaVerdict(r, ZH).drivers.at(-1)).toEqual({ label: '現金 − 債務', value: '−$20億', tone: 'red' })
     expect(combinedVerdict(r).passCount).toBe(2)
+  })
+
+  it('says N/A in Chinese, still without a count when the checklist could not judge', () => {
+    const r = { Ticker: 'X', wealthmatica: { ...WM, pass: null } } as Row
+    expect(verdictLines('Wealthmatica', r, ZH)[0].label).toBe('不適用')
+    expect(verdictLines('Graham', r, ZH).map((l) => l.label)).toEqual(['不適用', '不適用'])
   })
 })
 

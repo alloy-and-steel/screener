@@ -117,11 +117,11 @@ function BodyZh() {
 
       <Block title="Azqato — 成長性相對排名" dot>
         即時運作的 azqato 篩選器所用的相對百分位模型。六項指標分屬四個權重相同的支柱 &mdash;{' '}
-        <strong className="text-slate-100">TTM 25%</strong>（營收成長 10、EPS 成長 15）、
-        <strong className="text-slate-100">FWD 25%</strong>（營收成長 10、EPS 成長 15）&mdash;
+        <strong className="text-slate-100">近四季 (TTM) 25%</strong>（營收成長 10、EPS 成長 15）、
+        <strong className="text-slate-100">預估 (FWD) 25%</strong>（營收成長 10、EPS 成長 15）&mdash;
         已實現的成果與分析師預估同等計分，且兩者中 EPS 成長的權重都高於營收成長 &mdash;{' '}
         <strong className="text-slate-100">估值 25%</strong>（預估 PEG）、
-        <strong className="text-slate-100">資產負債表 25%</strong>（現金對負債）。每項指標依其在所有受篩股票中的百分位排名得分：
+        <strong className="text-slate-100">資產負債表 25%</strong>（現金對債務）。每項指標依其在所有受篩股票中的百分位排名得分：
         只有前 22% 拿滿分，後 22% 得零分，缺少資料的指標直接以零分計。分數對應排名等級 &mdash; S = 前 10%、A = 次 10%、B =
         20&ndash;50%、C = 50&ndash;75%、F = 後 25%；滿分 100 為 S+。等級達 A 以上（約前 20%）即
         <strong className="text-slate-100">通過</strong>。預估數字為本會計年度的分析師共識；虧損公司在估值項排名墊底，而非被剔除。
@@ -140,14 +140,14 @@ function BodyZh() {
         Benjamin Graham 兩項互不相干的檢查。<strong className="text-slate-100">估值</strong>：他修訂後的內在價值公式 &mdash;
         盈餘 &times;（8.5 + 2 &times; 成長率），並以當前 AAA 公司債殖利率調整 &mdash; 依安全邊際評為
         深度買進／買進／觀察／避開。<strong className="text-slate-100">防禦性</strong>：八項資產負債表條件（規模、流動比率 &ge;
-        2、長期負債 &le; 營運資金、連續 10 年 EPS 為正、連續 20 年未中斷配息、10 年 EPS 成長 33%、本益比 &le; 15、股價淨值比
-        &le; 1.5）&mdash; 評為 通過／邊緣／未通過。10 年 EPS 條件需要完整十年的財報，免費資料來源很少提供，因此能通過的股票不多。
+        2、長期債務 &le; 營運資金、連續 10 年 EPS 為正、連續 20 年未中斷配息、10 年 EPS 成長 33%、本益比 &le; 15、股價淨值比
+        &le; 1.5）&mdash; 評為 通過／臨界／未通過。10 年 EPS 條件需要完整十年的財報，免費資料來源很少提供，因此能通過的股票不多。
       </Block>
 
       <Block title="Wealthmatica — 成長品質檢查表" dot>
         Wealthmatica 電子報在每篇個股報告中都會檢視的財務檢查表，在此改為機械化判定。根據最近兩到三年的年度財報做九項檢查，
         每項都著眼於企業的<em>趨勢方向</em>：營收成長 &ge; 15%；成長加速（或 &ge; 25%）；自由現金流為正且上升；扣除股票酬勞後自由現金流仍為正；
-        股數每年增加不超過 2%；毛利率下降不超過 1 個百分點；營業利益率上升；EPS 上升（或虧損收斂）；現金至少等於負債。九項中通過 7 項即
+        股數每年增加不超過 2%；毛利率下降不超過 1 個百分點；營業利益率上升；EPS 上升（或虧損收斂）；現金至少等於債務。九項中通過 7 項即
         <strong className="text-slate-100">通過</strong>。財報無法回答的檢查 &mdash; 例如銀行沒有毛利率 &mdash;
         會略過而非判為未通過，門檻依適用的檢查數等比調整（6 項中 5 項、7 項中 6 項、8 項中 7 項）；適用少於 6 項則為
         N/A。電子報並未公布門檻，以上數值為本篩選器自訂。

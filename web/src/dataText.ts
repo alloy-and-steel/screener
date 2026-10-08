@@ -32,7 +32,7 @@ export function sectorMatches(sector: string, query: string): boolean {
 const MISSING_INPUT_ZH: Record<string, string> = {
   'risk-free rate': '無風險利率',
   'market cap': '市值',
-  'total debt': '總負債',
+  'total debt': '總債務',
   cash: '現金',
   'diluted shares': '稀釋後股數',
   'base FCFF': '基期 FCFF',
