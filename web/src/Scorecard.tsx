@@ -6,6 +6,7 @@ import { poolNames } from './filters'
 import { LEVELS, pickViews } from './selection'
 import { dataNote, sectorLabel } from './dataText'
 import { useI18n } from './i18n'
+import { fairPrices } from './fairPrice'
 import { TIER_LABEL, TIER_TONE, azNetCashMc, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
@@ -151,6 +152,38 @@ function OverallPanel({ row }: { row: Row }) {
           {dataNote(row.DCF_Data_Warning, lang)}
         </p>
       ) : null}
+    </div>
+  )
+}
+
+// What each method says the stock is worth next to today's price. Kept as three
+// numbers on purpose (see fairPrice.ts): the spread between them is the signal.
+function FairPricePanel({ row }: { row: Row }) {
+  const { m } = useI18n()
+  return (
+    <div className="mt-3 rounded-2xl bg-surface-1 p-4 ring-1 ring-inset ring-white/[0.07]">
+      <div className="mb-3">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{m.fairPrice}</div>
+        <div className="text-xs text-slate-500">{m.fairPriceSub}</div>
+      </div>
+      <dl className="space-y-1.5">
+        <div className="flex items-baseline justify-between gap-3 text-sm">
+          <dt className="text-slate-400">{m.today}</dt>
+          <dd className="tnum text-slate-100">{usd(row.Price)}</dd>
+        </div>
+        {fairPrices(row).map((f) => (
+          <div key={f.method} className="flex items-baseline justify-between gap-3 text-sm">
+            <dt className="text-slate-400">
+              {f.method} <span className="text-xs text-slate-500">{m.fairHint[f.method]}</span>
+            </dt>
+            <dd className="tnum text-right text-slate-100">
+              {usd(f.value)}
+              {f.vsPrice !== null ? <span className={`ml-2 font-medium ${signTone(f.vsPrice)}`}>{signedPct(f.vsPrice, 0)}</span> : null}
+              {f.range ? <div className="text-xs text-slate-500">{m.dcfRange(usd(f.range[0]), usd(f.range[1]))}</div> : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </div>
   )
 }
@@ -307,6 +340,7 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
                   <Card key={v.system} v={v} row={row} />
                 ))}
               </div>
+              <FairPricePanel row={row} />
               <PicksPanel row={row} />
               <OverallPanel row={row} />
               <FundamentalsPanel row={row} />

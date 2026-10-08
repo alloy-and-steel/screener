@@ -86,7 +86,7 @@ function BodyEn() {
         Each card shows the four verdicts (a green-tinted tile is a pass), the informational Overall score in the ring,
         and the headline numbers: PEG, forward PEG, forward EPS growth, the Graham and Lynch discounts to fair value, dividend yield and
         where the price sits in its 52-week range. Tap a card (or type a ticker and press Enter) for the full scorecard &mdash; every
-        verdict, its drivers, an RSI gauge, the per-pool Azqato ranks and the raw fundamentals behind them. Tighten the filter to{' '}
+        verdict, its drivers, the fair price by each of Lynch, Graham and a DCF beside today&rsquo;s price (shown separately, never averaged: they often disagree by 2&times; or more), an RSI gauge, the per-pool Azqato ranks and the raw fundamentals behind them. Tighten the filter to{' '}
         <em>All 4</em>, or relax it to see names that clear 2, 1, or any; narrow to one pool with the pool picker (<em>All pools</em>). The dot at the top
         shows how old the data is; the app checks for a new screen in the background and offers it when one lands, and keeps working
         offline once installed. A stock is <em>picked</em> at each level the first time it clears exactly 1, 2, 3 or all 4 screens:
@@ -168,7 +168,7 @@ function BodyZh() {
       <Block title="閱讀篩選結果">
         每張卡片顯示四個評等（綠色底色代表通過）、圓環中僅供參考的綜合分數，以及主要數字：PEG、預估 PEG、預估 EPS 成長、Graham 與
         Lynch 相對合理價值的折價、殖利率，以及股價在 52 週區間中的位置。點選卡片（或輸入代號後按 Enter）可開啟完整評分卡 &mdash;
-        每個評等及其驅動因素、RSI 量表、Azqato 在各股池的排名，以及背後的原始基本面數據。篩選器可收緊到<em>全 4</em>，
+        每個評等及其驅動因素、Lynch、Graham 與 DCF 各自估出的合理價及目前股價（分開列出、從不取平均：三者常相差兩倍以上）、RSI 量表、Azqato 在各股池的排名，以及背後的原始基本面數據。篩選器可收緊到<em>全 4</em>，
         或放寬為通過 2 項、1 項或不限；用股池選單可縮小到單一股池（<em>全部股池</em>）。頂端的圓點顯示資料新舊；App
         會在背景檢查新的篩選結果並在出爐時提示，安裝後也能離線使用。股票第一次恰好通過 1、2、3 或全部 4 項篩選時，即在該層級
         <em>入選</em>：卡片顯示您所篩選層級的入選日期、價格及其後漲跌；評分卡則列出全部四個層級。之後的入選不會取代較早的紀錄。

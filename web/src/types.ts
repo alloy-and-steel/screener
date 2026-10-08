@@ -68,6 +68,7 @@ export interface Row {
   Lynch_PEGY?: number | null
   Lynch_Lynch_Score?: number | null
   Lynch_Lynch_Category?: string | null
+  Lynch_FV_GplusD?: number | null
   Lynch_Lynch_BuyPrice?: number | null
   Lynch_LV_Ratio?: number | null
   Lynch_Lynch_Discount_Pct?: number | null
