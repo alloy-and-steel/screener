@@ -43,8 +43,8 @@ Post-publication decay uses four sources:
   better-known name and costs least to build, because `_compute_ev_ebit` already exists.
   Neither is in the gate today. The Overall score's Value and Quality pillars use
   overlapping inputs, but Overall is informational only.
-- **One finding about existing code:** `_compute_piotroski` departs from Piotroski's
-  paper in four ways (see [Piotroski](#piotroski-f-score-jar-2000--already-implemented)).
+- **One finding about existing code:** `_compute_piotroski` departed from Piotroski's
+  paper; fixed 2026-10-09 (see [Piotroski](#piotroski-f-score-jar-2000--already-implemented)).
 
 ## Summary
 
@@ -258,16 +258,14 @@ a long-only pass/fail screen.
 - **Decay:** CZ calc 1.05 in sample, 0.59 (t 1.2) after 2000; HXZ all-stock 0.29
   (t 1.06).
 
-`_compute_piotroski` (`stock_screener.py:1295`) differs from the paper:
-
-- It scores every name, not only high-B/M ones.
-- ΔROA and asset turnover use end-of-year assets, not beginning-of-year.
-- The leverage test divides this year's LTD by average assets but last year's by
-  year-end assets.
-- It returns a partial count when some signals are missing. The paper required complete
-  data.
-
-These affect only the Overall score's Safety pillar, which is informational, not the gate.
+`_compute_piotroski` was brought in line with the paper on 2026-10-09:
+beginning-of-year assets for ROA, CFO and turnover; long-term debt over average assets
+in both years; income before discontinued operations; and None unless all nine signals
+are computable. Before that it divided by year-end assets, mixed denominators in the
+leverage test, and scored a partial count out of 9 (banks scored 2–5 for missing lines).
+Still approximate, and said so in its docstring: equity issuance is read from the share
+count, long-term debt excludes its current portion, and every name is scored, not only
+high-B/M ones.
 
 ## Practitioners
 
@@ -437,5 +435,4 @@ is the checklist from the last time a system was added.
    - Fisher and Templeton: qualitative.
 4. **Cheap informational additions, not gates:** Beneish M-score as a red flag beside
    `Trap_Reasons`, and Neff's total return ratio as a Scorecard line.
-5. **Piotroski:** align `_compute_piotroski`'s denominators and missing-data handling with
-   the paper. This is a separate fix.
+5. **Piotroski:** done 2026-10-09 — `_compute_piotroski` now follows the paper.

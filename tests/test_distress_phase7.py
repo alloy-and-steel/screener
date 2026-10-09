@@ -101,191 +101,121 @@ def test_yf_row_prev_none_when_no_label_matches():
 
 
 # ── _compute_piotroski ───────────────────────────────────────────────────────
+# Definitions are Piotroski (2000), JAR 38 supplement, §2.3 and table 1 notes:
+# ROA, CFO and asset turnover are scaled by BEGINNING-of-year total assets, so
+# year t uses TA(t-1) and year t-1 uses TA(t-2) -- three balance sheets.
+# Leverage is long-term debt over AVERAGE total assets, in both years. The
+# paper scores only firms with every input present; a missing one is None.
+
+_NAN = float("nan")
 
 
-def test_piotroski_all_pass_returns_9():
-    """All 9 criteria pass -> F-Score = 9 (hand-verified per criterion)."""
-    inc_curr = _make_df({"Net Income": (1_000, 800), "Gross Profit": (4_000, 3_200), "Total Revenue": (10_000, 9_000), "EBIT": (1_500, 1_200)})
-    inc_prev = _make_df({"Net Income": (800, 600), "Gross Profit": (3_200, 2_800), "Total Revenue": (9_000, 8_000), "EBIT": (1_200, 1_000)})
-    bs_curr = _make_df(
-        {
-            "Total Assets": (20_000, 18_000),
-            "Total Current Assets": (8_000, 7_000),
-            "Total Current Liabilities": (3_000, 3_500),
-            "Long Term Debt": (2_000, 2_500),
-            "Stockholders Equity": (10_000, 9_000),
-            "Retained Earnings": (5_000, 4_000),
-            "Total Liabilities Net Minority Interest": (7_000, 7_500),
-            "Ordinary Shares Number": (900, 1_000),
-        }
-    )
-    bs_prev = _make_df(
-        {
-            "Total Assets": (25_000, 23_000),
-            "Total Current Assets": (7_000, 6_000),
-            "Total Current Liabilities": (3_500, 4_000),
-            "Long Term Debt": (2_500, 3_000),
-            "Stockholders Equity": (9_000, 8_000),
-            "Retained Earnings": (4_000, 3_000),
-            "Total Liabilities Net Minority Interest": (7_500, 8_000),
-            "Ordinary Shares Number": (1_000, 1_100),
-        }
-    )
-    cf_curr = _make_df({"Operating Cash Flow": (2_000, 1_800)})
-    cf_prev = _make_df({"Operating Cash Flow": (1_800, 1_600)})
+def _pio_frames(ta=(30_000, 15_000, 15_000), ni=(1_200, 1_000), cfo=1_500,
+                rev=(12_000, 10_000), gp=(4_900, 4_000), ca=(6_000, 5_000),
+                cl=(3_000, 2_600), ltd=(2_900, 2_000), shares=(1_000, 1_000),
+                drop=(), ni_label="Net Income", extra_inc=None):
+    """Newest-first yfinance-shaped frames (t, t-1, t-2). Two-year rows are NaN at t-2."""
+    cols = ("2024", "2023", "2022")
+    inc = {ni_label: (*ni, _NAN), "Total Revenue": (*rev, _NAN), "Gross Profit": (*gp, _NAN)}
+    inc.update(extra_inc or {})
+    bs = {
+        "Total Assets": ta,
+        "Current Assets": (*ca, _NAN),
+        "Current Liabilities": (*cl, _NAN),
+        "Long Term Debt": (*ltd, _NAN),
+        "Ordinary Shares Number": (*shares, _NAN),
+    }
+    cf = {"Operating Cash Flow": (cfo, _NAN, _NAN)}
+    frames = []
+    for rows in (inc, bs, cf):
+        rows = {k: v for k, v in rows.items() if k not in drop}
+        frames.append(_make_df(rows, cols=cols))
+    return tuple(frames)
 
-    result = _compute_piotroski(inc_curr, inc_prev, bs_curr, bs_prev, cf_curr, cf_prev)
-    assert result == 9, f"expected 9 (all pass), got {result}"
+
+def test_piotroski_uses_beginning_of_year_assets():
+    """
+    Assets double in year t (15,000 -> 30,000). On beginning-of-year assets:
+    F1 ROA 1,200/15,000 = .080 > 0                       1
+    F2 CFO 1,500 > 0                                     1
+    F3 ROA .080 vs 1,000/15,000 = .067                   1  (year-end assets: .040, fails)
+    F4 CFO/TA 1,500/15,000 = .100 > ROA .080             1
+    F5 LTD/avg TA 2,900/22,500 = .129 < 2,000/15,000 = .133  1
+    F6 current ratio 2.00 > 1.92                         1
+    F7 shares 1,000 <= 1,000                             1
+    F8 gross margin .408 > .400                          1
+    F9 turnover 12,000/15,000 = .80 > 10,000/15,000 = .67    1  (year-end: .40, fails)
+    """
+    inc, bs, cf = _pio_frames()
+    result = _compute_piotroski(inc, bs, cf)
+    assert result == 9, f"expected 9, got {result}"
+
+
+def test_piotroski_leverage_uses_average_assets_in_both_years():
+    """
+    TA 20,000 / 20,000 / 10,000; LTD 3,000 / 2,400.
+    F5 3,000/avg(20,000, 20,000) = .150 < 2,400/avg(20,000, 10,000) = .160 -> fell, 1.
+    (Dividing last year by its year-end assets, .120, reads it as a rise.)
+    F3 ROA 1,200/20,000 = .060 vs 1,000/10,000 = .100 -> 0.
+    F9 turnover 12,000/20,000 = .60 vs 10,000/10,000 = 1.00 -> 0.
+    F1 F2 F4 F6 F7 F8 pass as in the fixture above. Total 7.
+    """
+    inc, bs, cf = _pio_frames(ta=(20_000, 20_000, 10_000), ltd=(3_000, 2_400))
+    result = _compute_piotroski(inc, bs, cf)
+    assert result == 7, f"expected 7, got {result}"
 
 
 def test_piotroski_all_fail_returns_0():
-    """All 9 criteria fail -> F-Score = 0 (hand-verified per criterion)."""
-    inc_curr = _make_df({"Net Income": (-100, -50), "Gross Profit": (1_000, 1_100), "Total Revenue": (9_000, 8_500), "EBIT": (-50, 50)})
-    inc_prev = _make_df({"Net Income": (-50, -30), "Gross Profit": (1_200, 1_100), "Total Revenue": (9_000, 8_500), "EBIT": (50, 80)})
-    bs_curr = _make_df(
-        {
-            "Total Assets": (20_000, 19_000),
-            "Total Current Assets": (3_000, 3_200),
-            "Total Current Liabilities": (4_000, 3_500),
-            "Long Term Debt": (3_000, 2_500),
-            "Stockholders Equity": (8_000, 9_000),
-            "Retained Earnings": (2_000, 3_000),
-            "Total Liabilities Net Minority Interest": (10_000, 9_000),
-            "Ordinary Shares Number": (1_200, 1_000),
-        }
+    """
+    TA 20,000 / 19,000 / 18,000.
+    F1 ROA -100/19,000 < 0; F2 CFO -200; F3 -.0053 < -50/18,000 = -.0028;
+    F4 CFO/TA -.0105 < ROA -.0053; F5 3,000/19,500 = .154 > 2,500/18,500 = .135;
+    F6 .75 < .91; F7 shares 1,200 > 1,000; F8 .111 < .133; F9 .474 < .500.
+    """
+    inc, bs, cf = _pio_frames(
+        ta=(20_000, 19_000, 18_000), ni=(-100, -50), cfo=-200, rev=(9_000, 9_000),
+        gp=(1_000, 1_200), ca=(3_000, 3_200), cl=(4_000, 3_500), ltd=(3_000, 2_500),
+        shares=(1_200, 1_000),
     )
-    bs_prev = _make_df(
-        {
-            "Total Assets": (19_000, 18_000),
-            "Total Current Assets": (3_200, 3_000),
-            "Total Current Liabilities": (3_500, 3_200),
-            "Long Term Debt": (2_500, 2_000),
-            "Stockholders Equity": (9_000, 8_500),
-            "Retained Earnings": (3_000, 2_500),
-            "Total Liabilities Net Minority Interest": (9_000, 8_500),
-            "Ordinary Shares Number": (1_000, 900),
-        }
-    )
-    cf_curr = _make_df({"Operating Cash Flow": (-200, 100)})
-    cf_prev = _make_df({"Operating Cash Flow": (100, 90)})
+    result = _compute_piotroski(inc, bs, cf)
+    assert result == 0, f"expected 0, got {result}"
 
-    result = _compute_piotroski(inc_curr, inc_prev, bs_curr, bs_prev, cf_curr, cf_prev)
-    assert result == 0, f"expected 0 (all fail), got {result}"
+
+def test_piotroski_none_when_any_signal_lacks_an_input():
+    """A bank-shaped statement set (no gross profit, no current assets) has no
+    F-Score. Scoring the signals that remain out of 9 would read as a weak firm."""
+    for missing in ("Gross Profit", "Current Assets", "Long Term Debt", "Ordinary Shares Number", "Operating Cash Flow"):
+        inc, bs, cf = _pio_frames(drop=(missing,))
+        result = _compute_piotroski(inc, bs, cf)
+        assert result is None, f"expected None without {missing!r}, got {result}"
+
+
+def test_piotroski_none_with_only_two_balance_sheets():
+    """ΔROA needs total assets at the start of the prior year: three balance sheets."""
+    inc, bs, cf = _pio_frames()
+    result = _compute_piotroski(inc, bs.iloc[:, :2], cf)
+    assert result is None, f"expected None with two balance sheets, got {result}"
 
 
 def test_piotroski_none_when_no_statements():
-    result = _compute_piotroski(None, None, None, None, None, None)
+    result = _compute_piotroski(None, None, None)
     assert result is None, f"expected None, got {result}"
 
 
-def test_piotroski_returns_none_when_only_single_year_criteria_available():
-    """
-    When prior-year DataFrames are entirely None, only the 3 always-available
-    single-year criteria (F1, F2, F4) can be evaluated (criteria_counted == 3).
-    _compute_piotroski returns None instead of a misleadingly low raw score,
-    routing to the D-04 neutral-50 Safety-pillar fallback.
-    """
-    inc_curr = _make_df({"Net Income": (1_000, 800), "Gross Profit": (4_000, 3_200), "Total Revenue": (10_000, 9_000)})
-    bs_curr = _make_df(
-        {
-            "Total Assets": (20_000, 18_000),
-            "Total Current Assets": (8_000, 7_000),
-            "Total Current Liabilities": (3_000, 3_500),
-            "Long Term Debt": (2_000, 2_500),
-            "Stockholders Equity": (10_000, 9_000),
-            "Retained Earnings": (5_000, 4_000),
-            "Total Liabilities Net Minority Interest": (7_000, 7_500),
-            "Ordinary Shares Number": (900, 1_000),
-        }
+def test_piotroski_roa_excludes_discontinued_operations():
+    """The paper's ROA is income before extraordinary items (Compustat IB), which
+    also excludes discontinued operations. A gain on a sold division makes
+    'Net Income' positive while continuing operations lost money. Flat assets
+    (15,000) and LTD 1,900 / 2,000 make every other signal pass: on 'Net Income'
+    (1,200) this scores 9; on continuing operations (-300) F1 and F3 fail -> 7."""
+    inc, bs, cf = _pio_frames(
+        ta=(15_000, 15_000, 15_000), ltd=(1_900, 2_000),
+        ni_label="Net Income From Continuing Operation Net Minority Interest",
+        ni=(-300, 1_000),
+        extra_inc={"Net Income": (1_200, 1_000, _NAN)},
     )
-    cf_curr = _make_df({"Operating Cash Flow": (2_000, 1_800)})
-
-    result = _compute_piotroski(inc_curr, None, bs_curr, None, cf_curr, None)
-    assert result is None, f"expected None (criteria_counted==3, at-or-below threshold), got {result}"
-
-
-def test_piotroski_returns_score_when_one_comparison_criterion_available():
-    """
-    Boundary case: with a single comparison criterion available in addition to
-    the 3 single-year criteria (criteria_counted == 4), _compute_piotroski must
-    return a real int score, not None.
-    """
-    inc_curr = _make_df({"Net Income": (1_000, 800), "Gross Profit": (4_000, 3_200), "Total Revenue": (10_000, 9_000)})
-    bs_curr = _make_df(
-        {
-            "Total Assets": (20_000, 18_000),
-            "Total Current Assets": (8_000, 7_000),
-            "Total Current Liabilities": (3_000, 3_500),
-            "Long Term Debt": (2_000, 2_500),
-            "Stockholders Equity": (10_000, 9_000),
-            "Retained Earnings": (5_000, 4_000),
-            "Total Liabilities Net Minority Interest": (7_000, 7_500),
-            "Ordinary Shares Number": (900, 1_000),
-        }
-    )
-    bs_prev = _make_df({"Ordinary Shares Number": (1_000, 1_100)})
-    cf_curr = _make_df({"Operating Cash Flow": (2_000, 1_800)})
-
-    result = _compute_piotroski(inc_curr, None, bs_curr, bs_prev, cf_curr, None)
-    assert result is not None, "expected an int when 4 criteria (F1/F2/F4/F7) are evaluable"
-    assert 0 <= result <= 4, f"expected 0-4 (F1/F2/F4/F7 count), got {result}"
-
-
-def test_piotroski_f5_fails_safe_on_missing_ltd_curr():
-    """
-    F5 ('leverage decreased') must NOT award its point when current-year
-    long-term-debt cannot be located. A fixture with prior-year LTD present but
-    current-year LTD ABSENT must score exactly ONE point lower than an
-    otherwise-identical fixture where current-year LTD IS present and passes.
-    """
-    inc_curr = _make_income_curr()
-    inc_prev = _make_income_curr(net_income=800, gross_profit=3_200, revenue=9_000, ebit=1_200)
-    cf_curr = _make_cashflow_curr()
-    cf_prev = _make_cashflow_curr(ocf=1_800)
-
-    bs_prev = _make_df(
-        {
-            "Total Assets": (25_000, 23_000),
-            "Total Current Assets": (7_000, 6_000),
-            "Total Current Liabilities": (3_500, 4_000),
-            "Long Term Debt": (2_500, 3_000),
-            "Stockholders Equity": (9_000, 8_000),
-            "Retained Earnings": (4_000, 3_000),
-            "Total Liabilities Net Minority Interest": (7_500, 8_000),
-            "Ordinary Shares Number": (1_000, 1_100),
-        }
-    )
-    bs_curr_missing_ltd = _make_df(
-        {
-            "Total Assets": (20_000, 18_000),
-            "Total Current Assets": (8_000, 7_000),
-            "Total Current Liabilities": (3_000, 3_500),
-            "Stockholders Equity": (10_000, 9_000),
-            "Retained Earnings": (5_000, 4_000),
-            "Total Liabilities Net Minority Interest": (7_000, 7_500),
-            "Ordinary Shares Number": (900, 1_000),
-        }
-    )
-    bs_curr_present_ltd = _make_df(
-        {
-            "Total Assets": (20_000, 18_000),
-            "Total Current Assets": (8_000, 7_000),
-            "Total Current Liabilities": (3_000, 3_500),
-            "Long Term Debt": (2_000, 2_500),
-            "Stockholders Equity": (10_000, 9_000),
-            "Retained Earnings": (5_000, 4_000),
-            "Total Liabilities Net Minority Interest": (7_000, 7_500),
-            "Ordinary Shares Number": (900, 1_000),
-        }
-    )
-
-    score_missing = _compute_piotroski(inc_curr, inc_prev, bs_curr_missing_ltd, bs_prev, cf_curr, cf_prev)
-    score_present = _compute_piotroski(inc_curr, inc_prev, bs_curr_present_ltd, bs_prev, cf_curr, cf_prev)
-
-    assert score_missing is not None and score_present is not None
-    assert score_present == score_missing + 1, (
-        f"expected present-LTD score ({score_present}) to be exactly 1 higher than missing-LTD score ({score_missing})"
-    )
+    result = _compute_piotroski(inc, bs, cf)
+    assert result == 7, f"expected 7, got {result}"
 
 
 # ── _compute_altman_z ────────────────────────────────────────────────────────
@@ -614,12 +544,13 @@ def run_all():
         test_yf_row_prev_none_on_none_df,
         test_yf_row_prev_none_on_empty_df,
         test_yf_row_prev_none_when_no_label_matches,
-        test_piotroski_all_pass_returns_9,
+        test_piotroski_uses_beginning_of_year_assets,
+        test_piotroski_leverage_uses_average_assets_in_both_years,
         test_piotroski_all_fail_returns_0,
+        test_piotroski_none_when_any_signal_lacks_an_input,
+        test_piotroski_none_with_only_two_balance_sheets,
         test_piotroski_none_when_no_statements,
-        test_piotroski_returns_none_when_only_single_year_criteria_available,
-        test_piotroski_returns_score_when_one_comparison_criterion_available,
-        test_piotroski_f5_fails_safe_on_missing_ltd_curr,
+        test_piotroski_roa_excludes_discontinued_operations,
         test_altman_z_known_fixture,
         test_altman_z_none_when_total_assets_zero,
         test_altman_z_none_when_total_liabilities_zero,

@@ -1085,7 +1085,12 @@ SHARES_LABELS = ["Ordinary Shares Number", "Share Issued", "Common Stock Shares 
 DILUTED_SHARES_LABELS = ["Diluted Average Shares", "Diluted Average Shares Outstanding"]
 
 # ── Phase 7 yfinance candidate label lists ─────────────────────────────────
-NET_INCOME_LABELS = ["Net Income", "Net Income Common Stockholders", "Net Income Including Noncontrolling Interests"]
+# Piotroski's ROA is income before extraordinary items (Compustat IB), which
+# also excludes discontinued operations; fall back to total net income.
+NET_INCOME_LABELS = [
+    "Net Income From Continuing Operation Net Minority Interest",
+    "Net Income", "Net Income Common Stockholders", "Net Income Including Noncontrolling Interests",
+]
 TOTAL_ASSETS_LABELS = ["Total Assets"]
 GROSS_PROFIT_LABELS = ["Gross Profit"]
 REVENUE_LABELS = ["Total Revenue", "Revenue", "Operating Revenue"]
@@ -1292,124 +1297,72 @@ def _compute_shareholder_yield(div_yield, shares_now, shares_prev) -> tuple:
     return (total, partial_flag)
 
 
-def _compute_piotroski(inc_curr, inc_prev, bs_curr, bs_prev, cf_curr, cf_prev) -> int | None:
+def _compute_piotroski(inc_df, bs_df, cf_df) -> int | None:
     """
-    Piotroski F-Score (0-9) from two years of statement DataFrames (newest-first
-    columns; caller passes curr/prev split via columns[0]/prior-frame columns[0]).
-    None when all current-year statements are None. Missing prior-year data skips
-    (not fails) the affected 2-year comparison criterion. Returns None (routes to
-    the D-04 neutral-50 Safety fallback) when 3 or fewer criteria were evaluable —
-    a raw score out of 9 in that case would unfairly penalize thin-history/IPO tickers.
-    """
-    if inc_curr is None and bs_curr is None and cf_curr is None:
-        return None
+    Piotroski F-Score (0-9) as defined in Piotroski (2000), "Value Investing",
+    JAR 38 supplement, section 2.3 and table 1 notes. Takes the newest-first
+    annual frames whole: column 0 is year t, column 1 is t-1, and the balance
+    sheet's column 2 is t-2.
 
-    def _get(df, labels):
-        if df is None or df.empty or df.shape[1] < 1:
+    - ROA, CFO and asset turnover are scaled by BEGINNING-of-year total assets,
+      so year t divides by TA(t-1) and year t-1 by TA(t-2).
+    - Leverage is long-term debt over AVERAGE total assets, in both years.
+    - Net income is before discontinued operations where yfinance reports it,
+      the closest row to the paper's "before extraordinary items".
+
+    Returns None unless every one of the nine signals can be computed, as in
+    the paper -- a partial count read out of 9 would mark a firm weak for
+    missing a statement line (banks have no gross profit or current assets).
+    None routes to the neutral-50 Safety fallback in overall_score.
+
+    Kept from the paper only approximately:
+    - EQ_OFFER is "share count did not rise"; buybacks can mask an issuance.
+    - Long-term debt excludes its current portion; yfinance doesn't split it
+      out of "Current Debt", which also holds commercial paper.
+    - Every name is scored, not only the high book-to-market quintile the
+      paper studied: here the score is a health signal, not a return bet.
+    """
+    def _get(df, labels, col):
+        if df is None or df.empty or df.shape[1] <= col:
             return None
         for label in labels:
             if label in df.index:
-                return _safe_float(df.loc[label, df.columns[0]])
+                return _safe_float(df.loc[label, df.columns[col]])
         return None
 
-    net_income_curr = _get(inc_curr, NET_INCOME_LABELS)
-    total_assets_curr = _get(bs_curr, TOTAL_ASSETS_LABELS)
-    ocf_curr = _get(cf_curr, OCF_LABELS)
-    gross_profit_curr = _get(inc_curr, GROSS_PROFIT_LABELS)
-    revenue_curr = _get(inc_curr, REVENUE_LABELS)
-    current_assets_curr = _get(bs_curr, CURRENT_ASSETS_LABELS)
-    current_liabilities_curr = _get(bs_curr, CURRENT_LIABILITIES_LABELS)
-    long_term_debt_curr = _get(bs_curr, LONG_TERM_DEBT_LABELS)
-    shares_curr = _get(bs_curr, SHARES_LABELS)
+    def _pair(df, labels):
+        return _get(df, labels, 0), _get(df, labels, 1)
 
-    net_income_prev = _get(inc_prev, NET_INCOME_LABELS)
-    total_assets_prev = _get(bs_prev, TOTAL_ASSETS_LABELS)
-    gross_profit_prev = _get(inc_prev, GROSS_PROFIT_LABELS)
-    revenue_prev = _get(inc_prev, REVENUE_LABELS)
-    current_assets_prev = _get(bs_prev, CURRENT_ASSETS_LABELS)
-    current_liabilities_prev = _get(bs_prev, CURRENT_LIABILITIES_LABELS)
-    long_term_debt_prev = _get(bs_prev, LONG_TERM_DEBT_LABELS)
-    shares_prev = _get(bs_prev, SHARES_LABELS)
+    ta_t, ta_t1, ta_t2 = (_get(bs_df, TOTAL_ASSETS_LABELS, c) for c in range(3))
+    ni_t, ni_t1 = _pair(inc_df, NET_INCOME_LABELS)
+    rev_t, rev_t1 = _pair(inc_df, REVENUE_LABELS)
+    gp_t, gp_t1 = _pair(inc_df, GROSS_PROFIT_LABELS)
+    ca_t, ca_t1 = _pair(bs_df, CURRENT_ASSETS_LABELS)
+    cl_t, cl_t1 = _pair(bs_df, CURRENT_LIABILITIES_LABELS)
+    ltd_t, ltd_t1 = _pair(bs_df, LONG_TERM_DEBT_LABELS)
+    shares_t, shares_t1 = _pair(bs_df, SHARES_LABELS)
+    cfo_t = _get(cf_df, OCF_LABELS, 0)
 
-    score = 0
-    criteria_counted = 0
-
-    # F1: ROA > 0
-    if net_income_curr is not None and total_assets_curr:
-        criteria_counted += 1
-        if (net_income_curr / total_assets_curr) > 0:
-            score += 1
-    else:
-        criteria_counted += 1  # missing -> conservative fail
-
-    # F2: OCF > 0
-    if ocf_curr is not None:
-        criteria_counted += 1
-        if ocf_curr > 0:
-            score += 1
-    else:
-        criteria_counted += 1
-
-    # F3: ROA improved (requires prior year)
-    if net_income_prev is not None and total_assets_prev and total_assets_curr:
-        criteria_counted += 1
-        roa_curr = (net_income_curr / total_assets_curr) if net_income_curr is not None and total_assets_curr else None
-        roa_prev = net_income_prev / total_assets_prev
-        if roa_curr is not None and roa_curr > roa_prev:
-            score += 1
-
-    # F4: Accruals — OCF/TA > ROA (quality of earnings)
-    if ocf_curr is not None and total_assets_curr and net_income_curr is not None:
-        criteria_counted += 1
-        roa_curr = net_income_curr / total_assets_curr
-        cfo_assets = ocf_curr / total_assets_curr
-        if cfo_assets > roa_curr:
-            score += 1
-    elif total_assets_curr:
-        criteria_counted += 1
-
-    # F5: Leverage decreased — fail-safe if current-year LTD absent
-    if long_term_debt_prev is not None and total_assets_prev and total_assets_curr and long_term_debt_curr is not None:
-        criteria_counted += 1
-        avg_assets = (total_assets_curr + total_assets_prev) / 2.0
-        ltd_ratio_curr = long_term_debt_curr / avg_assets
-        ltd_ratio_prev = long_term_debt_prev / total_assets_prev
-        if ltd_ratio_curr < ltd_ratio_prev:
-            score += 1
-
-    # F6: Current ratio improved
-    if current_assets_prev is not None and current_liabilities_prev and current_liabilities_curr:
-        criteria_counted += 1
-        cr_curr = (current_assets_curr / current_liabilities_curr) if current_assets_curr is not None else 0
-        cr_prev = current_assets_prev / current_liabilities_prev
-        if cr_curr > cr_prev:
-            score += 1
-
-    # F7: No dilution
-    if shares_prev is not None and shares_curr is not None:
-        criteria_counted += 1
-        if shares_curr <= shares_prev:
-            score += 1
-
-    # F8: Gross margin improved
-    if gross_profit_prev is not None and revenue_prev and revenue_curr:
-        criteria_counted += 1
-        gm_curr = (gross_profit_curr / revenue_curr) if gross_profit_curr is not None else 0
-        gm_prev = gross_profit_prev / revenue_prev
-        if gm_curr > gm_prev:
-            score += 1
-
-    # F9: Asset turnover improved
-    if revenue_prev is not None and total_assets_prev and total_assets_curr and revenue_curr:
-        criteria_counted += 1
-        at_curr = revenue_curr / total_assets_curr
-        at_prev = revenue_prev / total_assets_prev
-        if at_curr > at_prev:
-            score += 1
-
-    if criteria_counted <= 3:
+    inputs = (ta_t, ta_t1, ta_t2, ni_t, ni_t1, rev_t, rev_t1, gp_t, gp_t1,
+              ca_t, ca_t1, cl_t, cl_t1, ltd_t, ltd_t1, shares_t, shares_t1, cfo_t)
+    if any(v is None for v in inputs):
         return None
-    return score
+    if min(ta_t, ta_t1, ta_t2, rev_t, rev_t1, cl_t, cl_t1) <= 0:
+        return None
+
+    roa_t, roa_t1 = ni_t / ta_t1, ni_t1 / ta_t2
+    signals = (
+        roa_t > 0,                                                  # F1 ROA
+        cfo_t > 0,                                                  # F2 CFO
+        roa_t > roa_t1,                                             # F3 ΔROA
+        cfo_t / ta_t1 > roa_t,                                      # F4 accrual
+        ltd_t / ((ta_t + ta_t1) / 2) < ltd_t1 / ((ta_t1 + ta_t2) / 2),  # F5 ΔLEVER fell
+        ca_t / cl_t > ca_t1 / cl_t1,                                # F6 ΔLIQUID
+        shares_t <= shares_t1,                                      # F7 EQ_OFFER
+        gp_t / rev_t > gp_t1 / rev_t1,                              # F8 ΔMARGIN
+        rev_t / ta_t1 > rev_t1 / ta_t2,                             # F9 ΔTURN
+    )
+    return sum(signals)
 
 
 def _compute_altman_z(bs_curr, inc_curr) -> float | None:
@@ -2510,15 +2463,10 @@ def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None =
     trap_reasons = _trap_reasons(fund["debt_equity"], fund["current_ratio"], eps_stab_for_gate, trap_fcf_metric)
 
     # ── Distress signals (Piotroski / Altman) ─────────────────────────
-    def _prev_frame(df):
-        if df is None or df.empty or df.shape[1] < 2:
-            return None
-        return df.iloc[:, 1:]
-
     inc_df = fund.get("income_stmt_df")
     bs_df = fund.get("balance_sheet_df")
     cf_df = fund.get("cashflow_df")
-    piotroski_f = _compute_piotroski(inc_df, _prev_frame(inc_df), bs_df, _prev_frame(bs_df), cf_df, _prev_frame(cf_df))
+    piotroski_f = _compute_piotroski(inc_df, bs_df, cf_df)
     altman_z = _compute_altman_z(bs_df, inc_df) if _sector_allows(fund, "altman") else None
 
     # ── Screen-grade FCFF/WACC DCF ────────────────────────────────────
