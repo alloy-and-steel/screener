@@ -48,21 +48,6 @@ def _make_df(data: dict, cols=("2024", "2023")) -> pd.DataFrame:
     return df
 
 
-def _make_income_curr(net_income=1_000, gross_profit=4_000, revenue=10_000, ebit=1_500) -> pd.DataFrame:
-    return _make_df(
-        {
-            "Net Income": (net_income, net_income * 0.8),
-            "Gross Profit": (gross_profit, gross_profit * 0.9),
-            "Total Revenue": (revenue, revenue * 0.9),
-            "EBIT": (ebit, ebit * 0.9),
-        }
-    )
-
-
-def _make_cashflow_curr(ocf=2_000) -> pd.DataFrame:
-    return _make_df({"Operating Cash Flow": (ocf, ocf * 0.9)})
-
-
 # ── _yf_row_prev ─────────────────────────────────────────────────────────────
 
 
@@ -216,6 +201,26 @@ def test_piotroski_roa_excludes_discontinued_operations():
     )
     result = _compute_piotroski(inc, bs, cf)
     assert result == 7, f"expected 7, got {result}"
+
+
+def test_piotroski_falls_back_when_a_preferred_row_is_blank():
+    """yfinance can carry the continuing-operations row with a blank year. The
+    score then reads 'Net Income' for both years rather than dropping to None:
+    the base fixture's 9."""
+    inc, bs, cf = _pio_frames(
+        ni_label="Net Income From Continuing Operation Net Minority Interest",
+        ni=(1_200, _NAN),
+        extra_inc={"Net Income": (1_200, 1_000, _NAN)},
+    )
+    result = _compute_piotroski(inc, bs, cf)
+    assert result == 9, f"expected 9, got {result}"
+
+
+def test_piotroski_none_without_revenue():
+    """A pre-revenue company has no gross margin or turnover to compare."""
+    inc, bs, cf = _pio_frames(rev=(0, 0), gp=(0, 0))
+    result = _compute_piotroski(inc, bs, cf)
+    assert result is None, f"expected None, got {result}"
 
 
 # ── _compute_altman_z ────────────────────────────────────────────────────────
@@ -551,6 +556,8 @@ def run_all():
         test_piotroski_none_with_only_two_balance_sheets,
         test_piotroski_none_when_no_statements,
         test_piotroski_roa_excludes_discontinued_operations,
+        test_piotroski_falls_back_when_a_preferred_row_is_blank,
+        test_piotroski_none_without_revenue,
         test_altman_z_known_fixture,
         test_altman_z_none_when_total_assets_zero,
         test_altman_z_none_when_total_liabilities_zero,

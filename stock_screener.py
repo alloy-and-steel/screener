@@ -1322,41 +1322,45 @@ def _compute_piotroski(inc_df, bs_df, cf_df) -> int | None:
     - Every name is scored, not only the high book-to-market quintile the
       paper studied: here the score is a health signal, not a return bet.
     """
-    def _get(df, labels, col):
-        if df is None or df.empty or df.shape[1] <= col:
+    def _row(df, labels, years):
+        # First labelled row with a value in each of the newest `years` columns,
+        # so both years come from the same line and a blank row falls through.
+        if df is None or df.empty or df.shape[1] < years:
             return None
         for label in labels:
             if label in df.index:
-                return _safe_float(df.loc[label, df.columns[col]])
+                values = [_safe_float(v) for v in df.loc[label].iloc[:years]]
+                if None not in values:
+                    return values
         return None
 
-    def _pair(df, labels):
-        return _get(df, labels, 0), _get(df, labels, 1)
-
-    ta_t, ta_t1, ta_t2 = (_get(bs_df, TOTAL_ASSETS_LABELS, c) for c in range(3))
-    ni_t, ni_t1 = _pair(inc_df, NET_INCOME_LABELS)
-    rev_t, rev_t1 = _pair(inc_df, REVENUE_LABELS)
-    gp_t, gp_t1 = _pair(inc_df, GROSS_PROFIT_LABELS)
-    ca_t, ca_t1 = _pair(bs_df, CURRENT_ASSETS_LABELS)
-    cl_t, cl_t1 = _pair(bs_df, CURRENT_LIABILITIES_LABELS)
-    ltd_t, ltd_t1 = _pair(bs_df, LONG_TERM_DEBT_LABELS)
-    shares_t, shares_t1 = _pair(bs_df, SHARES_LABELS)
-    cfo_t = _get(cf_df, OCF_LABELS, 0)
-
-    inputs = (ta_t, ta_t1, ta_t2, ni_t, ni_t1, rev_t, rev_t1, gp_t, gp_t1,
-              ca_t, ca_t1, cl_t, cl_t1, ltd_t, ltd_t1, shares_t, shares_t1, cfo_t)
-    if any(v is None for v in inputs):
+    rows = (
+        _row(bs_df, TOTAL_ASSETS_LABELS, 3),
+        _row(inc_df, NET_INCOME_LABELS, 2),
+        _row(inc_df, REVENUE_LABELS, 2),
+        _row(inc_df, GROSS_PROFIT_LABELS, 2),
+        _row(bs_df, CURRENT_ASSETS_LABELS, 2),
+        _row(bs_df, CURRENT_LIABILITIES_LABELS, 2),
+        _row(bs_df, LONG_TERM_DEBT_LABELS, 2),
+        _row(bs_df, SHARES_LABELS, 2),
+        _row(cf_df, OCF_LABELS, 1),
+    )
+    if any(r is None for r in rows):
         return None
+    ((ta_t, ta_t1, ta_t2), (ni_t, ni_t1), (rev_t, rev_t1), (gp_t, gp_t1), (ca_t, ca_t1),
+     (cl_t, cl_t1), (ltd_t, ltd_t1), (shares_t, shares_t1), (cfo_t,)) = rows
     if min(ta_t, ta_t1, ta_t2, rev_t, rev_t1, cl_t, cl_t1) <= 0:
         return None
 
+    # A tie scores 0 except F7: the paper credits a ratio that "fell" or
+    # "improved", and EQ_OFFER is "did not issue".
     roa_t, roa_t1 = ni_t / ta_t1, ni_t1 / ta_t2
     signals = (
         roa_t > 0,                                                  # F1 ROA
         cfo_t > 0,                                                  # F2 CFO
         roa_t > roa_t1,                                             # F3 ΔROA
         cfo_t / ta_t1 > roa_t,                                      # F4 accrual
-        ltd_t / ((ta_t + ta_t1) / 2) < ltd_t1 / ((ta_t1 + ta_t2) / 2),  # F5 ΔLEVER fell
+        ltd_t / ((ta_t + ta_t1) / 2) < ltd_t1 / ((ta_t1 + ta_t2) / 2),  # F5 ΔLEVER
         ca_t / cl_t > ca_t1 / cl_t1,                                # F6 ΔLIQUID
         shares_t <= shares_t1,                                      # F7 EQ_OFFER
         gp_t / rev_t > gp_t1 / rev_t1,                              # F8 ΔMARGIN
@@ -1775,7 +1779,8 @@ def get_yf_price_and_history(ticker: str) -> dict:
     # ── Phase 7: store the raw (newest-first) frames for Piotroski / Altman ──
     # Reuses the `inc`/`bs`/`cf` frames already fetched above (NOT the
     # oldest→newest `inc_sorted` local — Piotroski/Altman read columns[0] as
-    # current year, which requires the raw newest-first frame).
+    # current year and Piotroski columns[1..2] as the two before, which
+    # requires the raw newest-first frame).
     result["income_stmt_df"] = inc
     result["balance_sheet_df"] = bs
     result["cashflow_df"] = cf
