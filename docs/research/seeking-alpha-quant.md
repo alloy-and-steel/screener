@@ -47,6 +47,12 @@ could not be checked are listed under UNVERIFIED.
   history. A backtest of the approximation would be biased by look-ahead, survivorship and
   weight-fitting (§7).
 
+**Tested (2026-11-08):** the record against its public picks in
+`docs/research/sa-alpha-picks-audit.md`; the pick rules on a momentum-only rating over
+2015–2026 in `docs/research/sa-momentum-backtest.md`; and a forward test of the full
+five-factor approximation, live in the screener from the first run after 2026-11-08
+(`saquant.py`, `alphapicks.py`).
+
 ## 1. Is there an API?
 
 ### Verdict

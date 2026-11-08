@@ -33,6 +33,7 @@ web/dist/
 
 # ── Output / data files ───────────────────────────────────────────────────────
 *.csv
+!backtests/alpha_picks_public_picks.csv  # input to backtests/alpha_picks_audit.py
 *.xlsx
 
 # ── OS clutter ────────────────────────────────────────────────────────────────
