@@ -35,11 +35,11 @@ export function heldView(row: Row): { at: string; price: number; change: number 
 
 export type EmulatorStatus =
   | { kind: 'absent' }
-  | { kind: 'waiting'; firstEligibleOn: string | null; streaks: number; startedAt: string | null }
-  | { kind: 'running'; picks: number; open: number; returnPct: number | null; spyReturnPct: number | null; startedAt: string | null }
+  | { kind: 'waiting'; firstEligibleOn: string | null; streaks: number; streakDays: number; startedAt: string | null }
+  | { kind: 'running'; picks: number; open: number; returnPct: number | null; spyReturnPct: number | null; holdings: string[]; startedAt: string | null }
 
 export function emulatorStatus(s: AlphaPicksSummary | undefined): EmulatorStatus {
   if (!s) return { kind: 'absent' }
-  if (s.picks === 0) return { kind: 'waiting', firstEligibleOn: s.firstEligibleOn, streaks: s.strongBuyStreaks, startedAt: s.startedAt }
-  return { kind: 'running', picks: s.picks, open: s.open, returnPct: s.returnPct, spyReturnPct: s.spyReturnPct, startedAt: s.startedAt }
+  if (s.picks === 0) return { kind: 'waiting', firstEligibleOn: s.firstEligibleOn, streaks: s.strongBuyStreaks, streakDays: s.streakBusinessDays, startedAt: s.startedAt }
+  return { kind: 'running', picks: s.picks, open: s.open, returnPct: s.returnPct, spyReturnPct: s.spyReturnPct, holdings: s.holdings.map((h) => h.ticker), startedAt: s.startedAt }
 }

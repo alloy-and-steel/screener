@@ -207,8 +207,9 @@ function QuantPanel({ row, summary }: { row: Row; summary?: AlphaPicksSummary })
           <p>
             <span className="font-semibold text-slate-300">{m.quantEmulator}: </span>
             {st.kind === 'waiting'
-              ? m.quantWaiting(st.firstEligibleOn ? day(st.firstEligibleOn) : null, st.streaks)
+              ? m.quantWaiting(st.firstEligibleOn ? day(st.firstEligibleOn) : null, st.streaks, st.streakDays)
               : m.quantRunning(st.picks, st.open, signedPct(st.returnPct, 1), signedPct(st.spyReturnPct, 1))}
+            {st.kind === 'running' && st.holdings.length ? <span className="font-mono text-slate-300"> · {m.quantHolding(st.holdings.join(' '))}</span> : null}
             {st.startedAt ? <span className="text-slate-500"> · {m.quantSince(day(st.startedAt))}</span> : null}
           </p>
         ) : null}

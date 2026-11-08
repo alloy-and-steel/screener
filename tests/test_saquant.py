@@ -167,6 +167,16 @@ def test_growth_cap_reaches_d_plus():
     assert x["capped"] is True and x["rating"] == "Hold", x
 
 
+def test_ratings_match_the_frontend_type():
+    # web/src/types.ts SaRating is the frontend's copy of RATINGS; alphapicks
+    # reads its Strong Buy / Hold / Sell names from here.
+    import re
+    from saquant import RATINGS
+    ts = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "web", "src", "types.ts"), encoding="utf-8").read()
+    union = re.search(r"export type SaRating = ([^\n]+)", ts).group(1)
+    assert set(re.findall(r"'([^']+)'", union)) == set(RATINGS), union
+
+
 if __name__ == "__main__":
     tests = [v for k, v in dict(globals()).items() if k.startswith("test_")]
     for t in tests:

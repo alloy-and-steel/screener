@@ -221,6 +221,7 @@ export interface AlphaPicksSummary {
   returnPct: number | null
   spyReturnPct: number | null
   strongBuyStreaks: number
+  streakBusinessDays: number // the Strong Buy run a pick needs (75)
   firstEligibleOn: string | null // the earliest day a current Strong Buy streak reaches 75 business days
   holdings: { ticker: string; at: string; price: number }[]
 }

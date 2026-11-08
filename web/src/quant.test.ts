@@ -12,6 +12,7 @@ const summary = (over: Partial<AlphaPicksSummary> = {}): AlphaPicksSummary => ({
   returnPct: null,
   spyReturnPct: null,
   strongBuyStreaks: 0,
+  streakBusinessDays: 75,
   firstEligibleOn: null,
   holdings: [],
   ...over,
@@ -53,9 +54,11 @@ describe('emulatorStatus', () => {
     expect(emulatorStatus(undefined)).toEqual({ kind: 'absent' })
   })
   it('waits, with the first possible pick date, until the first pick', () => {
-    expect(emulatorStatus(summary({ strongBuyStreaks: 180, firstEligibleOn: '2027-02-22' }))).toEqual({ kind: 'waiting', firstEligibleOn: '2027-02-22', streaks: 180, startedAt: '2026-11-09T11:30:00Z' })
+    expect(emulatorStatus(summary({ strongBuyStreaks: 180, firstEligibleOn: '2027-02-22' }))).toEqual({ kind: 'waiting', firstEligibleOn: '2027-02-22', streaks: 180, streakDays: 75, startedAt: '2026-11-09T11:30:00Z' })
   })
   it('reports returns against SPY once it has picks', () => {
-    expect(emulatorStatus(summary({ picks: 3, open: 2, returnPct: 12.5, spyReturnPct: 4 }))).toEqual({ kind: 'running', picks: 3, open: 2, returnPct: 12.5, spyReturnPct: 4, startedAt: '2026-11-09T11:30:00Z' })
+    expect(
+      emulatorStatus(summary({ picks: 3, open: 2, returnPct: 12.5, spyReturnPct: 4, holdings: [{ ticker: 'AAA', at: '2027-03-01', price: 10 }, { ticker: 'BBB', at: '2027-03-15', price: 20 }] })),
+    ).toEqual({ kind: 'running', picks: 3, open: 2, returnPct: 12.5, spyReturnPct: 4, holdings: ['AAA', 'BBB'], startedAt: '2026-11-09T11:30:00Z' })
   })
 })

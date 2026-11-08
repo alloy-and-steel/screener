@@ -38,7 +38,7 @@ from scipy.optimize import brentq
 from azqato import azqato_score_all, pct_of_52w_range, wilder_rsi
 import alphapicks
 import selections
-from saquant import sa_quant_all
+from saquant import RATINGS as SA_RATINGS, sa_quant_all
 from wealthmatica import wealthmatica_profile
 
 # Load .env when running locally; no-op in GitHub Actions (env vars already set)
@@ -3006,7 +3006,7 @@ def _compute_stats(df: pd.DataFrame) -> dict:
     coverage_stats["wealthmatica_pass_count"] = sum(1 for v in wm_verdicts if v is True)
     saq_col = df["saQuant"] if "saQuant" in df.columns else None
     saq_ratings = [q.get("rating") for q in saq_col if isinstance(q, dict)] if saq_col is not None else []
-    coverage_stats["saquant_rating_counts"] = {k: saq_ratings.count(k) for k in ("Strong Buy", "Buy", "Hold", "Sell", "Strong Sell")}
+    coverage_stats["saquant_rating_counts"] = {k: saq_ratings.count(k) for k in SA_RATINGS}
     coverage_stats["saquant_unrated"] = sum(1 for v in saq_ratings if v is None)
 
     return {

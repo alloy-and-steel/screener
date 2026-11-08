@@ -190,7 +190,8 @@ Screen and publish are SEPARATE workflows, decoupled through a dedicated
   shallow-clone `origin/data` and seed the previous `results.json` (so
   `get_universe`'s constituent fallback has a last-known roster; the file is
   gitignored on `master`, so without the seed the fallback is a no-op) and the
-  selection ledger `picks.json` ->
+  selection ledger `picks.json` and the Alpha Picks emulator ledger
+  `alphapicks.json` (each fails the run if missing once published) ->
   run the screener -> `web/public/data/results.json` + `picks.json` + `alphapicks.json` +
   `stats.json` (universe
   aggregate stats: score distribution, sector breakdown, coverage — for future
@@ -276,7 +277,8 @@ and `wealthmatica` (`{checks: {key: {value, pass}}, passed, applicable, pass}`),
 - `tests/test_*.py` — offline regression suite (vanilla `assert`, no pytest,
   no network) covering the OverallScore engine, Phase 6 factors, Piotroski/
   Altman, the FCFF DCF stack, the output-validation guard, the selection
-  ledger, the Wealthmatica checklist, and the KO
+  ledger, the Wealthmatica checklist, the SA-style rating and Alpha Picks
+  emulator, and the KO
   Lynch/Graham formula fixture. Run individually (`python tests/test_X.py`)
   or via the CI/pre-flight loop (`for f in tests/test_*.py; do python "$f"; done`).
 - `web/src/` — SPA. `score.ts` (verdicts — the four-system gate,

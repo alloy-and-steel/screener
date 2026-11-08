@@ -33,6 +33,7 @@ Pure: no I/O, no network.
 
 from __future__ import annotations
 
+import bisect
 import math
 
 FACTORS = ("value", "growth", "profitability", "momentum", "revisions")
@@ -90,14 +91,15 @@ MIN_FACTORS = 4  # [ASSUMED] factors needed for a rating (revisions always among
 
 # Ratings by the composite's percentile within the sector, at SA's observed
 # distribution: the first bucket whose floor the percentile reaches.
+RATINGS = ("Strong Buy", "Buy", "Hold", "Sell", "Strong Sell")  # best first; web/src/types.ts SaRating mirrors it
 RATING_FLOORS = (
     ("Strong Buy", 1.0 - 0.095),
     ("Buy", 1.0 - 0.095 - 0.104),
     ("Hold", 0.16),
     ("Sell", 0.08),
 )
-LOWEST_RATING = "Strong Sell"
-HOLD = "Hold"
+LOWEST_RATING = RATINGS[-1]
+HOLD = RATINGS[2]
 
 
 def _usable(v) -> bool:
@@ -113,21 +115,10 @@ def _pctiles(values: dict[str, float]) -> dict[str, float]:
     ordered = sorted(values.values())
     out = {}
     for key, v in values.items():
-        below = _count_below(ordered, v)
-        equal = _count_below(ordered, v, inclusive=True) - below
+        below = bisect.bisect_left(ordered, v)
+        equal = bisect.bisect_right(ordered, v) - below
         out[key] = (below + (equal - 1) / 2.0) / (n - 1)
     return out
-
-
-def _count_below(ordered: list, v: float, inclusive: bool = False) -> int:
-    lo, hi = 0, len(ordered)
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if ordered[mid] < v or (inclusive and ordered[mid] == v):
-            lo = mid + 1
-        else:
-            hi = mid
-    return lo
 
 
 def _rank_key(v: float, higher_better: bool, non_positive_worst: bool) -> float:

@@ -96,8 +96,8 @@ function BodyEn() {
         Strong Buy, 10% Buy, 64% Hold, 8% Sell, 8% Strong Sell. The <strong className="text-slate-100">Alpha Picks emulator</strong>{' '}
         applies SA&rsquo;s published pick rules to it from the first run on: two picks a month (from the 1st and the 15th), a stock
         must have been Strong Buy for 75 business days, cost over $10, be worth over $500M and not be a REIT; it is sold on a Sell
-        rating or after more than 180 days at Hold, and compared with the same dollars in SPY. Nothing is backfilled, so the record
-        starts on its launch day.
+        rating or after more than 180 days at Hold, and compared with the same dollars in SPY (prices only; SA also reinvests
+        dividends). Nothing is backfilled, so the record starts on its launch day.
       </Block>
 
       <Block title="Reading the screen">
@@ -194,7 +194,7 @@ function BodyZh() {
         與 SA 相同：無分析師覆蓋的個股不評級，一項過弱的評等會讓評級最高只到持有，評級分布依 SA 實際觀察到的比例 &mdash;
         約 9.5% 強力買進、10% 買進、64% 持有、8% 賣出、8% 強力賣出。<strong className="text-slate-100">Alpha Picks 模擬組合</strong>
         自首次執行起套用 SA 公開的選股規則：每月兩檔（自 1 日與 15 日起），個股須連續 75 個營業日維持強力買進、股價高於 $10、市值高於 $5 億且不是 REIT；
-        評級轉為賣出或持有超過 180 天即賣出，並與同額投入 SPY 比較。不回溯補資料，紀錄自上線當天開始。
+        評級轉為賣出或持有超過 180 天即賣出，並與同額投入 SPY 比較（僅計股價；SA 另計入股息再投資）。不回溯補資料，紀錄自上線當天開始。
       </Block>
 
       <Block title="閱讀篩選結果">

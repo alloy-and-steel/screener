@@ -141,11 +141,12 @@ const en = {
   quantStreak: (rating: string, days: number, since: string) => `${rating} for ${days} business days (since ${since})`,
   quantHeld: (since: string) => `Held by the Alpha Picks emulator since ${since}`,
   quantEmulator: 'Alpha Picks emulator',
-  quantWaiting: (date: string | null, n: number) =>
+  quantWaiting: (date: string | null, n: number, days: number) =>
     date
-      ? `No picks yet: a stock needs 75 business days at Strong Buy. ${n} streaks running; the first could qualify on ${date}.`
-      : 'No picks yet: a stock needs 75 business days at Strong Buy, and none is at Strong Buy now.',
-  quantRunning: (picks: number, open: number, ret: string, spy: string) => `${picks} picks (${open} held): ${ret} vs ${spy} for the same dollars in SPY`,
+      ? `No picks yet: a stock needs ${days} business days at Strong Buy. ${n} streaks running; the first could qualify on ${date}.`
+      : `No picks yet: a stock needs ${days} business days at Strong Buy, and none is at Strong Buy now.`,
+  quantRunning: (picks: number, open: number, ret: string, spy: string) => `${picks} picks (${open} held): ${ret} vs ${spy} for the same dollars in SPY, price only`,
+  quantHolding: (tickers: string) => `Holding ${tickers}`,
   quantSince: (date: string) => `Forward test since ${date}`,
   firstPicked: 'First picked',
   levelLabel: (l: PickLevel) => LEVEL_EN[l].replace(/^./, (c) => c.toUpperCase()),
@@ -344,11 +345,12 @@ const zhTW: Messages = {
   quantStreak: (rating, days, since) => `${rating} 已持續 ${days} 個營業日（自 ${since}）`,
   quantHeld: (since) => `Alpha Picks 模擬組合自 ${since} 起持有`,
   quantEmulator: 'Alpha Picks 模擬組合',
-  quantWaiting: (date, n) =>
+  quantWaiting: (date, n, days) =>
     date
-      ? `尚無選股：個股需連續 75 個營業日維持強力買進。目前有 ${n} 檔在累積中，最早可於 ${date} 符合資格。`
-      : '尚無選股：個股需連續 75 個營業日維持強力買進，目前沒有任何個股為強力買進。',
-  quantRunning: (picks, open, ret, spy) => `${picks} 檔選股（持有 ${open} 檔）：${ret}，同額投入 SPY 為 ${spy}`,
+      ? `尚無選股：個股需連續 ${days} 個營業日維持強力買進。目前有 ${n} 檔在累積中，最早可於 ${date} 符合資格。`
+      : `尚無選股：個股需連續 ${days} 個營業日維持強力買進，目前沒有任何個股為強力買進。`,
+  quantRunning: (picks, open, ret, spy) => `${picks} 檔選股（持有 ${open} 檔）：${ret}，同額投入 SPY 為 ${spy}（僅計股價）`,
+  quantHolding: (tickers) => `持有 ${tickers}`,
   quantSince: (date) => `自 ${date} 起前瞻測試`,
   firstPicked: '首次入選',
   levelLabel: (l) => LEVEL_ZH[l],
