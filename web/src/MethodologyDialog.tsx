@@ -82,6 +82,24 @@ function BodyEn() {
         sheets); a missing pillar is simply excluded from the average rather than penalized.
       </Block>
 
+      <Block title="SA-style quant + Alpha Picks emulator — a forward test">
+        Our approximation of Seeking Alpha&rsquo;s Quant Rating, built from the same free data as the screens &mdash; it is{' '}
+        <strong className="text-slate-100">not</strong> SA&rsquo;s rating and does <strong className="text-slate-100">not</strong> count
+        toward the pass filter. Five factor grades, A+ to F, each ranked only against stocks in the same sector:{' '}
+        <strong className="text-slate-100">Value</strong> (forward P/E, PEG, P/B, EV/EBIT, EV/EBITDA, EV/sales, P/S, P/cash flow,
+        dividend yield), <strong className="text-slate-100">Growth</strong> (revenue and EPS growth trailing and forward, EBITDA,
+        operating and free cash flow growth), <strong className="text-slate-100">Profitability</strong> (margins, ROE, ROA, ROIC, asset
+        turnover), <strong className="text-slate-100">Momentum</strong> (3, 6, 9 and 12-month price change) and{' '}
+        <strong className="text-slate-100">EPS revisions</strong> (90-day change in the consensus, net upward revisions). Momentum
+        weighs most; the weights and grade bands are ours, since SA publishes neither. As SA does, a stock with no analyst coverage is
+        not rated, one very weak grade holds the rating at Hold, and the ratings follow SA&rsquo;s observed spread &mdash; about 9.5%
+        Strong Buy, 10% Buy, 64% Hold, 8% Sell, 8% Strong Sell. The <strong className="text-slate-100">Alpha Picks emulator</strong>{' '}
+        applies SA&rsquo;s published pick rules to it from the first run on: two picks a month (from the 1st and the 15th), a stock
+        must have been Strong Buy for 75 business days, cost over $10, be worth over $500M and not be a REIT; it is sold on a Sell
+        rating or after more than 180 days at Hold, and compared with the same dollars in SPY. Nothing is backfilled, so the record
+        starts on its launch day.
+      </Block>
+
       <Block title="Reading the screen">
         Each card shows the four verdicts (a green-tinted tile is a pass), the informational Overall score in the ring,
         and the headline numbers: PEG, forward PEG, forward EPS growth, the Graham and Lynch discounts to fair value, dividend yield and
@@ -163,6 +181,20 @@ function BodyZh() {
         Z&Prime;，加上品質支柱中的槓桿／流動性訊號）。折價門檻隨即時 AAA 殖利率調整 &mdash;
         利率高時，同樣的折價就沒那麼吸引人。金融類股略過 Altman／DCF／盈餘殖利率等項目（這些公式不適用於銀行的資產負債表）；
         缺少的支柱直接排除在平均之外，而不是扣分。
+      </Block>
+
+      <Block title="SA 風格量化評級＋Alpha Picks 模擬組合 — 前瞻測試">
+        以與各篩選相同的免費資料，仿照 Seeking Alpha 量化評級建立的近似值 &mdash; 它
+        <strong className="text-slate-100">不是</strong> SA 的評級，也<strong className="text-slate-100">不</strong>計入通過篩選。五項因子評等，A+ 至 F，
+        每項只與同產業個股比較：<strong className="text-slate-100">價值</strong>（預估本益比、PEG、股價淨值比、EV/EBIT、EV/EBITDA、EV/營收、股價營收比、股價現金流比、殖利率）、
+        <strong className="text-slate-100">成長</strong>（過去與預估的營收及 EPS 成長、EBITDA、營業與自由現金流成長）、
+        <strong className="text-slate-100">獲利能力</strong>（各項利潤率、ROE、ROA、ROIC、資產周轉率）、
+        <strong className="text-slate-100">動能</strong>（3、6、9 與 12 個月股價變化）以及
+        <strong className="text-slate-100">EPS 預估修正</strong>（共識預估 90 天變化、淨上修次數）。動能權重最高；權重與評等級距由我們自訂，因為 SA 兩者皆未公開。
+        與 SA 相同：無分析師覆蓋的個股不評級，一項過弱的評等會讓評級最高只到持有，評級分布依 SA 實際觀察到的比例 &mdash;
+        約 9.5% 強力買進、10% 買進、64% 持有、8% 賣出、8% 強力賣出。<strong className="text-slate-100">Alpha Picks 模擬組合</strong>
+        自首次執行起套用 SA 公開的選股規則：每月兩檔（自 1 日與 15 日起），個股須連續 75 個營業日維持強力買進、股價高於 $10、市值高於 $5 億且不是 REIT；
+        評級轉為賣出或持有超過 180 天即賣出，並與同額投入 SPY 比較。不回溯補資料，紀錄自上線當天開始。
       </Block>
 
       <Block title="閱讀篩選結果">

@@ -36,7 +36,9 @@ from dotenv import load_dotenv
 from scipy.optimize import brentq
 
 from azqato import azqato_score_all, pct_of_52w_range, wilder_rsi
+import alphapicks
 import selections
+from saquant import sa_quant_all
 from wealthmatica import wealthmatica_profile
 
 # Load .env when running locally; no-op in GitHub Actions (env vars already set)
@@ -1191,6 +1193,101 @@ def _wealthmatica_from_statements(inc, cf) -> dict:
     )
 
 
+EBITDA_LABELS = ["EBITDA", "Normalized EBITDA"]
+SA_MOMENTUM_WINDOWS = {"ret3m": 63, "ret6m": 126, "ret9m": 189}  # trading days back
+SA_MIN_12M_CLOSES = 240  # the 1y history is ~251 closes; fewer -> no 12-month return
+
+
+def _pct_change(now, base) -> float | None:
+    """(now - base) / |base| in percent; None when either is missing or base is 0."""
+    if now is None or base is None or base == 0:
+        return None
+    return (now - base) / abs(base) * 100.0
+
+
+def _ratio(num, den) -> float | None:
+    """num / den; None when either is missing or den is 0. A negative result is kept
+    (a loss-maker's multiple) -- saquant ranks it worst."""
+    if num is None or den is None or den == 0:
+        return None
+    return num / den
+
+
+def _growth(now, prev) -> float | None:
+    """YoY growth in percent; None unless the base year is positive (growth off a
+    loss or a zero has no meaning)."""
+    if now is None or prev is None or prev <= 0:
+        return None
+    return (now - prev) / prev * 100.0
+
+
+def _momentum_returns(closes: list) -> dict:
+    """SA's Momentum inputs -- 3/6/9/12-month price change, no skip-month (the
+    Guo-Jame paper's reading of SA). Nominal closes, split-adjusted by Yahoo."""
+    series = [c for c in closes if c is not None and c == c and c > 0]
+    out = {k: (_pct_change(series[-1], series[-1 - n]) if len(series) > n else None) for k, n in SA_MOMENTUM_WINDOWS.items()}
+    out["ret12m"] = _pct_change(series[-1], series[0]) if len(series) >= SA_MIN_12M_CLOSES else None
+    return out
+
+
+def _saquant_inputs(fund: dict, div_yield_pct: float | None) -> dict:
+    """The metric dict saquant.sa_quant_all ranks, from data already fetched.
+    Value multiples use Yahoo's market cap / debt / cash snapshot (the same one
+    azqato reads); with price and statements in different currencies (ADRs)
+    the multiples mix units and are left out."""
+    inc, bs, cf = fund.get("income_stmt_df"), fund.get("balance_sheet_df"), fund.get("cashflow_df")
+    revenue, revenue_prev = _yf_row(inc, REVENUE_LABELS), _yf_row_prev(inc, REVENUE_LABELS)
+    gross = _yf_row(inc, GROSS_PROFIT_LABELS)
+    ebit = _yf_row(inc, EBIT_LABELS)
+    ebitda, ebitda_prev = _yf_row(inc, EBITDA_LABELS), _yf_row_prev(inc, EBITDA_LABELS)
+    net_income = _yf_row(inc, NET_INCOME_LABELS)
+    assets = _yf_row(bs, TOTAL_ASSETS_LABELS)
+    equity = fund.get("equity")
+    ocf, ocf_prev = _yf_row(cf, OCF_LABELS), _yf_row_prev(cf, OCF_LABELS)
+    fcf_series = _fcf_series(cf) or []
+    fcf = fcf_series[0] if len(fcf_series) >= 1 else None
+    fcf_prev = fcf_series[1] if len(fcf_series) >= 2 else None
+
+    cap, debt, cash = fund.get("az_market_cap"), fund.get("az_debt"), fund.get("az_cash")
+    same_units = not _currency_mismatch(fund.get("price_currency"), fund.get("financial_currency"))
+    ev = cap + debt - cash if None not in (cap, debt, cash) else None
+
+    def multiple(num, den):
+        return _ratio(num, den) if same_units else None
+
+    metrics = {
+        "peFwd": fund.get("az_pe_fwd"),
+        "pegFwd": fund.get("az_peg_fwd"),
+        "pb": fund.get("pb_ratio"),
+        "evEbit": multiple(ev, ebit),
+        "evEbitda": multiple(ev, ebitda),
+        "evSales": multiple(ev, revenue) if revenue is not None and revenue > 0 else None,
+        "ps": multiple(cap, revenue) if revenue is not None and revenue > 0 else None,
+        "pcf": multiple(cap, ocf),
+        "divYield": div_yield_pct,
+        "revTTM": fund.get("az_rev_ttm"),
+        "revFwd": fund.get("az_rev_fwd"),
+        "epsTTM": fund.get("az_eps_ttm"),
+        "epsFwd": fund.get("az_eps_fwd"),
+        "ebitdaYoY": _growth(ebitda, ebitda_prev),
+        "ocfYoY": _growth(ocf, ocf_prev),
+        "fcfYoY": _growth(fcf, fcf_prev),
+        "roic": fund.get("roic"),
+        "epsTrend0y": fund.get("sa_eps_trend_0y"),
+        "epsTrend1y": fund.get("sa_eps_trend_1y"),
+        "netRevisions0y": fund.get("sa_net_revisions_0y"),
+    }
+    # Margins and turnover need positive revenue; returns need a positive base.
+    positive_revenue = revenue is not None and revenue > 0
+    for key, num in (("grossMargin", gross), ("ebitMargin", ebit), ("ebitdaMargin", ebitda), ("netMargin", net_income), ("fcfMargin", fcf)):
+        metrics[key] = _ratio(num, revenue) if positive_revenue else None
+    metrics["roe"] = _ratio(net_income, equity) if equity is not None and equity > 0 else None
+    metrics["roa"] = _ratio(net_income, assets) if assets is not None and assets > 0 else None
+    metrics["assetTurnover"] = _ratio(revenue, assets) if positive_revenue and assets is not None and assets > 0 else None
+    metrics.update(_momentum_returns(fund.get("closes") or []))
+    return metrics
+
+
 def _effective_tax_rate(income_statement) -> float:
     """Derive a bounded effective tax rate; fall back to the configured rate."""
     tax = _yf_row(income_statement, TAX_PROVISION_LABELS)
@@ -1658,6 +1755,12 @@ def get_yf_price_and_history(ticker: str) -> dict:
         "shares_now": None,
         "shares_prev": None,
         "diluted_shares": None,
+        # SA-style quant (saquant.py): analyst coverage + EPS Revisions inputs
+        "industry": None,
+        "sa_covered": False,
+        "sa_eps_trend_0y": None,
+        "sa_eps_trend_1y": None,
+        "sa_net_revisions_0y": None,
         # Phase 7 additions: raw DataFrames for Piotroski/Altman (newest-first columns)
         "income_stmt_df": None,
         "balance_sheet_df": None,
@@ -1700,6 +1803,7 @@ def get_yf_price_and_history(ticker: str) -> dict:
     #    on this single call would zero every azqato metric, i.e. tier F) ────
     info = _yf_fetch("info", lambda: t.info) or {}
     result["sector"] = info.get("sector")
+    result["industry"] = info.get("industry")
     result["beta"] = _safe_float(info.get("beta"))
     result["price_currency"] = info.get("currency")
     result["financial_currency"] = info.get("financialCurrency")
@@ -1815,11 +1919,14 @@ def get_yf_price_and_history(ticker: str) -> dict:
     earn_est = _yf_fetch("earnings estimate", lambda: t.earnings_estimate)
     rev_est = _yf_fetch("revenue estimate", lambda: t.revenue_estimate)
 
-    def _estimate(df, col) -> float | None:
+    def _cell(df, period, col) -> float | None:
         try:
-            return _safe_float(df.loc["0y", col])
+            return _safe_float(df.loc[period, col])
         except Exception:
             return None
+
+    def _estimate(df, col) -> float | None:
+        return _cell(df, "0y", col)
 
     eg_fwd = _estimate(earn_est, "growth")
     result["az_eps_fwd"] = eg_fwd * 100.0 if eg_fwd is not None else None
@@ -1842,6 +1949,21 @@ def get_yf_price_and_history(ticker: str) -> dict:
     if (peg is None or peg == 0) and pe is not None and result["az_eps_fwd"] is not None and result["az_eps_fwd"] > 0:
         peg = pe / result["az_eps_fwd"]
     result["az_peg_fwd"] = peg
+
+    # ── SA-style EPS Revisions inputs (saquant.py). eps_trend / eps_revisions
+    #    read the same earningsTrend payload as earnings_estimate above, which
+    #    yfinance caches per Ticker, so they cost no further request. SA rates
+    #    no stock without analyst coverage: no current-year EPS estimate here
+    #    means not covered. ──
+    result["sa_covered"] = _estimate(earn_est, "avg") is not None
+    trend = _yf_fetch("eps trend", lambda: t.eps_trend)
+    revisions = _yf_fetch("eps revisions", lambda: t.eps_revisions)
+    result["sa_eps_trend_0y"] = _pct_change(_cell(trend, "0y", "current"), _cell(trend, "0y", "90daysAgo"))
+    result["sa_eps_trend_1y"] = _pct_change(_cell(trend, "+1y", "current"), _cell(trend, "+1y", "90daysAgo"))
+    up, down = _cell(revisions, "0y", "upLast30days"), _cell(revisions, "0y", "downLast30days")
+    analysts = _estimate(earn_est, "numberOfAnalysts")
+    if up is not None and down is not None and analysts:
+        result["sa_net_revisions_0y"] = (up - down) / analysts
 
     return result
 
@@ -1976,6 +2098,11 @@ def get_combined_data(ticker: str, finnhub: dict | None = None) -> dict:
         "az_market_cap": yf_data["az_market_cap"],
         # ── Phase 6/7 additions — sector/beta/currency, price signals, factors ──
         "sector": yf_data["sector"],
+        "industry": yf_data["industry"],
+        "sa_covered": yf_data["sa_covered"],
+        "sa_eps_trend_0y": yf_data["sa_eps_trend_0y"],
+        "sa_eps_trend_1y": yf_data["sa_eps_trend_1y"],
+        "sa_net_revisions_0y": yf_data["sa_net_revisions_0y"],
         "beta": yf_data["beta"],
         "price_currency": yf_data["price_currency"],
         "financial_currency": yf_data["financial_currency"],
@@ -2449,6 +2576,11 @@ def process_ticker(ticker: str, aaa_yield: float, risk_free_rate: float | None =
     # ── Wealthmatica checklist (4th gating system) — absolute, per ticker ──
     row["wealthmatica"] = _wealthmatica_from_statements(fund.get("income_stmt_df"), fund.get("cashflow_df"))
 
+    # ── SA-style quant inputs (informational) — the rating is sector-relative,
+    #    so run_screener grades them in one pass and drops this private key ──
+    row["Industry"] = fund.get("industry")
+    row["_saq"] = {"sector": fund.get("sector"), "covered": fund.get("sa_covered"), "metrics": _saquant_inputs(fund, row.get("DivYield_Pct"))}
+
     # ── Growth stability — fraction of years with positive EPS ───────
     # None when fewer than 3 years available (genuinely unknown, not zero).
     if len(valid_eps) >= 3:
@@ -2753,6 +2885,19 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float
                 r["azqato"].setdefault("byIndex", {})[name] = {"score": pool["score"], "tier": pool["tier"]}
         log.info(f"  → {name}: re-scored {len(members)} names as their own cross-section")
 
+    # ── SA-style quant rating (saquant.py) — INFORMATIONAL, never gated ──
+    # Sector-relative like Seeking Alpha's own, so one cross-sectional pass.
+    # Feeds the Alpha Picks emulator ledger (write_json) and a Scorecard panel.
+    sa_inputs = {r["Ticker"]: r.pop("_saq") for r in results if "_saq" in r}
+    sa_rated = sa_quant_all(sa_inputs)
+    for r in results:
+        q = sa_rated.get(r["Ticker"])
+        if q is not None:
+            q.pop("metricPctiles")
+            r["saQuant"] = q
+    rating_counts = pd.Series([q["rating"] for q in sa_rated.values()]).value_counts(dropna=False).to_dict()
+    log.info(f"SA-style ratings over {len(sa_rated)} names: {rating_counts}")
+
     df = pd.DataFrame(results)
     # Sort by OverallScore descending (best opportunities first); fall back to
     # the legacy CombinedScore sort for any row the new engine couldn't score.
@@ -2770,6 +2915,7 @@ def run_screener(universe: pd.DataFrame, aaa_yield: float, risk_free_rate: float
 OUTPUT_PATH = Path("web/public/data/results.json")
 STATS_PATH = Path("web/public/data/stats.json")
 SELECTIONS_PATH = Path("web/public/data/picks.json")  # selections.py ledger v3 (selections.json was v2)
+ALPHAPICKS_PATH = Path("web/public/data/alphapicks.json")  # alphapicks.py emulator ledger
 SNAPSHOTS_DIR = Path("web/public/data/snapshots")
 SNAPSHOTS_INDEX = SNAPSHOTS_DIR / "index.json"
 
@@ -2777,6 +2923,7 @@ MIN_VALID_ROWS = 100  # abort the publish if fewer real (non-error) rows than th
 MIN_VALID_FRACTION = 0.60  # ... or if fewer than this fraction of rows are valid
 MIN_FINNHUB_VALID_FRACTION = 0.60  # ... or if fewer than this fraction have live Finnhub data
 MIN_DCF_ROWS = 100  # ... or if fewer than this many rows carry a complete FCFF DCF
+MIN_SAQUANT_ROWS = 100  # below this many SA-style ratings the Alpha Picks emulator is not advanced (an estimates outage would end every streak)
 MIN_WEALTHMATICA_ROWS = 100  # ... or if fewer than this many rows carry a Wealthmatica verdict (a statements outage)
 
 # [ASSUMED] — no empirical anchor; low_safety_count flags rows the Safety
@@ -2857,6 +3004,10 @@ def _compute_stats(df: pd.DataFrame) -> dict:
     wm_verdicts = [wm.get("pass") for wm in wm_col if isinstance(wm, dict)] if wm_col is not None else []
     coverage_stats["tickers_with_wealthmatica_verdict"] = sum(1 for v in wm_verdicts if v is not None)
     coverage_stats["wealthmatica_pass_count"] = sum(1 for v in wm_verdicts if v is True)
+    saq_col = df["saQuant"] if "saQuant" in df.columns else None
+    saq_ratings = [q.get("rating") for q in saq_col if isinstance(q, dict)] if saq_col is not None else []
+    coverage_stats["saquant_rating_counts"] = {k: saq_ratings.count(k) for k in ("Strong Buy", "Buy", "Hold", "Sell", "Strong Sell")}
+    coverage_stats["saquant_unrated"] = sum(1 for v in saq_ratings if v is None)
 
     return {
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -2952,7 +3103,7 @@ def _validate_output_dataframe(df: pd.DataFrame) -> dict:
     }
 
 
-def write_json(df: pd.DataFrame) -> None:
+def write_json(df: pd.DataFrame, spy_price: float | None = None) -> None:
     # Two independent legacy publish guards (row-count based) plus the richer
     # _validate_output_dataframe checks (required columns, blank/duplicate
     # tickers, Finnhub coverage fraction, FCFF DCF row-quality) below --
@@ -2997,9 +3148,29 @@ def write_json(df: pd.DataFrame) -> None:
         sys.exit(1)
     selections.annotate_rows(rows, ledger)
 
+    # Alpha Picks emulator: SA's published pick rules applied to the SA-style
+    # rating, carried run to run on the data branch like the selection ledger.
+    # A run where the rating mostly failed (an estimates outage) leaves it
+    # untouched rather than ending every Strong Buy streak.
+    try:
+        ap_ledger = alphapicks.load_ledger(ALPHAPICKS_PATH)
+        if ap_ledger is None:
+            log.warning(f"No Alpha Picks emulator ledger at {ALPHAPICKS_PATH} -- starting a new one with this run")
+            ap_ledger = alphapicks.empty_ledger()
+        rated = sum(1 for r in rows if (r.get("saQuant") or {}).get("rating"))
+        if rated >= MIN_SAQUANT_ROWS:
+            ap_ledger = alphapicks.update_ledger(ap_ledger, rows, generated_at, spy_price)
+        else:
+            log.error(f"Only {rated} rows carry an SA-style rating (minimum {MIN_SAQUANT_ROWS}) -- Alpha Picks emulator not advanced this run")
+    except ValueError as exc:
+        log.error(f"Aborting JSON write: Alpha Picks emulator ledger: {exc}")
+        sys.exit(1)
+    alphapicks.annotate_rows(rows, ap_ledger, generated_at)
+
     payload = {
         "generated_at": generated_at,
         "rows": rows,
+        "alphaPicks": alphapicks.summary(ap_ledger, rows, spy_price),
     }
     OUTPUT_PATH.write_text(
         json.dumps(payload, separators=(",", ":")),
@@ -3008,6 +3179,8 @@ def write_json(df: pd.DataFrame) -> None:
     log.info(f"Results written to {OUTPUT_PATH} ({len(rows)} rows)")
     selections.save_ledger(SELECTIONS_PATH, ledger)
     log.info(f"Selection ledger written to {SELECTIONS_PATH} ({len(ledger['tickers'])} names ever picked)")
+    alphapicks.save_ledger(ALPHAPICKS_PATH, ap_ledger)
+    log.info(f"Alpha Picks emulator written to {ALPHAPICKS_PATH} ({len(ap_ledger['open'])} open, {len(ap_ledger['closed'])} closed)")
 
     stats = _compute_stats(df)
     STATS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -3045,6 +3218,25 @@ def update_snapshot_manifest(filename: str) -> None:
     log.info(f"Snapshot manifest updated: {filename} ({SNAPSHOTS_INDEX})")
 
 
+BENCHMARK_TICKER = "SPY"  # the Alpha Picks benchmark (SA: "an equal amount of SPY")
+
+
+def fetch_benchmark_price() -> float | None:
+    """SPY's last price for the Alpha Picks emulator's benchmark lots. None on
+    failure, logged: the emulator then defers that run's pick (a lot with no
+    benchmark could never be compared) instead of the whole publish failing."""
+    def _fetch():
+        price = _safe_float(getattr(yf.Ticker(BENCHMARK_TICKER).fast_info, "last_price", None))
+        if price is None:
+            raise ValueError("no last_price in fast_info")
+        return price
+    try:
+        return _call_with_retries(_fetch, what=f"yfinance price {BENCHMARK_TICKER}")
+    except Exception as exc:
+        log.error(f"{BENCHMARK_TICKER} price unavailable -- the Alpha Picks emulator makes no pick this run: {exc}")
+        return None
+
+
 def main():
     log.info("═══ Lynch & Graham Screener Starting ═══")
 
@@ -3060,7 +3252,7 @@ def main():
     results_df = run_screener(universe, aaa_yield, risk_free_rate)
 
     # 4. Write JSON output
-    write_json(results_df)
+    write_json(results_df, fetch_benchmark_price())
 
     log.info("═══ Done ═══")
     log.info(f"Total tickers processed: {len(results_df)}")

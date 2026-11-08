@@ -209,7 +209,7 @@ export default function App() {
         )}
       </main>
 
-      {openRow ? <Scorecard row={openRow} onClose={() => setOpenTicker(null)} /> : null}
+      {openRow ? <Scorecard row={openRow} alphaPicks={load.status === 'ready' ? load.data.alphaPicks : undefined} onClose={() => setOpenTicker(null)} /> : null}
       {infoOpen ? <MethodologyDialog onClose={() => setInfoOpen(false)} /> : null}
       <Toasts pendingAt={pending?.generated_at} onLoadPending={applyPending} onDismissPending={dismissPending} />
     </div>

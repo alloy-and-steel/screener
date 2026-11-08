@@ -143,6 +143,18 @@ earnings-yield (`_sector_allows`). All `SCORE_*`/`PILLAR_WEIGHTS`/`DCF_*`
 band constants are `[ASSUMED]` first-pass estimates — monitor `stats.json`'s
 `score_distribution`/`pillar_averages` before tuning them.
 
+**SA-style quant + Alpha Picks emulator (informational, not gated)** — a forward
+test of Seeking Alpha's published method (research and reconstruction spec:
+`docs/research/seeking-alpha-quant.md`). `saquant.py` grades five factors
+(Value, Growth, Profitability, Momentum, EPS Revisions) A+..F against the
+stock's own SECTOR, rates only analyst-covered names, caps a name with one
+very weak grade at Hold, and fills the five ratings at SA's observed spread
+(9.5/10.4/64/8/8 %). `alphapicks.py` applies SA's Alpha Picks rules to that
+rating run by run: 75 business days at Strong Buy, two slots a month (1st,
+15th), sell on Sell or >180 days at Hold, SPY same-dollar benchmark. Weights,
+grade bands and every rule SA doesn't publish are `[ASSUMED]` constants
+there. It has no history before its launch run — never backfill it.
+
 ## Stack
 
 - **Backend:** Python 3.14. `stock_screener.py` (pipeline + OverallScore
@@ -179,7 +191,7 @@ Screen and publish are SEPARATE workflows, decoupled through a dedicated
   `get_universe`'s constituent fallback has a last-known roster; the file is
   gitignored on `master`, so without the seed the fallback is a no-op) and the
   selection ledger `picks.json` ->
-  run the screener -> `web/public/data/results.json` + `picks.json` +
+  run the screener -> `web/public/data/results.json` + `picks.json` + `alphapicks.json` +
   `stats.json` (universe
   aggregate stats: score distribution, sector breakdown, coverage — for future
   monitoring, no dedicated UI page yet) -> force-push those files to the
@@ -218,7 +230,9 @@ already-prefixed dict. The frontend reads those exact keys (`web/src/score.ts`,
 `format.tsx`, `filters.ts`, `StockCard.tsx`, `Scorecard.tsx`). Don't "fix" the prefix without updating the frontend in the same diff.
 Each row also carries `picks4` (`{"1"|"2"|"3"|"4": {at, price}}`, levels never
 reached absent, null if never picked) merged in by `write_json` from the ledger,
-and `wealthmatica` (`{checks: {key: {value, pass}}, passed, applicable, pass}`).
+and `wealthmatica` (`{checks: {key: {value, pass}}, passed, applicable, pass}`),
+`saQuant` (`{rating, score, capped, grades, pctiles}`) and `alphaPicks`
+(`{streak, position}` or null).
 
 ## Layout
 
@@ -246,6 +260,14 @@ and `wealthmatica` (`{checks: {key: {value, pass}}, passed, applicable, pass}`).
 - `azqato.py` — `wilder_rsi`, `pct_of_52w_range`, `azqato_profile` (pure).
 - `wealthmatica.py` — `wealthmatica_profile` (pure); `stock_screener.
   _wealthmatica_from_statements` extracts its inputs from the yfinance frames.
+- `saquant.py` — SA-style quant rating (pure, sector-relative, one pass in
+  `run_screener`); inputs from `_saquant_inputs` in `stock_screener.py`.
+- `alphapicks.py` — Alpha Picks emulator ledger (pure); carried in
+  `alphapicks.json` on the `data` branch exactly like `picks.json`, merged
+  into rows as `alphaPicks` and summarised in results.json's top-level
+  `alphaPicks`. `write_json` skips advancing it when fewer than
+  `MIN_SAQUANT_ROWS` names are rated (an estimates outage would end every
+  streak).
 - `selections.py` — the selection ledger (pure, v3): a stock is **picked at
   level N** the first run it passes EXACTLY N screens (N = 1..4); each level
   keeps that first run + price only, never overwritten. Pass gates mirror

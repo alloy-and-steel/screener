@@ -1,0 +1,308 @@
+"""
+Alpha Picks emulator -- a forward test of Seeking Alpha's published rules.
+
+Applies the Alpha Picks rules that Seeking Alpha publishes on its help center
+(docs/research/seeking-alpha-quant.md section 2) to this screener's own
+SA-style rating (saquant.py), one screener run at a time, and keeps the
+result as a ledger on the `data` branch next to picks.json. It cannot be
+backfilled -- past runs' fundamentals and estimates were never saved -- so
+its record starts on its first run, and its first pick comes once a stock
+has held Strong Buy for 75 business days.
+
+Rules, and where each comes from:
+  - Two picks a month: a slot opens on the 1st (slot "a") and on the 15th
+    (slot "b"); the first run in a slot that finds an eligible stock fills
+    it. (help center: first trading day, and the 15th or the next one)
+  - Eligible: Strong Buy for at least 75 consecutive business days [the help
+    center does not say trading or calendar; Mon-Fri business days here,
+    holidays not removed], price > $10, market cap > $500M [SA: 3-month
+    average; the screener has today's], not a REIT [by Yahoo industry], not
+    picked in the past 365 days, not already held. (help center)
+  - Among the eligible, the highest SA-style score. [ASSUMED: SA does not say
+    how it chooses]
+  - Entry: PICK_DOLLARS at the run's price; the benchmark buys the same
+    dollars of SPY at the run's SPY price (SA: "an equal amount of SPY on the
+    pick date"). The run's price stands in for SA's opening price.
+  - Exit at the run's price when the rating is Sell or Strong Sell, or after
+    more than 180 days at Hold (help center). A winner -- price at least
+    twice the entry -- exits only on Sell / Strong Sell [secondary sources;
+    SA's own wording varies, see the research doc]. The SPY lot is sold the
+    same day.
+  - A position above 15% of the portfolio is cut back to 10%, the proceeds
+    spread equally over the other holdings [secondary sources and one SA
+    webinar snippet], once the portfolio holds at least 10 names [ASSUMED:
+    with fewer, equal weights alone exceed 15%]. The SPY lots are not trimmed.
+
+A run in which the ticker is missing or unrated leaves its position alone
+(valued at its last known price) but ends its rating streak: an unrated day
+is not a Strong Buy day. Prices are nominal, so a split after entry shows
+as a false drop, as in the picks.json ledger.
+
+Pure: no I/O, no network. The small load/save helpers are the only file access.
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+from datetime import date, timedelta
+from pathlib import Path
+
+LEDGER_VERSION = 1
+ROW_FIELD = "alphaPicks"
+
+PICK_DOLLARS = 1000.0
+STREAK_BUSINESS_DAYS = 75
+MIN_PRICE = 10.0
+MIN_MARKET_CAP_B = 0.5
+COOLDOWN_DAYS = 365
+HOLD_EXIT_DAYS = 180  # more than this many days at Hold -> exit
+WINNER_MULTIPLE = 2.0
+TRIM_ABOVE = 0.15
+TRIM_TO = 0.10
+# [ASSUMED] Trims apply only from this many holdings: below 1 / TRIM_TO an
+# equal-weight portfolio already sits above 15% per name, and trimming would
+# churn every holding on every run.
+TRIM_MIN_HOLDINGS = round(1 / TRIM_TO)
+
+STRONG_BUY = "Strong Buy"
+HOLD = "Hold"
+SELLS = frozenset({"Sell", "Strong Sell"})
+
+
+def empty_ledger() -> dict:
+    return {
+        "version": LEDGER_VERSION,
+        "started_at": None,
+        "updated_at": None,
+        "streaks": {},
+        "slots": [],
+        "open": [],
+        "closed": [],
+        "trims": [],
+        "last_picked": {},
+        "spy_last": None,
+    }
+
+
+def _slot(day: date) -> str:
+    return f"{day:%Y-%m}-{'a' if day.day < 15 else 'b'}"
+
+
+def _business_days(since: str, day: date) -> int:
+    """Mon-Fri days from `since` (counted) up to `day` (not counted)."""
+    start = date.fromisoformat(since)
+    if day <= start:
+        return 0
+    weeks, extra = divmod((day - start).days, 7)
+    return weeks * 5 + sum(1 for i in range(extra) if (start.weekday() + i) % 7 < 5)
+
+
+def _add_business_days(since: str, n: int) -> date:
+    """The first day on which _business_days(since, day) reaches n."""
+    d = date.fromisoformat(since)
+    while _business_days(since, d) < n:
+        d += timedelta(days=1)
+    return d
+
+
+def _rating(row: dict) -> str | None:
+    return (row.get("saQuant") or {}).get("rating")
+
+
+def _usable_price(v) -> bool:
+    return isinstance(v, (int, float)) and v > 0
+
+
+def _is_reit(row: dict) -> bool:
+    return str(row.get("Industry") or "").upper().startswith("REIT")
+
+
+def update_ledger(ledger: dict, rows: list[dict], generated_at: str, spy_price: float | None) -> dict:
+    """Return a new ledger with one run applied. `generated_at` must be later
+    than the ledger's last run. `spy_price` None defers any pick (a lot with
+    no benchmark could never be compared) but still applies exits and trims."""
+    last = ledger.get("updated_at")
+    if last is not None and generated_at <= last:
+        raise ValueError(f"run {generated_at} is not newer than the ledger's last run {last}")
+    out = copy.deepcopy(ledger)
+    day = date.fromisoformat(generated_at[:10])
+    today = day.isoformat()
+    by_ticker = {r["Ticker"]: r for r in rows if not r.get("Error")}
+    if out["started_at"] is None:
+        out["started_at"] = generated_at
+    if _usable_price(spy_price):
+        out["spy_last"] = spy_price
+    spy_now = out["spy_last"]
+
+    # 1. Rating streaks: kept while the rating repeats, restarted when it changes.
+    streaks = {}
+    for t, r in by_ticker.items():
+        rating = _rating(r)
+        if rating is None:
+            continue
+        prev = out["streaks"].get(t)
+        streaks[t] = prev if prev and prev["rating"] == rating else {"rating": rating, "since": today}
+    out["streaks"] = streaks
+
+    # 2. Exits, at today's price, for positions whose rating says so.
+    still_open = []
+    for pos in out["open"]:
+        r = by_ticker.get(pos["ticker"])
+        price = r.get("Price") if r else None
+        if _usable_price(price):
+            pos["last_price"] = price
+        rating = _rating(r) if r else None
+        reason = None
+        if _usable_price(price) and rating in SELLS:
+            reason = "sell"
+        elif _usable_price(price) and rating == HOLD:
+            held_days = (day - date.fromisoformat(streaks[pos["ticker"]]["since"])).days
+            winner = price >= WINNER_MULTIPLE * pos["price"]
+            if held_days > HOLD_EXIT_DAYS and not winner:
+                reason = "hold180"
+        if reason is None:
+            still_open.append(pos)
+            continue
+        out["closed"].append({
+            **pos,
+            "exit_at": today,
+            "exit_price": price,
+            "proceeds": pos["shares"] * price,
+            "spy_exit_price": spy_now,
+            "spy_proceeds": pos["spy_shares"] * spy_now if spy_now else None,
+            "reason": reason,
+        })
+    out["open"] = still_open
+
+    # 3. Trim: anything above 15% of the portfolio back to 10%.
+    _trim(out, today)
+
+    # 4. Pick: one per slot, the best-scoring eligible Strong Buy.
+    slot = _slot(day)
+    if slot not in out["slots"] and _usable_price(spy_price):
+        held = {p["ticker"] for p in out["open"]}
+        eligible = []
+        for t, r in by_ticker.items():
+            s = streaks.get(t)
+            if not s or s["rating"] != STRONG_BUY or _business_days(s["since"], day) < STREAK_BUSINESS_DAYS:
+                continue
+            price, cap_b = r.get("Price"), r.get("MarketCap_B")
+            if not (_usable_price(price) and price > MIN_PRICE):
+                continue
+            if not (isinstance(cap_b, (int, float)) and cap_b > MIN_MARKET_CAP_B):
+                continue
+            if _is_reit(r) or t in held:
+                continue
+            last_pick = out["last_picked"].get(t)
+            if last_pick and (day - date.fromisoformat(last_pick)).days < COOLDOWN_DAYS:
+                continue
+            eligible.append((-(r["saQuant"].get("score") or 0.0), t))
+        if eligible:
+            t = min(eligible)[1]
+            price = by_ticker[t]["Price"]
+            out["open"].append({
+                "ticker": t,
+                "slot": slot,
+                "at": today,
+                "price": price,
+                "shares": PICK_DOLLARS / price,
+                "cost": PICK_DOLLARS,
+                "spy_price": spy_price,
+                "spy_shares": PICK_DOLLARS / spy_price,
+                "last_price": price,
+            })
+            out["slots"].append(slot)
+            out["last_picked"][t] = today
+
+    out["updated_at"] = generated_at
+    return out
+
+
+def _trim(ledger: dict, today: str) -> None:
+    for _ in range(len(ledger["open"])):
+        values = {p["ticker"]: p["shares"] * p["last_price"] for p in ledger["open"]}
+        total = sum(values.values())
+        if total <= 0 or len(values) < TRIM_MIN_HOLDINGS:
+            return
+        big = max(values, key=values.get)
+        if values[big] <= TRIM_ABOVE * total:
+            return
+        freed = values[big] - TRIM_TO * total
+        others = [p for p in ledger["open"] if p["ticker"] != big]
+        for p in ledger["open"]:
+            if p["ticker"] == big:
+                p["shares"] -= freed / p["last_price"]
+            else:
+                p["shares"] += freed / len(others) / p["last_price"]
+        ledger["trims"].append({"ticker": big, "at": today, "from_pct": round(values[big] / total * 100, 2), "to_pct": TRIM_TO * 100})
+
+
+def summary(ledger: dict, rows: list[dict], spy_price: float | None) -> dict:
+    """Portfolio totals for the frontend: dollars in vs value now, for the
+    picks and for the same-dollars SPY benchmark."""
+    prices = {r["Ticker"]: r.get("Price") for r in rows}
+    spy = spy_price if _usable_price(spy_price) else ledger.get("spy_last")
+    picks = len(ledger["open"]) + len(ledger["closed"])
+    invested = picks * PICK_DOLLARS
+    value = sum(p["shares"] * (prices.get(p["ticker"]) if _usable_price(prices.get(p["ticker"])) else p["last_price"]) for p in ledger["open"])
+    value += sum(c["proceeds"] for c in ledger["closed"])
+    spy_value = None
+    if spy:
+        spy_value = sum(p["spy_shares"] * spy for p in ledger["open"]) + sum(c["spy_proceeds"] or 0.0 for c in ledger["closed"])
+    first_eligible = None
+    for s in ledger["streaks"].values():
+        if s["rating"] == STRONG_BUY:
+            d = _add_business_days(s["since"], STREAK_BUSINESS_DAYS).isoformat()
+            first_eligible = min(first_eligible, d) if first_eligible else d
+    return {
+        "startedAt": ledger["started_at"],
+        "picks": picks,
+        "open": len(ledger["open"]),
+        "closed": len(ledger["closed"]),
+        "invested": invested,
+        "value": value if picks else None,
+        "returnPct": (value / invested - 1.0) * 100.0 if picks else None,
+        "spyReturnPct": (spy_value / invested - 1.0) * 100.0 if picks and spy_value is not None else None,
+        "strongBuyStreaks": sum(1 for s in ledger["streaks"].values() if s["rating"] == STRONG_BUY),
+        "firstEligibleOn": first_eligible,
+        "holdings": [
+            {"ticker": p["ticker"], "at": p["at"], "price": p["price"]} for p in ledger["open"]
+        ],
+    }
+
+
+def annotate_rows(rows: list[dict], ledger: dict, generated_at: str) -> None:
+    """Attach each row's streak and open position as ROW_FIELD (None when the
+    ledger knows nothing about the ticker)."""
+    day = date.fromisoformat(generated_at[:10])
+    positions = {p["ticker"]: p for p in ledger["open"]}
+    for r in rows:
+        t = r["Ticker"]
+        s = ledger["streaks"].get(t)
+        p = positions.get(t)
+        if not s and not p:
+            r[ROW_FIELD] = None
+            continue
+        r[ROW_FIELD] = {
+            "streak": {**s, "businessDays": _business_days(s["since"], day)} if s else None,
+            "position": {"at": p["at"], "price": p["price"], "slot": p["slot"]} if p else None,
+        }
+
+
+def load_ledger(path: Path) -> dict | None:
+    """The ledger at `path`, or None if there is none yet (bootstrap). A file
+    that exists but can't be read raises: starting over would silently erase
+    the forward test's history."""
+    if not path.exists():
+        return None
+    ledger = json.loads(path.read_text(encoding="utf-8"))
+    if ledger.get("version") != LEDGER_VERSION or not isinstance(ledger.get("streaks"), dict):
+        raise ValueError(f"{path} is not a version-{LEDGER_VERSION} Alpha Picks emulator ledger")
+    return ledger
+
+
+def save_ledger(path: Path, ledger: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(ledger, separators=(",", ":"), sort_keys=True), encoding="utf-8")
+

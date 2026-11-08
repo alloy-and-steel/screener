@@ -1,12 +1,14 @@
 import { useEffect } from 'react'
-import type { Row, Azqato } from './types'
+import type { AlphaPicksSummary, Row, Azqato } from './types'
 import { INDEX_NAMES } from './types'
 import { DASH, Dot, RangeBar, RsiGauge, TONE, capB, compactUsd, num, pct, signTone, signedPct, usd } from './format'
 import { poolNames } from './filters'
-import { LEVELS, pickViews } from './selection'
+import { LEVELS, entryDate, pickViews } from './selection'
 import { dataNote, sectorLabel } from './dataText'
 import { useI18n } from './i18n'
 import { fairPrices } from './fairPrice'
+import { emulatorStatus, factorGrades, gradeTone, heldView, ratingTone } from './quant'
+import { statusLabel } from './messages'
 import { TIER_LABEL, TIER_TONE, azNetCashMc, combinedVerdict, verdictLines, verdicts, type Driver, type Verdict } from './score'
 
 function DriverRow({ d }: { d: Driver }) {
@@ -156,6 +158,65 @@ function OverallPanel({ row }: { row: Row }) {
   )
 }
 
+// SA-style quant (saquant.py) and the Alpha Picks emulator (alphapicks.py).
+// Informational, like Overall: the pass gate never reads either.
+function QuantPanel({ row, summary }: { row: Row; summary?: AlphaPicksSummary }) {
+  const { m, lang } = useI18n()
+  const q = row.saQuant
+  if (!q) return null
+  const now = new Date()
+  const day = (iso: string) => entryDate(`${iso.slice(0, 10)}T00:00:00Z`, now, lang)
+  const rt = TONE[ratingTone(q.rating)]
+  const streak = row.alphaPicks?.streak
+  const held = heldView(row)
+  const st = emulatorStatus(summary)
+  return (
+    <div className="mt-3 rounded-2xl bg-surface-1 p-4 ring-1 ring-inset ring-white/[0.07]">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{m.quant}</div>
+          <div className="text-xs text-slate-500">{m.quantSub}</div>
+        </div>
+        {q.rating ? (
+          <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 ring-1 ring-inset ${rt.bg} ${rt.ring}`}>
+            <span className={`text-xs font-semibold ${rt.text}`}>{statusLabel(m, q.rating)}</span>
+            <span className="tnum text-xs text-slate-400">{m.quantScore(num(q.score, 0))}</span>
+          </span>
+        ) : (
+          <span className="text-xs text-slate-500">{m.quantNotRated}</span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-5">
+        {factorGrades(row).map(({ factor, grade }) => (
+          <div key={factor} className="flex items-center justify-between gap-2">
+            <span className="text-[11px] uppercase tracking-[0.06em] text-slate-500">{m.quantFactor[factor]}</span>
+            <span className={`tnum text-sm font-semibold ${TONE[gradeTone(grade)].text}`}>{grade ?? DASH}</span>
+          </div>
+        ))}
+      </div>
+      {q.capped && q.rating ? <p className="mt-2 text-xs text-amber-300/80">{m.quantCapped}</p> : null}
+      <div className="mt-3 space-y-1 border-t border-white/[0.06] pt-3 text-xs text-slate-400">
+        {streak ? <p>{m.quantStreak(statusLabel(m, streak.rating), streak.businessDays, day(streak.since))}</p> : null}
+        {held ? (
+          <p className="text-slate-200">
+            {m.quantHeld(day(held.at))} · <span className="tnum">{usd(held.price)}</span>{' '}
+            <span className={`tnum font-medium ${signTone(held.change)}`}>{signedPct(held.change, 1)}</span>
+          </p>
+        ) : null}
+        {st.kind !== 'absent' ? (
+          <p>
+            <span className="font-semibold text-slate-300">{m.quantEmulator}: </span>
+            {st.kind === 'waiting'
+              ? m.quantWaiting(st.firstEligibleOn ? day(st.firstEligibleOn) : null, st.streaks)
+              : m.quantRunning(st.picks, st.open, signedPct(st.returnPct, 1), signedPct(st.spyReturnPct, 1))}
+            {st.startedAt ? <span className="text-slate-500"> · {m.quantSince(day(st.startedAt))}</span> : null}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 // What each method says the stock is worth next to today's price. Kept as three
 // numbers on purpose (see fairPrice.ts): the spread between them is the signal.
 function FairPricePanel({ row }: { row: Row }) {
@@ -257,7 +318,7 @@ function FundamentalsPanel({ row }: { row: Row }) {
 
 // Full detail for one name, shown in a sheet over the card grid: bottom sheet
 // on phones, right-hand panel on wide screens. Escape / backdrop / ✕ close it.
-export default function Scorecard({ row, onClose }: { row: Row; onClose: () => void }) {
+export default function Scorecard({ row, alphaPicks, onClose }: { row: Row; alphaPicks?: AlphaPicksSummary; onClose: () => void }) {
   const { m, lang } = useI18n()
   const vs = verdicts(row, m)
   const c = combinedVerdict(row)
@@ -344,6 +405,7 @@ export default function Scorecard({ row, onClose }: { row: Row; onClose: () => v
               <FairPricePanel row={row} />
               <PicksPanel row={row} />
               <OverallPanel row={row} />
+              <QuantPanel row={row} summary={alphaPicks} />
               <FundamentalsPanel row={row} />
             </>
           )}

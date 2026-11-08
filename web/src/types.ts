@@ -128,6 +128,14 @@ export interface Row {
   // three-screen ledger's `picks` field is retired and never read.)
   picks4?: Picks | null
 
+  // SA-style quant rating (saquant.py) — an approximation of Seeking Alpha's
+  // Quant Rating from free data. Informational: never part of the pass gate.
+  saQuant?: SaQuant
+  // The Alpha Picks emulator (alphapicks.py): this stock's current rating
+  // streak and, if the emulator holds it, its entry. Null when it knows nothing.
+  alphaPicks?: AlphaPicksRow | null
+  Industry?: string | null
+
   // Tolerate the full set of emitted columns without enumerating every one.
   [key: string]: unknown
 }
@@ -185,7 +193,40 @@ export interface Scores {
   dcf_discount: number | null
 }
 
+// The five factors, in display order (saquant.FACTORS).
+export const SA_FACTORS = ['value', 'growth', 'profitability', 'momentum', 'revisions'] as const
+export type SaFactor = (typeof SA_FACTORS)[number]
+export type SaRating = 'Strong Buy' | 'Buy' | 'Hold' | 'Sell' | 'Strong Sell'
+
+export interface SaQuant {
+  rating: SaRating | null // null: no analyst coverage, no sector, or too few factors
+  score: number | null // the composite's percentile within the sector, 0-100
+  capped: boolean // one very bad grade holds the rating at Hold or below
+  grades: Record<SaFactor, string | null> // A+ .. F, null when too few inputs
+  pctiles: Partial<Record<SaFactor, number>> // 0..1 within the sector
+}
+
+export interface AlphaPicksRow {
+  streak: { rating: SaRating; since: string; businessDays: number } | null
+  position: { at: string; price: number; slot: string } | null
+}
+
+export interface AlphaPicksSummary {
+  startedAt: string | null
+  picks: number
+  open: number
+  closed: number
+  invested: number
+  value: number | null
+  returnPct: number | null
+  spyReturnPct: number | null
+  strongBuyStreaks: number
+  firstEligibleOn: string | null // the earliest day a current Strong Buy streak reaches 75 business days
+  holdings: { ticker: string; at: string; price: number }[]
+}
+
 export interface Dataset {
   generated_at: string
   rows: Row[]
+  alphaPicks?: AlphaPicksSummary // absent on datasets published before the emulator
 }

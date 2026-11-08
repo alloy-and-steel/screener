@@ -209,6 +209,8 @@ def test_yf_price_and_info_recover_from_one_transient_failure_each():
         balance_sheet = None
         earnings_estimate = None
         revenue_estimate = None
+        eps_trend = None
+        eps_revisions = None
 
         def history(self, **kwargs):
             return pd.DataFrame()

@@ -73,7 +73,11 @@ jobs:
         #      the first run of the four-screen ledger: the branch then holds only
         #      the three-screen selections.json, which can't be carried into four
         #      levels, so the ledger starts fresh and selections.json is archived.
-        #   3. Carries prior monthly snapshots forward past the force-push.
+        #   3. Seeds web/public/data/alphapicks.json, the Alpha Picks emulator
+        #      ledger (alphapicks.py): rating streaks, holdings and closed picks
+        #      of the forward test. Same rule as picks.json: missing on a branch
+        #      that already published it is a lost ledger, so the run fails.
+        #   4. Carries prior monthly snapshots forward past the force-push.
         # Absent on the bootstrap run -- no data branch yet, so no fallback.
         env:
           GH_TOKEN: ${{ github.token }}
@@ -106,6 +110,18 @@ jobs:
               echo "::error::data branch has no picks.json -- refusing to restart the selection ledger."
               exit 1
             fi
+            prev_emulator="${RUNNER_TEMP}/data-branch-prev/web/public/data/alphapicks.json"
+            if [ -s "${prev_emulator}" ]; then
+              cp "${prev_emulator}" web/public/data/alphapicks.json
+              echo "Seeded the Alpha Picks emulator ledger."
+            elif python -c 'import json, sys; sys.exit(any("alphaPicks" in r for r in json.load(open(sys.argv[1]))["rows"]))' "${prev_results}"; then
+              # One-shot: the published dataset predates the emulator (no row
+              # carries alphaPicks), so the forward test starts with this run.
+              echo "First run of the Alpha Picks emulator: alphapicks.json starts fresh."
+            else
+              echo "::error::data branch has no alphapicks.json -- refusing to restart the Alpha Picks emulator."
+              exit 1
+            fi
           else
             echo "No data branch yet (bootstrap run) -- constituent fallback unavailable."
           fi
@@ -116,7 +132,7 @@ jobs:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: python stock_screener.py
 
-      - name: Publish results.json + stats.json + picks.json (+ monthly snapshot) to the data branch
+      - name: Publish results.json + stats.json + picks.json + alphapicks.json (+ monthly snapshot) to the data branch
         env:
           GH_TOKEN: ${{ github.token }}
           IS_FIRST_WEEKDAY: ${{ steps.check-date.outputs.is_first_weekday }}
@@ -127,6 +143,7 @@ jobs:
           test -s web/public/data/results.json
           test -s web/public/data/stats.json
           test -s web/public/data/picks.json
+          test -s web/public/data/alphapicks.json
           ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           today="$(date -u +%Y-%m-%d)"
           work="${RUNNER_TEMP}/data-branch"
@@ -161,6 +178,7 @@ jobs:
           cp web/public/data/results.json "${work}/web/public/data/results.json"
           cp web/public/data/stats.json "${work}/web/public/data/stats.json"
           cp web/public/data/picks.json "${work}/web/public/data/picks.json"
+          cp web/public/data/alphapicks.json "${work}/web/public/data/alphapicks.json"
           # The three-screen ledger (2026-08-20 to the Wealthmatica launch): kept
           # as it was, never read again.
           if [ -s "${prev}/web/public/data/selections.json" ]; then
@@ -189,4 +207,4 @@ jobs:
           # Force-push a fresh single commit: the data branch is latest-only
           # (except for snapshot files, restored above before this commit).
           git push -fq "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
-          echo "Pushed results.json + stats.json + picks.json to the data branch (${ts})."
+          echo "Pushed results.json + stats.json + picks.json + alphapicks.json to the data branch (${ts})."

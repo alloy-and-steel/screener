@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react'
 import type { Lang } from './i18n'
-import type { AzqatoTier, IndexName, PickLevel, WealthmaticaCheckKey } from './types'
+import type { AzqatoTier, IndexName, PickLevel, SaFactor, WealthmaticaCheckKey } from './types'
 import type { SortKey } from './filters'
 import type { AgeUnit } from './freshness'
 
@@ -132,6 +132,21 @@ const en = {
   fairVsToday: '% = how far each fair price sits above (+) or below (−) today’s price — not the discount shown in the cards above',
   fairHint: { Lynch: 'P/E = growth + yield', Graham: 'rate-adjusted formula', DCF: 'cash-flow model' },
   dcfRange: (lo: string, hi: string) => `range ${lo}–${hi}`,
+  quant: 'SA-style quant',
+  quantSub: 'Our approximation of Seeking Alpha’s Quant Rating from free data — not SA’s own rating, and not part of the pass gate',
+  quantFactor: { value: 'Value', growth: 'Growth', profitability: 'Profitability', momentum: 'Momentum', revisions: 'EPS revisions' } as Record<SaFactor, string>,
+  quantScore: (s: string) => `sector rank ${s}/100`,
+  quantNotRated: 'Not rated — no analyst coverage, no sector, or too few inputs',
+  quantCapped: 'Held at Hold or below: one factor grade is too weak (SA’s rule)',
+  quantStreak: (rating: string, days: number, since: string) => `${rating} for ${days} business days (since ${since})`,
+  quantHeld: (since: string) => `Held by the Alpha Picks emulator since ${since}`,
+  quantEmulator: 'Alpha Picks emulator',
+  quantWaiting: (date: string | null, n: number) =>
+    date
+      ? `No picks yet: a stock needs 75 business days at Strong Buy. ${n} streaks running; the first could qualify on ${date}.`
+      : 'No picks yet: a stock needs 75 business days at Strong Buy, and none is at Strong Buy now.',
+  quantRunning: (picks: number, open: number, ret: string, spy: string) => `${picks} picks (${open} held): ${ret} vs ${spy} for the same dollars in SPY`,
+  quantSince: (date: string) => `Forward test since ${date}`,
   firstPicked: 'First picked',
   levelLabel: (l: PickLevel) => LEVEL_EN[l].replace(/^./, (c) => c.toUpperCase()),
   now: 'now',
@@ -320,6 +335,21 @@ const zhTW: Messages = {
   fairVsToday: '% = 各合理價高於（+）或低於（−）目前股價的幅度 — 與上方卡片中的折價算法不同',
   fairHint: { Lynch: '本益比 = 成長率 + 殖利率', Graham: '利率調整公式', DCF: '現金流模型' },
   dcfRange: (lo, hi) => `區間 ${lo}–${hi}`,
+  quant: 'SA 風格量化評級',
+  quantSub: '以免費資料仿照 Seeking Alpha 量化評級的近似值 — 並非 SA 本身的評級，也不計入篩選門檻',
+  quantFactor: { value: '價值', growth: '成長', profitability: '獲利能力', momentum: '動能', revisions: 'EPS 預估修正' },
+  quantScore: (s) => `產業內排名 ${s}/100`,
+  quantNotRated: '未評級 — 無分析師覆蓋、無產業分類或資料不足',
+  quantCapped: '最高只到持有：有一項因子評等過弱（SA 的規則）',
+  quantStreak: (rating, days, since) => `${rating} 已持續 ${days} 個營業日（自 ${since}）`,
+  quantHeld: (since) => `Alpha Picks 模擬組合自 ${since} 起持有`,
+  quantEmulator: 'Alpha Picks 模擬組合',
+  quantWaiting: (date, n) =>
+    date
+      ? `尚無選股：個股需連續 75 個營業日維持強力買進。目前有 ${n} 檔在累積中，最早可於 ${date} 符合資格。`
+      : '尚無選股：個股需連續 75 個營業日維持強力買進，目前沒有任何個股為強力買進。',
+  quantRunning: (picks, open, ret, spy) => `${picks} 檔選股（持有 ${open} 檔）：${ret}，同額投入 SPY 為 ${spy}`,
+  quantSince: (date) => `自 ${date} 起前瞻測試`,
   firstPicked: '首次入選',
   levelLabel: (l) => LEVEL_ZH[l],
   now: '目前',
@@ -393,6 +423,8 @@ const zhTW: Messages = {
     'Deep Buy': '深度買進',
     Buy: '買進',
     Hold: '持有',
+    Sell: '賣出',
+    'Strong Sell': '強力賣出',
     Watch: '觀察',
     Avoid: '避開',
     Pass: '通過',

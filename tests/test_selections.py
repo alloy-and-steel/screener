@@ -169,17 +169,18 @@ def _write_json_in(tmp, df):
     """Run the real write_json against temp paths. The publish guards'
     richer checks are stubbed: they are covered by their own tests, and this
     fixture's rows are not a full screen."""
-    saved = (screener.OUTPUT_PATH, screener.STATS_PATH, screener.SELECTIONS_PATH,
+    saved = (screener.OUTPUT_PATH, screener.STATS_PATH, screener.SELECTIONS_PATH, screener.ALPHAPICKS_PATH,
              screener._validate_output_dataframe, screener._compute_stats)
     screener.OUTPUT_PATH = tmp / "results.json"
     screener.STATS_PATH = tmp / "stats.json"
     screener.SELECTIONS_PATH = tmp / "picks.json"
+    screener.ALPHAPICKS_PATH = tmp / "alphapicks.json"
     screener._validate_output_dataframe = lambda _df: {"valid_rows": 0, "total_rows": 0, "valid_fraction": 1.0, "finnhub_fraction": 1.0, "dcf_rows": 0, "wealthmatica_rows": 0}
     screener._compute_stats = lambda _df: {}
     try:
         screener.write_json(df)
     finally:
-        (screener.OUTPUT_PATH, screener.STATS_PATH, screener.SELECTIONS_PATH,
+        (screener.OUTPUT_PATH, screener.STATS_PATH, screener.SELECTIONS_PATH, screener.ALPHAPICKS_PATH,
          screener._validate_output_dataframe, screener._compute_stats) = saved
 
 
